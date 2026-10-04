@@ -90,7 +90,8 @@ export const POWER_LIST = [
   // ---- cosmic ----
   P('METEOR', 'Meteor', 'cosmic', 35, 7, 'Obliterate the land with a burning meteor.', { legacy: true, eventKind: 'disaster' }),
   P('METEOR_SHOWER', 'Meteor Shower', 'cosmic', 38, 12, 'Many smaller impacts fall over half a minute.', { eventKind: 'disaster' }),
-  P('SINGULARITY', 'Surface Rift', 'cosmic', 45, 5, 'Tear open a gravitational rift that vaporizes everything.', { legacy: true, eventKind: 'disaster' })
+  P('SINGULARITY', 'Surface Rift', 'cosmic', 45, 5, 'Tear open a gravitational rift that vaporizes everything.', { legacy: true, eventKind: 'disaster' }),
+  P('STARWARD_VISION', 'Starward Vision', 'cosmic', 60, 8, 'A people dreams of the stars: it masters rocketry (Spaceflight Age) and raises a spaceport. Its colony ships will settle other worlds.', { eventKind: 'omen' })
 ];
 
 export const POWER_BY_ID = Object.fromEntries(POWER_LIST.map(p => [p.id, p]));

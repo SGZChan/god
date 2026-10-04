@@ -78,7 +78,9 @@ export function summarizeWorld(sim) {
       society: summarizeSociety(sim, civ),
       status: civStatus(civ),
       progress: eraProgress(civ),
-      faith: getReligion(sim.society, civ.faithId) ? getReligion(sim.society, civ.faithId).name : null
+      faith: getReligion(sim.society, civ.faithId) ? getReligion(sim.society, civ.faithId).name : null,
+      colonyOf: civ.colonyOf || null,
+      ships: civ.shipsLaunched || 0
     })),
     religions: religionsOf(sim.society)
       .filter(r => !r.extinct && r.adherents > 0)
@@ -162,6 +164,7 @@ export class OverviewPanel {
       if (civ.status.kind === 'war') card.appendChild(el('div', 'civ-meta', civ.status.label));
 
       card.appendChild(el('div', 'civ-meta', `${civ.government} • ${civ.era}${civ.faith ? ` • ${civ.faith}` : ''}`));
+      if (civ.colonyOf || civ.ships) card.appendChild(el('div', 'civ-meta', [civ.colonyOf ? `Colony of ${civ.colonyOf}` : '', civ.ships ? `🚀 ${civ.ships} ship${civ.ships === 1 ? '' : 's'} launched` : ''].filter(Boolean).join(' • ')));
 
       const stats = el('div', 'civ-stats');
       stats.append(

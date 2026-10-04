@@ -14,9 +14,10 @@ import { Minimap } from './ui/minimap.js';
 import { ResourceLensPanel } from './ui/resourceLens.js';
 import { sounds } from './audio/soundFX.js';
 import { FixedStepper, runSimulationSteps, SIM_STEP } from './simulation/fixedStep.js';
-import { random, setActiveRng } from './simulation/random.js';
+import { random, setActiveRng, withRng } from './simulation/random.js';
 import { createPlanetWorld } from './simulation/world.js';
 import { SaveError, serializeGame, restoreSim, parseSave } from './persistence/saveGame.js';
+import { foundColony } from './civilization/spaceflight.js';
 
 const SAVE_KEY = 'genesis-cosmos-save-v3';
 const AUTOSAVE_MS = 30000;
@@ -30,6 +31,8 @@ class GameApp {
     this.stepper = new FixedStepper();
     this.customPlanets = [];          // [{ systemId, config }] planets the player created
     this.pendingSims = new Map();     // planetId -> saved sim data not yet restored
+    this.voyages = [];                // colony ships in flight (civilization/spaceflight.js)
+    this.pendingColonies = new Map(); // planetId -> ships that landed on a planet whose simulation is not loaded yet
     this.autosaveEnabled = true;
 
     // DOM Elements
@@ -231,6 +234,102 @@ class GameApp {
       simSeconds: world.simSeconds || 0,
       lastActiveCosmicAge: world.lastActiveCosmicAge !== undefined ? world.lastActiveCosmicAge : this.cosmicTimeAge
     });
+    // colony ships that landed while this planet was not loaded
+    for (const ship of this.pendingColonies.get(planet.id) || []) this.landColony(planet.id, ship);
+    this.pendingColonies.delete(planet.id);
+  }
+
+  // ---------- colony ships (civilization/spaceflight.js) ----------
+
+  // Every planet the game knows: { id, name, systemId, config }
+  allPlanets() {
+    const out = [];
+    for (const sys of this.galaxy.systems) for (const p of sys.planets) out.push({ id: p.id, name: p.name, systemId: sys.id, config: p });
+    return out;
+  }
+
+  // A ship leaves `sim`'s planet: pick a destination (a planet of this system first, then another star system)
+  launchVoyage(sim, ship) {
+    const here = this.galaxy.activeSystemId;
+    const origin = sim.planet.id;
+    const settledBy = new Set(this.voyages.filter(v => v.civ.name === ship.civ.name).map(v => v.toPlanetId));
+    for (const [id, other] of this.simulations) {
+      if (other.society.civilizations.some(c => c.isAlive && c.colonyOf === ship.civ.name)) settledBy.add(id);
+    }
+    const candidates = this.allPlanets().filter(p => p.id !== origin && !settledBy.has(p.id) && !(p.config.isConsumed));
+    const score = p => (p.systemId === here ? 0 : 100) + (p.config.hasAtmosphere ? 0 : 10) + (p.config.isPopulated ? 3 : 0) + Math.random();
+    candidates.sort((a, b) => score(a) - score(b));
+    const target = candidates[0];
+    if (!target) return;
+    const sameSystem = target.systemId === here;
+    const voyage = {
+      ...ship,
+      fromPlanetId: origin,
+      fromSystemId: here,
+      toPlanetId: target.id,
+      toSystemId: target.systemId,
+      toName: target.name,
+      departAge: this.cosmicTimeAge,
+      arriveAge: this.cosmicTimeAge + (sameSystem ? 0.008 : 0.05) // about 8 or 50 years
+    };
+    this.voyages.push(voyage);
+    this.logTo(sim, `🚀 The ship of ${ship.civ.name} heads for ${target.name}${sameSystem ? '' : ' in another star system'}.`);
+  }
+
+  // A ship arrives: found the colony now, or when the target planet's simulation is next created
+  arrive(voyage) {
+    if (this.simulations.has(voyage.toPlanetId)) {
+      this.landColony(voyage.toPlanetId, voyage);
+    } else {
+      const list = this.pendingColonies.get(voyage.toPlanetId) || [];
+      list.push(voyage);
+      this.pendingColonies.set(voyage.toPlanetId, list);
+    }
+  }
+
+  landColony(planetId, ship) {
+    const sim = this.simulations.get(planetId);
+    if (!sim) return;
+    const civ = withRng(sim.rng, () => foundColony(sim, ship));
+    if (!civ) return;
+    sim.planet.isPopulated = true;
+    const entry = this.allPlanets().find(p => p.id === planetId);
+    if (entry) entry.config.isPopulated = true; // the galaxy's record, so the planet lists show life there
+    const text = `🌍 Colonists of ${ship.civ.name} landed on ${sim.planet.name} and founded ${civ.name}.`;
+    this.logTo(sim, text);
+    this.notifications.push(text, 'info', true);
+    if (this.galaxy.systems.some(s => s.id === this.galaxy.activeSystemId)) this.updatePlanetSelectLabels();
+  }
+
+  logTo(sim, text) {
+    sim.eventLog.unshift(text);
+    if (sim.eventLog.length > 30) sim.eventLog.length = 30;
+  }
+
+  updatePlanetSelectLabels() {
+    for (const opt of this.planetSelect.options) {
+      const sim = this.simulations.get(opt.value);
+      if (sim) opt.innerText = `${sim.planet.name} [${sim.planet.isPopulated ? 'Life' : 'Barren'}]`;
+    }
+  }
+
+  tickVoyages() {
+    // collect ships launched by the active planet's peoples
+    const sim = this.activeSim;
+    if (sim && sim.society.outbound && sim.society.outbound.length) {
+      for (const ship of sim.society.outbound.splice(0)) this.launchVoyage(sim, ship);
+    }
+    for (const v of this.voyages.filter(x => x.arriveAge <= this.cosmicTimeAge)) {
+      this.voyages.splice(this.voyages.indexOf(v), 1);
+      this.arrive(v);
+    }
+    this.solarSystem.setVoyages(this.voyages.map(v => ({
+      id: v.id,
+      from: v.fromSystemId === this.galaxy.activeSystemId ? v.fromPlanetId : null,
+      to: v.toSystemId === this.galaxy.activeSystemId ? v.toPlanetId : null,
+      progress: Math.min(1, (this.cosmicTimeAge - v.departAge) / Math.max(1e-6, v.arriveAge - v.departAge)),
+      color: v.civ.color
+    })));
   }
 
   // Removes every simulation and its input listeners (new universe / load).
@@ -611,6 +710,10 @@ class GameApp {
   }
 
   buildSaveText() {
+    // ships launched since the last frame are put in flight first, so their crews are saved somewhere
+    for (const sim of this.simulations.values()) {
+      if (sim.society.outbound && sim.society.outbound.length) for (const ship of sim.society.outbound.splice(0)) this.launchVoyage(sim, ship);
+    }
     // Planets never visited regenerate from the seed, so only visited ones are stored
     const sims = new Map([...this.simulations].filter(([, sim]) => sim.everActive));
     const save = serializeGame({
@@ -626,6 +729,10 @@ class GameApp {
     for (const [id, data] of this.pendingSims) {
       if (!save.sims[id]) save.sims[id] = data;
     }
+    // colony ships: in flight, and landed on planets not loaded yet
+    save.voyages = this.voyages;
+    save.pendingColonies = Object.fromEntries(this.pendingColonies);
+
     return JSON.stringify(save);
   }
 
@@ -696,6 +803,8 @@ class GameApp {
     }
 
     this.pendingSims = new Map(Object.entries(data.sims));
+    this.voyages = Array.isArray(data.voyages) ? data.voyages : [];
+    this.pendingColonies = new Map(Object.entries(data.pendingColonies || {}));
     this.loadSystem(data.activeSystemId);
     if (data.activePlanetId && this.simulations.has(data.activePlanetId)) {
       this.setActivePlanet(data.activePlanetId);
@@ -768,6 +877,8 @@ class GameApp {
   applyNewSeed(seed) {
     sounds.playDivineBlessing();
     this.currentSeed = seed;
+    this.voyages = [];
+    this.pendingColonies = new Map();
     this.disposeSimulations();
     this.resetUniverse(seed);
     this.customPlanets = [];
@@ -1126,6 +1237,9 @@ class GameApp {
       this.epochDisplay.innerText = `Epoch: ${terrain.timeAge.toFixed(1)} MYA`;
       this.activeSim.lastActiveCosmicAge = this.cosmicTimeAge;
     }
+
+    // Colony ships between planets
+    this.tickVoyages();
 
     // 4. Render Surface if active
     if (this.currentView === 'SURFACE' && this.activeSim) {

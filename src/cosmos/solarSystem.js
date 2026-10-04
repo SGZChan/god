@@ -230,6 +230,56 @@ export class SolarSystem {
     this.selectedPlanet = planet;
   }
 
+  // --- COLONY SHIPS (civilization/spaceflight.js; main.js keeps the voyages) ---
+
+  // voyages: [{ id, from: planetId|null, to: planetId|null, progress 0..1, color }]. A null end is outside this
+  // system: the ship flies out to (or in from) deep space beyond the outermost orbit.
+  setVoyages(voyages) {
+    if (!this.shipMeshes) this.shipMeshes = new Map();
+    const keep = new Set();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    for (const v of voyages) {
+      const fromP = v.from ? this.planets.find(p => p.id === v.from) : null;
+      const toP = v.to ? this.planets.find(p => p.id === v.to) : null;
+      if (!fromP && !toP) continue;
+      keep.add(v.id);
+      let ship = this.shipMeshes.get(v.id);
+      if (!ship) {
+        const group = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.ConeGeometry(1.6, 5, 8), new THREE.MeshBasicMaterial({ color: v.color || '#e2e8f0' }));
+        body.rotation.x = Math.PI / 2; // the cone points along +z, so lookAt() aims it
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(1, 3, 8), new THREE.MeshBasicMaterial({ color: '#fb923c' }));
+        flame.rotation.x = -Math.PI / 2;
+        flame.position.z = -3.6;
+        group.add(body, flame);
+        group.scale.setScalar(3); // readable from the system camera
+        this.scene.add(group);
+        ship = { group };
+        this.shipMeshes.set(v.id, ship);
+      }
+      if (fromP) fromP.getWorldPosition(a);
+      if (toP) toP.getWorldPosition(b);
+      const far = 1.6 * Math.max(300, ...this.planets.map(p => p.distance || 0));
+      if (!fromP) a.copy(b).setY(0).normalize().multiplyScalar(far);
+      if (!toP) b.copy(a).setY(0).normalize().multiplyScalar(far);
+      const t = Math.max(0, Math.min(1, v.progress));
+      const pos = a.clone().lerp(b, t);
+      pos.y += Math.sin(Math.PI * t) * 18; // a gentle arc above the orbital plane
+      ship.group.position.copy(pos);
+      const ahead = a.clone().lerp(b, Math.min(1, t + 0.02));
+      ahead.y += Math.sin(Math.PI * Math.min(1, t + 0.02)) * 18;
+      ship.group.lookAt(ahead);
+      ship.group.visible = this.systemVisible;
+    }
+    for (const [id, ship] of this.shipMeshes) {
+      if (keep.has(id)) continue;
+      this.scene.remove(ship.group);
+      ship.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      this.shipMeshes.delete(id);
+    }
+  }
+
   // --- COSMIC EVENTS ---
 
   // Trigger asteroid strike targeting a planet or random path

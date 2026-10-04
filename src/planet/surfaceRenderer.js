@@ -637,7 +637,7 @@ export class SurfaceRenderer {
         if (ent.decayTimer > 0) {
           ctx.save();
           ctx.globalAlpha = Math.max(0.3, Math.min(1.0, ent.decayTimer / 4.0));
-          this.drawGlyph(ctx, '🪦', Math.floor(ts * 0.95), px, py);
+          drawTombstone(ctx, px, py, ts * 0.8);
           if (isZoomedIn) {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -770,8 +770,8 @@ export class SurfaceRenderer {
   // Render Minecraft-like top-down blocky architectural structures
   renderStructure(ctx, structure, px, py, ts, isDetailed) {
     if (!isDetailed) {
-      // Zoomed out: Clean icon representation
-      this.drawGlyph(ctx, structure.icon || '🏛️', Math.floor(ts * 0.9), px + ts / 2, py + ts / 2);
+      // Zoomed out: a small drawn marker in the structure's colour
+      drawStructureMark(ctx, structure, px, py, ts);
       return;
     }
 
@@ -850,7 +850,7 @@ export class SurfaceRenderer {
         ctx.beginPath();
         ctx.arc(x + w / 2, y + h / 2, w / 2.5, 0, Math.PI * 2);
         ctx.fill();
-        this.drawGlyph(ctx, '👑', Math.floor(ts * 0.6), x + w / 2, y + h / 2);
+        drawCrown(ctx, x + w / 2, y + h / 2, w * 0.45);
         break;
 
       case 'ruins':
@@ -864,8 +864,65 @@ export class SurfaceRenderer {
         break;
 
       default:
-        this.drawGlyph(ctx, structure.icon || '🏛️', Math.floor(ts * 0.9), x + w / 2, y + h / 2);
+        drawStructureMark(ctx, structure, px, py, ts);
         break;
     }
   }
+}
+
+// ---------- small drawn marks (no emoji in the world view) ----------
+
+// A grey headstone with a cross, centred on (cx, cy)
+function drawTombstone(ctx, cx, cy, size) {
+  const w = size * 0.55;
+  const h = size * 0.7;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  ctx.fillStyle = '#64748b';
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x, y + w / 2);
+  ctx.arc(cx, y + w / 2, w / 2, Math.PI, 0);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(x - w * 0.15, y + h - size * 0.08, w * 1.3, size * 0.08);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(cx - size * 0.03, y + h * 0.22, size * 0.06, h * 0.45);
+  ctx.fillRect(cx - w * 0.25, y + h * 0.34, w * 0.5, size * 0.06);
+}
+
+// A gold crown centred on (cx, cy), `w` wide
+function drawCrown(ctx, cx, cy, w) {
+  const h = w * 0.7;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  ctx.fillStyle = '#facc15';
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x, y + h * 0.25);
+  ctx.lineTo(x + w * 0.25, y + h * 0.55);
+  ctx.lineTo(cx, y);
+  ctx.lineTo(x + w * 0.75, y + h * 0.55);
+  ctx.lineTo(x + w, y + h * 0.25);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#a16207';
+  ctx.lineWidth = Math.max(1, w * 0.06);
+  ctx.stroke();
+}
+
+const MARK_COLORS = { house: '#b45309', tower: '#64748b', temple: '#f59e0b', farm: '#84cc16', capital: '#3b82f6', ruins: '#475569' };
+
+// Zoomed-out marker for a tile structure: a block in the structure's colour with a darker rim
+function drawStructureMark(ctx, structure, px, py, ts) {
+  const pad = Math.max(1, ts * 0.18);
+  const color = MARK_COLORS[structure.type] || '#94a3b8';
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(px + pad - 1, py + pad - 1, ts - pad * 2 + 2, ts - pad * 2 + 2);
+  ctx.fillStyle = color;
+  ctx.fillRect(px + pad, py + pad, ts - pad * 2, ts - pad * 2);
+  if (structure.type === 'capital') drawCrown(ctx, px + ts / 2, py + ts / 2, ts * 0.4);
 }

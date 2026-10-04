@@ -1,6 +1,6 @@
 # Genesis & Cosmos — Life-Simulation Roadmap
 
-Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world, now a finite planet: 1b), 2 (genetic life + sprites), 3 (society: clans, jobs, economy, construction by builders, exploration). Next: 4 (beliefs and religions).** Each sub-project below gets its own
+Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world, now a finite planet: 1b), 2 (genetic life + sprites), 3 (society: clans, jobs, economy, construction by builders, exploration), 5 (building and disaster graphics), 4 (beliefs and religions), 6 (space-faring civilizations). All sub-projects are done.** Each sub-project below gets its own
 spec → plan → build → browser-verification cycle (see `docs/superpowers/`). Earlier work (Phases 1-3) is described in
 `docs/superpowers/specs/2026-10-04-simulation-persistence-ui-design.md`.
 
@@ -49,9 +49,9 @@ Dependencies: 3 needs 1 and 2; 4 needs 3; 5 needs 3; 6 needs 3 and 4. Sub-projec
    camps that grow into towns, **construction by builders in stages**, desire-path roads, farms near water.
 4. **DONE - Beliefs and religions** (src/civilization/religion.js): deity invention, rituals, shrines/temples built by priests, spread, schism and conflict;
    the player is unknown to mortals.
-5. **Graphics for buildings and disasters**: procedural pixel-art building tiles per type/era/culture with construction
+5. **DONE - Graphics for buildings and disasters** (src/art/buildingArt.js, buildingRenderer.js, effects.js): procedural pixel-art building tiles per type/era/culture with construction
    stages; animated disaster effects (meteor streak and crater, shockwave, lava, lightning, flood, plague mist, quake).
-6. **Space-faring civilizations**: tech to rockets, ships that carry real settlers to planets in the system, then to
+6. **DONE - Space-faring civilizations** (src/civilization/spaceflight.js): tech to rockets, ships that carry real settlers to planets in the system, then to
    other systems and galaxies; new colonies founded by the arrivals.
 
 ## Recommended order
@@ -161,3 +161,12 @@ chooses sites).
   job) lead rites at shrines/temples, settlements with a faith plan a shrine (now a Stone Age building), temple and cathedral,
   old faiths over several clans split into sects, and different faiths between devout neighbours can start holy wars.
   The player is never named. Saved in the planet's society block (religions, faithSeq) and entity.faithId.
+- 6: spaceflight (src/civilization/spaceflight.js, tests/spaceflight_test.js). A civilization in the Spaceflight Age with a
+  finished spaceport launches a ship every 90 simulated seconds (when it has 14+ citizens): six adults (half women, never
+  champions or soldiers) leave the planet carrying genomes, personalities, talents and faith. main.js flies the voyage
+  (same system ~8 years, another star ~50 years; ships drawn in the system view), lands it on the target planet's
+  simulation or keeps it in pendingColonies until that planet is loaded, and saves voyages/pending colonies with the game.
+  On landing the settlers found "New <homeland>" with their era and faith. The Starward Vision cosmic power lifts a people
+  into the Spaceflight Age and raises its spaceport.
+- 5: confirmed done (procedural building sprites with construction stages, animated power/disaster effects); the last emoji
+  in the world view (tombstones, legacy structure markers, the capital crown) are now drawn shapes.

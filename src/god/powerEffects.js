@@ -10,6 +10,8 @@ import { Entity } from '../life/entity.js';
 import { FOOD_CAP } from '../civilization/society.js';
 import { pushWorldEvent } from './events.js';
 import { POWER_BY_ID } from './powerCatalog.js';
+import { ERAS } from '../civilization/techTree.js';
+import { placeLandmark } from '../civilization/townPlanner.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rnd = (a, b) => a + random() * (b - a);
@@ -242,6 +244,20 @@ export const CASTS = {
     fx.addVisual('shockwave', x + 0.5, y + 0.5, { radius: 6, life: 1.6, color: '#ff6a1a' });
     fx.addVisual('embers', x + 0.5, y + 0.5, { radius: 5, life: 4 });
     fx.addVisual('crack', x + 0.5, y + 0.5, { radius: 4, life: 8, glow: true });
+    return true;
+  },
+  // The people whose land was touched leaps to the Spaceflight Age and gets a finished spaceport (spaceflight.js)
+  STARWARD_VISION(fx, x, y, o) {
+    const civ = civsIn(fx, x, y, R('STARWARD_VISION', o))[0];
+    if (!civ) return 'Cast it on a civilization.';
+    const space = ERAS.find(e => e.id === 'SPACE_AGE');
+    civ.era = space;
+    civ.techPoints = Math.max(civ.techPoints, space.reqPoints);
+    civ.launchTimer = Math.min(civ.launchTimer === undefined ? 30 : civ.launchTimer, 30);
+    const st = (civ.settlements || []).find(s => s.capital) || (civ.settlements || [])[0];
+    const hasPort = [...fx.terrain.buildings.values()].some(b => b.civId === civ.id && b.type === 'spaceport');
+    if (st && !hasPort) placeLandmark(civ, fx.terrain, st, 'spaceport');
+    fx.addVisual('shockwave', civ.capitalX + 0.5, civ.capitalY + 0.5, { radius: 8, life: 2, color: '#93c5fd' });
     return true;
   },
   SINGULARITY(fx, x, y) {

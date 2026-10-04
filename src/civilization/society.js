@@ -10,6 +10,7 @@ import { bondFounders, assignHomes, adoptOrphans, feedChildren, clearDeadMates, 
 import { revealAround, syncDiscoveries, isExplored, isDiscovered } from './exploration.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { tickReligion } from './religion.js';
+import { tickSpaceflight } from './spaceflight.js';
 
 export const INITIAL_CITIZENS = 6;
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
@@ -577,6 +578,9 @@ export class SocietyManager {
 
     // faith: deities, conversion, schisms (religion.js)
     tickReligion(this, civ, dt);
+
+    // spaceflight: colony ships from a spaceport (spaceflight.js); main.js carries them to other planets
+    tickSpaceflight(this, civ, dt);
   }
 
   // A clan that outgrew CLAN_SPLIT_SIZE sends a splinter group to found a new hamlet.

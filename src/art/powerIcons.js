@@ -776,6 +776,20 @@ const ICONS = {
     g.arc(16, 16, 11, Math.PI + 0.3, Math.PI + 1.6);
     stroke(g, C.goldLt, 2);
   },
+  STARWARD_VISION(g) {
+    // a rocket climbing past a star
+    g.beginPath();
+    g.moveTo(16, 3); g.quadraticCurveTo(22, 9, 21, 19); g.lineTo(11, 19); g.quadraticCurveTo(10, 9, 16, 3);
+    g.closePath();
+    fill(g, C.white);
+    stroke(g, C.slate, 1);
+    circle(g, 16, 11, 2.4); fill(g, C.cyan);
+    g.beginPath(); g.moveTo(11, 15); g.lineTo(7, 22); g.lineTo(11, 20); g.closePath(); fill(g, C.red);
+    g.beginPath(); g.moveTo(21, 15); g.lineTo(25, 22); g.lineTo(21, 20); g.closePath(); fill(g, C.red);
+    g.beginPath(); g.moveTo(13, 20); g.lineTo(16, 29); g.lineTo(19, 20); g.closePath(); fill(g, C.orange);
+    sparkle(g, 26, 7, 2.5, C.goldLt);
+    sparkle(g, 6, 9, 2, C.cyanLt);
+  },
   // toolbar helpers
   ASTEROID(g) { ICONS.METEOR(g); },
   BLACKHOLE(g) { ICONS.SINGULARITY(g); },

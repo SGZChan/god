@@ -388,6 +388,12 @@ export function planSettlement(civ, terrain, st, { instant = false, maxSites = n
   return b;
 }
 
+// Places one finished building of `type` for the settlement at once (a god's gift, e.g. Starward Vision's spaceport):
+// on the edge if it fits there, else on a street plot. Returns the building or null.
+export function placeLandmark(civ, terrain, st, type) {
+  return edgePlot(terrain, civ, st, type, true) || streetPlot(terrain, civ, st, type, true);
+}
+
 export function growTown(civ, terrain, opts = {}) {
   for (const st of settlementsOf(civ)) {
     const b = planSettlement(civ, terrain, st, opts);
