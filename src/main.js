@@ -3,7 +3,8 @@ import { SeededRNG } from './cosmos/seed.js';
 import { Universe } from './cosmos/universe.js';
 import { SolarSystem } from './cosmos/solarSystem.js';
 import { SurfaceRenderer } from './planet/surfaceRenderer.js';
-import { DivinePowersManager, POWERS } from './god/divinePowers.js';
+import { DivinePowersManager } from './god/divinePowers.js';
+import { PowerPalette, bindGodMenu, loadGodSettings } from './ui/powerPalette.js';
 import { InspectorPanel } from './ui/inspector.js';
 import { CreationWorkshop } from './workshop/creator.js';
 import { PlanetCreator } from './workshop/planetCreator.js';
@@ -203,7 +204,14 @@ class GameApp {
       const screenX = clientX - rect.left;
       const screenY = clientY - rect.top;
       const tile = renderer.screenToTile(screenX, screenY);
+      // brush powers were already cast on mouse-down
+      const p = divine.activePower;
+      if (p && p.isDraggable && p.id !== 'INSPECT' && p.id !== 'PAN') return;
       const result = divine.applyAt(tile.x, tile.y, false, tile.worldX, tile.worldY);
+      if (divine.lastMessage) {
+        this.notifications.push(divine.lastMessage, 'minor');
+        divine.lastMessage = null;
+      }
       if (result) {
         this.inspector.inspect(result.type, result.target);
       }
@@ -217,6 +225,7 @@ class GameApp {
       rng: world.rng,
       renderer,
       divine,
+      effects: divine.effects,
       everActive,
       eventLog: [],
       simSeconds: world.simSeconds || 0,
@@ -267,6 +276,7 @@ class GameApp {
     }
     sim.lastActiveCosmicAge = this.cosmicTimeAge;
 
+    if (this.palette) this.palette.setActive(sim.divine.activePower);
     // Inspector only opens on explicit user click — do NOT auto-open here.
   }
 
@@ -409,25 +419,20 @@ class GameApp {
       });
     });
 
-    // Divine power buttons
-    const powerBtns = document.querySelectorAll('.power-btn[data-power]');
-    powerBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const pKey = btn.dataset.power;
-        const power = POWERS[pKey];
-        if (power && this.activeSim) {
-          powerBtns.forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          this.activeSim.divine.setPower(power);
-          this.activeSim.renderer.currentPower = power;
-          this.surfaceCanvas.style.cursor = power.cursor || 'grab';
-
-          // Update helper banner
-          this.powerHintIcon.innerText = power.icon;
-          this.powerHintText.innerText = `Power: ${power.name} — ${power.description}`;
-        }
-      });
+    // Divine powers: categorized palette (src/ui/powerPalette.js)
+    loadGodSettings();
+    this.palette = new PowerPalette({
+      root: document.getElementById('power-palette'),
+      isActive: () => this.currentView === 'SURFACE' && Boolean(this.activeSim) && !document.querySelector('.modal-overlay:not(.hidden)'),
+      getDivine: () => (this.activeSim ? this.activeSim.divine : null),
+      onSelect: (power) => {
+        if (!this.activeSim) return;
+        this.activeSim.divine.setPower(power);
+        this.activeSim.renderer.currentPower = power;
+        this.surfaceCanvas.style.cursor = power.cursor || 'grab';
+      }
     });
+    bindGodMenu();
 
     // Camera follow entity callback from inspector
     this.inspector.onFollowEntity = (ent) => {
@@ -499,6 +504,7 @@ class GameApp {
 
   // One simulated year is 4 simulated seconds (matches creature aging)
   refreshHud() {
+    if (this.palette) this.palette.update();
     const sim = this.activeSim;
     this.yearDisplay.textContent = 'Year ' + Math.floor(sim.simSeconds * 0.25).toLocaleString();
     if (this.currentView === 'SURFACE' && !this.overview.isCollapsed) {
@@ -857,7 +863,7 @@ class GameApp {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
       if (document.querySelector('.modal-overlay:not(.hidden)')) return;
       const views = { '1': 'UNIVERSE', '2': 'GALAXY', '3': 'SYSTEM', '4': 'SURFACE' };
-      if (views[e.key]) {
+      if (views[e.key] && !(this.currentView === 'SURFACE' && e.key >= '1' && e.key <= '9')) { // on the surface the digits pick powers (see ui/powerPalette.js)
         this.switchView(views[e.key]);
       } else if (e.key === 'Backspace') {
         e.preventDefault();
@@ -951,6 +957,8 @@ class GameApp {
         this.switchView('SURFACE');
       }
       this.activeSim.divine.armSpawn(spawnData);
+      this.activeSim.renderer.currentPower = this.activeSim.divine.activePower;
+      this.palette.setActive(this.activeSim.divine.activePower);
       this.surfaceCanvas.style.cursor = 'crosshair';
       this.notifications.push(`✨ Click anywhere on ${this.activeSim.planet.name} to place your creation!`);
     });
@@ -1159,6 +1167,7 @@ class GameApp {
       // Geology runs once per frame at the raw speed. Creatures and civilizations
       // advance in fixed steps so behaviour is identical at every speed.
       terrain.update(dt, this.timeSpeed);
+      this.activeSim.divine.regen(dt);
       const steps = this.stepper.advance(dt, this.timeSpeed);
       const ran = runSimulationSteps(this.activeSim, steps, { budgetMs: 12 });
       this.activeSim.simSeconds += ran * SIM_STEP;

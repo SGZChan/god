@@ -80,3 +80,4 @@ player; both depend on 3.
   Tests: tests/planet_test.js, tests/resources_test.js; tools: scripts/mapcheck.mjs (land/biome/resource histogram), scripts/smoke_world.mjs.
   Known: renewables regrow only while their chunk is loaded; god powers that reshape terrain leave deposits where they were (e.g. a tree on newly flooded
   tile); the overview/minimap shows generated terrain, not god-power edits; creatures do not use resources yet (sub-project 3 builds on the API).
+- Powers: categorized palette, 54 powers, ActiveEffects manager, world event bus (docs/POWERS.md). Tests: tests/powers_test.js, scripts/smoke_powers.mjs.

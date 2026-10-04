@@ -13,6 +13,7 @@ import { SocietyManager, Civilization, GOVERNMENTS } from '../civilization/socie
 import { ERAS } from '../civilization/techTree.js';
 import { SeededRNG } from '../cosmos/seed.js';
 import { withRng } from '../simulation/random.js';
+import { ensureEffects } from '../god/effects.js';
 
 export const SAVE_VERSION = 3; // 3: finite planet-sized map + resource deposits (2: infinite chunked world, 1: fixed grid)
 
@@ -103,6 +104,10 @@ export function serializeSim(sim) {
     extinctions: [...sim.ecosystem.extinctions],
     births: sim.ecosystem.births,
     deaths: sim.ecosystem.deaths,
+    worldEvents: sim.ecosystem.worldEvents || [],
+    worldEventSeq: sim.ecosystem.worldEventSeq || 0,
+    effects: sim.terrain.effects ? sim.terrain.effects.toJSON() : [],
+    effectsMeta: { seq: sim.terrain.effects ? sim.terrain.effects.seq : 0, naturalTimer: sim.terrain.effects ? sim.terrain.effects.naturalTimer : null },
     civs: civs.map(serializeCiv),
     entities: sim.ecosystem.entities.map(e => ({
       ...pickFields(e, ENTITY_SKIP),
@@ -142,6 +147,10 @@ export function restoreSim(data, rngSeedLabel = 'restore') {
   ecosystem.births = data.births;
   ecosystem.deaths = data.deaths;
   ecosystem.notifications = [];
+  // god powers (older saves have none)
+  ecosystem.worldEvents = Array.isArray(data.worldEvents) ? data.worldEvents : [];
+  ecosystem.worldEventSeq = data.worldEventSeq || 0;
+  ensureEffects(terrain, ecosystem, society).loadJSON(data.effects || [], data.effectsMeta || {});
 
   const civById = new Map(civs.map(c => [c.id, c]));
   const speciesById = new Map(ecosystem.speciesCatalog.map(s => [s.id, s]));

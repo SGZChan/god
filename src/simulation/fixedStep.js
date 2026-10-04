@@ -46,6 +46,8 @@ export function runSimulationSteps(sim, steps, { budgetMs = Infinity, now = () =
     if (i > 0 && now() - start > budgetMs) break;
     sim.ecosystem.update(SIM_STEP, 1);
     sim.society.update(SIM_STEP, 1);
+    const fx = sim.effects || (sim.terrain && sim.terrain.effects);
+    if (fx) fx.update(SIM_STEP);
     done++;
   }
   return done;

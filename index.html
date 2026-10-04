@@ -100,6 +100,13 @@
             </button>
             <input id="menu-import-file" type="file" accept="application/json,.json" hidden>
             <div class="menu-sep"></div>
+            <button id="menu-sandbox" class="menu-item menu-toggle" role="menuitemcheckbox" aria-checked="true" title="Off: powers cost divine energy, which refills over time">
+              <span class="toggle-dot" aria-hidden="true"></span><span>Sandbox: unlimited energy</span>
+            </button>
+            <button id="menu-disasters" class="menu-item menu-toggle" role="menuitemcheckbox" aria-checked="true" title="Storms, droughts, earthquakes and comets happen on their own">
+              <span class="toggle-dot" aria-hidden="true"></span><span>Natural disasters</span>
+            </button>
+            <div class="menu-sep"></div>
             <button id="btn-open-guide" class="menu-item" role="menuitem">
               <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>How to play</span>
             </button>
@@ -205,65 +212,30 @@
       <aside id="minimap-panel" class="minimap hidden" aria-label="Planet map"></aside>
     </div>
 
-    <!-- BOTTOM DIVINE POWERS & COSMIC EVENTS TOOLBAR -->
-    <nav class="bottom-powers-hud">
-      <button class="power-btn active" data-power="INSPECT" id="power-inspect">
-        👁️<span class="tooltip">Inspect Mind (or Drag to Move)</span>
-      </button>
-      <button class="power-btn" data-power="PAN" id="power-pan">
-        ✋<span class="tooltip">Move / Pan Camera (WASD / Drag)</span>
-      </button>
-      <div class="divider"></div>
-      <button class="power-btn" data-power="TERRAFORM_RAISE">
-        ⛰️<span class="tooltip">Raise Mountains (Crushes Buildings & Life!)</span>
-      </button>
-      <button class="power-btn" data-power="TERRAFORM_LOWER">
-        🌊<span class="tooltip">Carve Ocean Basin (Sinks Cities & Drowns Mortals!)</span>
-      </button>
-      <button class="power-btn" data-power="TSUNAMI">
-        🌊<span class="tooltip">Tsunami Deluge (Catastrophic Coastal Flood)</span>
-      </button>
-      <button class="power-btn" data-power="VOLCANO">
-        🌋<span class="tooltip">Volcanic Magma Fissure (Incinerate Land)</span>
-      </button>
-      <button class="power-btn" data-power="SINGULARITY">
-        🕳️<span class="tooltip">Surface Gravitational Void (Vaporize)</span>
-      </button>
-      <button class="power-btn" data-power="PLAGUE">
-        ☣️<span class="tooltip">Divine Pestilence (Infect Empires)</span>
-      </button>
-      <button class="power-btn" data-power="DIVINE_RAIN">
-        🌧️<span class="tooltip">Rain of Life & Fertility</span>
-      </button>
-      <button class="power-btn" data-power="LIGHTNING">
-        ⚡<span class="tooltip">Divine Lightning Bolt</span>
-      </button>
-      <button class="power-btn" data-power="METEOR">
-        ☄️<span class="tooltip">Meteor Cataclysm</span>
-      </button>
-      <button class="power-btn" data-power="INSPIRATION">
-        💡<span class="tooltip">Divine Revelation (Tech Advance)</span>
-      </button>
-      <button class="power-btn" data-power="BLESSING">
-        ✨<span class="tooltip">Holy Blessing (Heal & Rejuvenate)</span>
-      </button>
-      
-      <!-- COSMIC EVENTS SECTION -->
-      <div class="divider"></div>
-      <button id="btn-launch-asteroid" class="power-btn cosmic-event-btn" title="Hurl Rogue Asteroid (Extinction Threat)">
-        ☄️<span class="tooltip">Hurl Cosmic Asteroid</span>
-      </button>
-      <button id="btn-spawn-blackhole" class="power-btn cosmic-event-btn" title="Spawn Gravitational Singularity">
-        🕳️<span class="tooltip">Spawn Black Hole</span>
-      </button>
-
-      <!-- CREATION WORKSHOP SECTION -->
-      <div class="divider"></div>
-      <button id="btn-open-workshop" class="power-btn creator-btn" title="Open The God Creation Workshop">
-        <span style="font-size: 1.25rem;">👑</span>
-        <span class="creator-btn-text">God Workshop</span>
-      </button>
+    <!-- BOTTOM DIVINE POWER PALETTE (filled by src/ui/powerPalette.js) -->
+    <nav class="bottom-powers-hud power-palette" id="power-palette" aria-label="God powers">
+      <div class="pp-head">
+        <div class="pp-tools">
+          <button class="power-btn pp-tool active" data-power="INSPECT" id="power-inspect" aria-label="Inspect"></button>
+          <button class="power-btn pp-tool" data-power="PAN" id="power-pan" aria-label="Pan"></button>
+        </div>
+        <div class="pp-tabs" role="tablist" aria-label="Power categories"></div>
+        <label class="pp-search">
+          <input type="search" placeholder="Search powers  ( / )" aria-label="Search powers" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="pp-energy sandbox" id="pp-energy" role="img" aria-label="Divine energy">
+          <div class="pp-energy-bar"><div class="pp-energy-fill"></div></div>
+          <span class="pp-energy-text">Sandbox</span>
+        </div>
+        <div class="pp-extras">
+          <button id="btn-launch-asteroid" class="pp-extra cosmic-event-btn" data-icon-id="ASTEROID" title="Hurl Rogue Asteroid (Extinction Threat)" aria-label="Hurl cosmic asteroid"></button>
+          <button id="btn-spawn-blackhole" class="pp-extra cosmic-event-btn" data-icon-id="BLACKHOLE" title="Spawn Gravitational Singularity" aria-label="Spawn black hole"></button>
+          <button id="btn-open-workshop" class="pp-extra pp-workshop creator-btn" data-icon-id="WORKSHOP" title="Open The God Creation Workshop"><span class="creator-btn-text">Workshop</span></button>
+        </div>
+      </div>
+      <div class="pp-grid" role="listbox" aria-label="Powers"></div>
     </nav>
+    <div id="pp-tooltip" class="pp-tooltip" role="tooltip" hidden></div>
 
     <!-- NEW UNIVERSE CREATION MODAL -->
     <div id="new-universe-modal" class="modal-overlay hidden">
