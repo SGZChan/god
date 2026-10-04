@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Creature sprite sheet (dev)</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #1b2434; color: #cbd5e1; font: 13px sans-serif; }
+    h2 { margin: 14px 0 6px; font-size: 14px; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cell { background: #2f4a2c; padding: 4px; text-align: center; }
+    canvas { image-rendering: pixelated; display: block; }
+  </style>
+</head>
+<body>
+  <h2>Random species (frame 0 / frame 1)</h2>
+  <div id="random" class="row"></div>
+  <h2>Each part variant on a neutral base</h2>
+  <div id="parts"></div>
+  <script type="module">
+    import { SeededRNG } from '/src/cosmos/seed.js';
+    import { setActiveRng } from '/src/simulation/random.js';
+    import { Genome, PART_COUNTS } from '/src/life/genome.js';
+    import { getCreatureCanvas } from '/src/art/creatureSprite.js';
+
+    const SCALE = 6;
+    const seed = new URLSearchParams(location.search).get('seed') || 'sheet';
+    setActiveRng(new SeededRNG(seed));
+
+    function show(parent, traits, frames = [0, 1]) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      for (const frame of frames) {
+        const source = getCreatureCanvas(traits, frame);
+        const canvas = document.createElement('canvas');
+        canvas.width = source.width * SCALE;
+        canvas.height = source.height * SCALE;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+        cell.appendChild(canvas);
+      }
+      cell.style.display = 'flex';
+      cell.style.gap = '4px';
+      parent.appendChild(cell);
+    }
+
+    for (let i = 0; i < 24; i++) show(document.getElementById('random'), Genome.random().phenotype());
+
+    const base = Genome.pure({ body: 0, head: 0, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0, hue: 0.08, sat: 0.7, light: 0.5, hue2: 0.3, eyeHue: 0.6 }).phenotype();
+    for (const gene of Object.keys(PART_COUNTS)) {
+      const title = document.createElement('h2');
+      title.textContent = gene;
+      document.getElementById('parts').appendChild(title);
+      const row = document.createElement('div');
+      row.className = 'row';
+      document.getElementById('parts').appendChild(row);
+      for (let v = 0; v < PART_COUNTS[gene]; v++) show(row, { ...base, [gene]: v }, [0]);
+    }
+    document.title = 'ready';
+  </script>
+</body>
+</html>

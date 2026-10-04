@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genesis & Cosmos — God Simulation & Life Evolution Game</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 3D Three.js Solar System & Galaxy Canvas Container -->
+    <div id="solar-canvas-container"></div>
+
+    <!-- 2D Planetary Surface Simulation Canvas Container -->
+    <div id="surface-canvas-container" class="hidden">
+      <canvas id="surface-canvas"></canvas>
+    </div>
+
+    <!-- ICON SPRITE (stroke icons, colored by currentColor) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+      <symbol id="i-universe" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="1.7"/><circle cx="11" cy="18" r="2.6"/><path d="M8 8l8 1M7 9l3 7M17 11l-4 5"/></symbol>
+      <symbol id="i-galaxy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2c0-4 4-6.2 7.2-4.2M12 13.8c0 4-4 6.2-7.2 4.2M10.2 12c-4 0-6.2-4-4.2-7.2M13.8 12c4 0 6.2 4 4.2 7.2"/></symbol>
+      <symbol id="i-system" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><ellipse cx="12" cy="12" rx="9.5" ry="4.2" transform="rotate(-25 12 12)"/><circle cx="19.2" cy="8.6" r="1.1"/></symbol>
+      <symbol id="i-surface" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3 3.2 15 0 18M12 3c-3.2 3-3.2 15 0 18"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 5.5l11 6.5-11 6.5z"/></symbol>
+      <symbol id="i-ff" viewBox="0 0 24 24"><path d="M4 6l7.5 6L4 18zM12.5 6L20 12l-7.5 6z"/></symbol>
+      <symbol id="i-ff3" viewBox="0 0 24 24"><path d="M2.5 6.5l6 5.5-6 5.5zM9.5 6.5l6 5.5-6 5.5zM16.5 6.5l6 5.5-6 5.5z"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5.5 13.5h5.8L10.5 21 18.5 10h-5.8z"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2c-1 .7-1.6 1.2-1.6 2.6M12 17.2v.3"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.3"/><path d="M17 14c2.5 0 4 1.8 4 4.5"/></symbol>
+      <symbol id="i-sword" viewBox="0 0 24 24"><path d="M14.5 4H20v5.5L10 19.5 4.5 14zM6 17l-3 3M8.5 14.5l3 3"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 5h12l-2.2 4L17 13H5"/></symbol>
+      <symbol id="i-paw" viewBox="0 0 24 24"><circle cx="7" cy="10" r="1.7"/><circle cx="11" cy="6.5" r="1.7"/><circle cx="16" cy="7.5" r="1.7"/><circle cx="19" cy="12" r="1.7"/><path d="M8 18c0-3 2.5-5 5-5s5 2 4 4.5c-.8 2-3 2-4.5 1.5S8 20 8 18z"/></symbol>
+    </svg>
+
+    <!-- TOP HUD: navigation (left), location (center), time (right) -->
+    <header class="hud">
+      <div class="hud-cluster hud-left">
+        <div class="brand">
+          <svg class="icon brand-mark" aria-hidden="true"><use href="#i-spark"/></svg>
+          <span class="brand-name">Genesis &amp; Cosmos</span>
+        </div>
+
+        <!-- 3-Tier Multi-Scale View Switcher -->
+        <div class="seg" role="group" aria-label="View">
+          <button id="btn-view-universe" class="seg-btn" title="Intergalactic space: travel to another galaxy (key 1)">
+            <svg class="icon" aria-hidden="true"><use href="#i-universe"/></svg><span>Universe</span>
+          </button>
+          <button id="btn-view-galaxy" class="seg-btn" title="The galaxy: click a star system to fly there (key 2)">
+            <svg class="icon" aria-hidden="true"><use href="#i-galaxy"/></svg><span>Galaxy</span>
+          </button>
+          <button id="btn-view-system" class="seg-btn active" title="Solar system orbital view (key 3)">
+            <svg class="icon" aria-hidden="true"><use href="#i-system"/></svg><span>System</span>
+          </button>
+          <button id="btn-view-surface" class="seg-btn" title="Descend to the living planetary surface (key 4)">
+            <svg class="icon" aria-hidden="true"><use href="#i-surface"/></svg><span>Surface</span>
+          </button>
+        </div>
+
+        <div class="menu-wrap">
+          <button id="btn-menu" class="icon-btn" title="Menu" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg><span class="sr-only">Menu</span>
+          </button>
+          <div id="menu-panel" class="menu-panel hidden" role="menu" aria-label="Game menu">
+            <div class="menu-section">
+              <div class="menu-label">Universe seed</div>
+              <div class="seed-row">
+                <span id="current-seed-label" class="seed-value">Genesis-1337</span>
+                <button id="btn-copy-seed" class="icon-btn small" title="Copy seed" aria-label="Copy seed">
+                  <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
+                </button>
+              </div>
+            </div>
+            <button id="btn-new-universe" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>New universe…</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button id="menu-save" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-save"/></svg><span>Save now</span>
+            </button>
+            <button id="menu-load" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><span>Load last save</span>
+            </button>
+            <button id="menu-export" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>Export to file</span>
+            </button>
+            <button id="menu-import" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg><span>Import from file…</span>
+            </button>
+            <input id="menu-import-file" type="file" accept="application/json,.json" hidden>
+            <div class="menu-sep"></div>
+            <button id="btn-open-guide" class="menu-item" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>How to play</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-cluster hud-center">
+        <label class="field"><span class="field-label">Galaxy</span>
+          <select id="galaxy-select" class="planet-selector" title="Travel to another galaxy"></select>
+        </label>
+        <label class="field"><span class="field-label">System</span>
+          <select id="system-select" class="planet-selector" title="Select star system"></select>
+        </label>
+        <label class="field"><span class="field-label">Planet</span>
+          <select id="planet-select" class="planet-selector" title="Select planet"></select>
+        </label>
+      </div>
+
+      <div class="hud-cluster hud-right">
+        <div class="readouts">
+          <span id="year-display" class="readout" title="Years simulated on this planet">Year 0</span>
+          <span id="epoch-display" class="readout readout-muted" title="Geological time">Epoch: 0.0 MYA</span>
+        </div>
+        <!-- Time dilation -->
+        <div class="seg time-seg" role="group" aria-label="Time speed">
+          <button class="time-btn seg-btn" data-speed="0" title="Pause time"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span class="sr-only">Pause</span></button>
+          <button class="time-btn seg-btn active" data-speed="1" title="Mortal real-time"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span>1×</span></button>
+          <button class="time-btn seg-btn" data-speed="10" title="Civilization speed"><svg class="icon" aria-hidden="true"><use href="#i-ff"/></svg><span>10×</span></button>
+          <button class="time-btn seg-btn" data-speed="100" title="Dynasty speed"><svg class="icon" aria-hidden="true"><use href="#i-ff3"/></svg><span>100×</span></button>
+          <button class="time-btn seg-btn" data-speed="10000" title="Maximum speed (creatures and civilizations are limited to about 180×)"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span>Max</span></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Where you are: universe > galaxy > system > planet. Click a level to go there; Backspace goes up. -->
+    <nav id="breadcrumb" class="crumbs" aria-label="Location"></nav>
+
+    <!-- Fade shown while the camera flies to a new galaxy or system -->
+    <div id="warp-overlay" class="warp-overlay" aria-hidden="true"></div>
+
+    <!-- WORLD OVERVIEW (surface view): civilizations, wildlife and recent events -->
+    <aside id="overview-panel" class="overview hidden" aria-label="World overview">
+      <button id="overview-toggle" class="overview-head" aria-expanded="true" aria-controls="overview-body">
+        <span>World overview</span>
+        <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </button>
+      <div id="overview-body" class="overview-body"></div>
+    </aside>
+
+    <!-- FLOATING PLANET QUICK-ACTION CARD (Shows in 3D system view when a planet is selected) -->
+    <div id="planet-action-card" class="planet-focus-card">
+      <div class="focus-card-header">
+        <div class="focus-icon" id="focus-planet-icon">🪐</div>
+        <div>
+          <h3 id="focus-planet-name">Terra Nova</h3>
+          <div id="focus-planet-status" class="focus-status">🌱 Living Garden World • Oxygen Atmosphere</div>
+        </div>
+      </div>
+      <div class="focus-actions">
+        <button id="btn-focus-descend" class="btn-focus-primary">
+          🌍 Descend to Surface
+        </button>
+        <button id="btn-focus-workshop" class="btn-focus-secondary">
+          👑 Create Life Here
+        </button>
+      </div>
+    </div>
+
+    <!-- ACTIVE POWER HINT BANNER -->
+    <div id="power-hint-banner" class="power-hint-banner">
+      <span id="power-hint-icon">👁️</span>
+      <span id="power-hint-text">Mode: Inspect — Click on any creature, human, city, or terrain tile to inspect its stats.</span>
+    </div>
+
+    <!-- RIGHT INSPECTOR DRAWER (Closable — opens only on explicit click) -->
+    <aside id="inspector-drawer" class="inspector-drawer hidden">
+      <div class="empty-inspector">
+        <button class="inspector-close-btn" id="btn-initial-close-inspector" title="Close Panel">&times;</button>
+        <div class="empty-icon">👁️</div>
+        <h3>Omniscient Eye</h3>
+        <p>Click on any human, creature, city, or tile on the planet to inspect its mind, DNA, and JEV decision matrix.</p>
+      </div>
+    </aside>
+
+    <!-- NOTIFICATIONS STREAM -->
+    <div id="notifications-stream" class="notifications-container"></div>
+
+    <!-- SURFACE NAVIGATION COMPASS & PAN DPAD -->
+    <div id="surface-nav-controls" class="surface-nav-dpad hidden">
+      <button class="nav-btn nav-up" id="nav-pan-up" title="Pan Up (W / ↑)">▲</button>
+      <div class="nav-middle-row">
+        <button class="nav-btn nav-left" id="nav-pan-left" title="Pan Left (A / ←)">◀</button>
+        <button class="nav-btn nav-center" id="nav-pan-center" title="Center Map (C)">⌖</button>
+        <button class="nav-btn nav-right" id="nav-pan-right" title="Pan Right (D / →)">▶</button>
+      </div>
+      <button class="nav-btn nav-down" id="nav-pan-down" title="Pan Down (S / ↓)">▼</button>
+    </div>
+
+    <!-- BOTTOM DIVINE POWERS & COSMIC EVENTS TOOLBAR -->
+    <nav class="bottom-powers-hud">
+      <button class="power-btn active" data-power="INSPECT" id="power-inspect">
+        👁️<span class="tooltip">Inspect Mind (or Drag to Move)</span>
+      </button>
+      <button class="power-btn" data-power="PAN" id="power-pan">
+        ✋<span class="tooltip">Move / Pan Camera (WASD / Drag)</span>
+      </button>
+      <div class="divider"></div>
+      <button class="power-btn" data-power="TERRAFORM_RAISE">
+        ⛰️<span class="tooltip">Raise Mountains (Crushes Buildings & Life!)</span>
+      </button>
+      <button class="power-btn" data-power="TERRAFORM_LOWER">
+        🌊<span class="tooltip">Carve Ocean Basin (Sinks Cities & Drowns Mortals!)</span>
+      </button>
+      <button class="power-btn" data-power="TSUNAMI">
+        🌊<span class="tooltip">Tsunami Deluge (Catastrophic Coastal Flood)</span>
+      </button>
+      <button class="power-btn" data-power="VOLCANO">
+        🌋<span class="tooltip">Volcanic Magma Fissure (Incinerate Land)</span>
+      </button>
+      <button class="power-btn" data-power="SINGULARITY">
+        🕳️<span class="tooltip">Surface Gravitational Void (Vaporize)</span>
+      </button>
+      <button class="power-btn" data-power="PLAGUE">
+        ☣️<span class="tooltip">Divine Pestilence (Infect Empires)</span>
+      </button>
+      <button class="power-btn" data-power="DIVINE_RAIN">
+        🌧️<span class="tooltip">Rain of Life & Fertility</span>
+      </button>
+      <button class="power-btn" data-power="LIGHTNING">
+        ⚡<span class="tooltip">Divine Lightning Bolt</span>
+      </button>
+      <button class="power-btn" data-power="METEOR">
+        ☄️<span class="tooltip">Meteor Cataclysm</span>
+      </button>
+      <button class="power-btn" data-power="INSPIRATION">
+        💡<span class="tooltip">Divine Revelation (Tech Advance)</span>
+      </button>
+      <button class="power-btn" data-power="BLESSING">
+        ✨<span class="tooltip">Holy Blessing (Heal & Rejuvenate)</span>
+      </button>
+      
+      <!-- COSMIC EVENTS SECTION -->
+      <div class="divider"></div>
+      <button id="btn-launch-asteroid" class="power-btn cosmic-event-btn" title="Hurl Rogue Asteroid (Extinction Threat)">
+        ☄️<span class="tooltip">Hurl Cosmic Asteroid</span>
+      </button>
+      <button id="btn-spawn-blackhole" class="power-btn cosmic-event-btn" title="Spawn Gravitational Singularity">
+        🕳️<span class="tooltip">Spawn Black Hole</span>
+      </button>
+
+      <!-- CREATION WORKSHOP SECTION -->
+      <div class="divider"></div>
+      <button id="btn-open-workshop" class="power-btn creator-btn" title="Open The God Creation Workshop">
+        <span style="font-size: 1.25rem;">👑</span>
+        <span class="creator-btn-text">God Workshop</span>
+      </button>
+    </nav>
+
+    <!-- NEW UNIVERSE CREATION MODAL -->
+    <div id="new-universe-modal" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-header">
+          <h2>🌌 Forge New Universe</h2>
+          <button id="btn-close-new-universe" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body" style="flex-direction: column; gap: 16px; padding: 20px 24px;">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+            Just like Minecraft, your universe's seed determines all star systems, continental landmasses, biomes, and planetary physics. Once created, the seed is locked for this cosmos.
+          </p>
+          <div class="form-group">
+            <label style="font-weight: 600; color: #fff;">Universe Generation Seed</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="create-universe-seed" value="Cosmos-999" style="flex: 1; background: rgba(0,0,0,0.5); border: 1px solid var(--border-gold); color: #fef08a; padding: 10px 14px; border-radius: 8px; font-weight: 700; font-family: monospace;">
+              <button id="btn-modal-roll-seed" class="icon-action-btn" style="padding: 0 16px; font-size: 1.1rem;" title="Randomize Seed">🎲</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label style="font-weight: 600; color: #fff;">Galaxy Topology</label>
+            <select id="create-galaxy-type" style="background: rgba(0,0,0,0.5); border: 1px solid var(--border-glass); color: #fff; padding: 10px 14px; border-radius: 8px;">
+              <option value="spiral">Twin-Arm Spiral Galaxy (Rich & Habitable)</option>
+              <option value="elliptical">Elliptical Core Cluster (Dense Stars)</option>
+              <option value="ring">Ring Super-Structure (Ancient Monolith)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-new-universe" class="btn-secondary">Cancel</button>
+          <button id="btn-confirm-new-universe" class="btn-primary">🌌 Ignite New Universe</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTINUE SAVED UNIVERSE MODAL -->
+    <div id="continue-modal" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+          <h2>💾 Saved Universe Found</h2>
+        </div>
+        <div class="modal-body" style="flex-direction: column; gap: 12px; padding: 20px 24px;">
+          <p id="continue-info" style="font-weight: 600; color: #fef08a;"></p>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+            Continue where you left off, or start the default universe. Starting fresh replaces the saved universe the next time the game autosaves.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-discard-save" class="btn-secondary">Start Fresh</button>
+          <button id="btn-continue-save" class="btn-primary">Continue Universe</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BEGINNER'S GUIDE MODAL -->
+    <div id="guide-modal" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 650px;">
+        <div class="modal-header">
+          <h2>✨ Creator's Guide — How to Play God</h2>
+          <button id="btn-close-guide" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body" style="flex-direction: column; gap: 16px; padding: 20px 24px;">
+          <div class="guide-step">
+            <div class="guide-step-icon">🪐</div>
+            <div class="guide-step-body">
+              <h4>1. Explore the Multi-Scale Cosmos</h4>
+              <p>Switch smoothly between <strong>🌌 Galaxy</strong>, <strong>🪐 Solar System</strong>, and <strong>🌍 Planetary Surface</strong> in the top-left HUD. In 3D space, click on any planet to orbit and focus on it.</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-step-icon">🌍</div>
+            <div class="guide-step-body">
+              <h4>2. Descend to the Living Surface</h4>
+              <p>Click <strong>"Descend to Surface"</strong> on any planet to explore its procedural biomes, wildlife, tribes, and continental drift in real time.</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-step-icon">👑</div>
+            <div class="guide-step-body">
+              <h4>3. The God Creation Workshop</h4>
+              <p>Click the <strong>Crown 👑</strong> button in the bottom dock. Design custom humans/champions with <strong>⚡ JEV System 1 AI</strong> or <strong>🧭 Minecraft Mob AI</strong>, create custom species with genetic traits, or forge brand new planets!</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-step-icon">⛰️</div>
+            <div class="guide-step-body">
+              <h4>4. Shape Worlds & Cast Divine Powers</h4>
+              <p>Select divine powers from the bottom toolbar to raise mountains, carve ocean trenches, bless crops with rain, or hurl cosmic meteors.</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-step-icon">⚡</div>
+            <div class="guide-step-body">
+              <h4>5. Control Time & Watch Civilizations Evolve</h4>
+              <p>Warp time to <strong>100x</strong> or <strong>10,000x</strong> in the top-right HUD to watch continents drift, ice ages advance, species mutate, and civilizations rise, collapse into ruins, and be reborn!</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: center;">
+          <button id="btn-dismiss-guide" class="btn-primary" style="padding: 10px 30px;">Let There Be Light (Start)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- THE GOD CREATION WORKSHOP MODAL -->
+    <div id="workshop-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>👑 The God Creation Workshop</h2>
+          <button id="btn-close-workshop" class="close-btn">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Left Column: Procedural Avatar Preview & Presets -->
+          <div class="preview-col" id="workshop-preview-col">
+            <canvas id="avatar-preview-canvas" width="200" height="200"></canvas>
+            <div id="preview-name-display" class="preview-title">Eve</div>
+            <div id="preview-epithet-display" class="preview-epithet">The Firstborn Prophet</div>
+
+            <div class="presets-container" id="champion-presets-box">
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">Archetype Presets:</div>
+              <button class="preset-btn" data-preset="prophet">✨ Prophet of Light</button>
+              <button class="preset-btn" data-preset="warlord">⚔️ Divine Warmaster</button>
+              <button class="preset-btn" data-preset="architect">🏛️ Master Architect</button>
+            </div>
+          </div>
+
+          <!-- Right Column: Granular Customization Form -->
+          <div class="controls-col">
+            <div class="tab-bar">
+              <button id="tab-champion-btn" class="tab-btn active">Champion / Human</button>
+              <button id="tab-species-btn" class="tab-btn">Living Species</button>
+              <button id="tab-planet-btn" class="tab-btn">Custom Planet</button>
+            </div>
+
+            <!-- Tab 1: Champion Creator -->
+            <div id="tab-champion-content">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Name</label>
+                  <input type="text" id="champ-name" value="Eve">
+                </div>
+                <div class="form-group">
+                  <label>Epithet / Sacred Title</label>
+                  <input type="text" id="champ-epithet" value="The Firstborn Prophet">
+                </div>
+                <div class="form-group">
+                  <label>Gender / Identity</label>
+                  <select id="champ-gender">
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Celestial / Ascendant">Celestial / Ascendant</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Attire / Regalia</label>
+                  <select id="champ-attire">
+                    <option value="robes">Sacred Robes</option>
+                    <option value="armor">Holy Plate Armor</option>
+                    <option value="scholar">Sage Vestments</option>
+                    <option value="tribal">Primal Furs</option>
+                    <option value="celestial">Solar Regalia</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Hairstyle</label>
+                  <select id="champ-hair-style">
+                    <option value="long">Long Flowing</option>
+                    <option value="short">Short Warrior</option>
+                    <option value="braided">Braided Locks</option>
+                    <option value="crown">Royal Crown</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Hair Color</label>
+                  <input type="color" id="champ-hair-color" value="#4a2511" style="height: 38px; padding: 2px; width: 100%;">
+                </div>
+                <div class="form-group">
+                  <label>Skin Tone</label>
+                  <input type="color" id="champ-skin-color" value="#f3c192" style="height: 38px; padding: 2px; width: 100%;">
+                </div>
+                <div class="form-group">
+                  <label>Divine Aura Color</label>
+                  <input type="color" id="champ-aura-color" value="#ffd700" style="height: 38px; padding: 2px; width: 100%;">
+                </div>
+              </div>
+
+              <!-- AI System Selector -->
+              <div class="ai-selector-box" style="margin-top: 14px;">
+                <label style="font-size: 0.8rem; font-weight: 600; color: #fff;">Cognitive AI Architecture</label>
+                <div class="ai-options">
+                  <label class="ai-option-label">
+                    <input type="radio" name="champ-ai" value="JEV" checked>
+                    <span>⚡ JEV System 1 (Choice, Score, Noul Fast Evaluations)</span>
+                  </label>
+                  <label class="ai-option-label">
+                    <input type="radio" name="champ-ai" value="MINECRAFT">
+                    <span>🧭 Minecraft Mob A* AI (Grid Wander & Flee)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Personality Sliders (Big 5 + Piety) -->
+              <div class="sliders-section" style="margin-top: 14px;">
+                <div class="section-title">Personality Matrix (Big Five + Devotion)</div>
+                <div class="slider-row">
+                  <span>Openness / Curiosity:</span>
+                  <input type="range" id="trait-openness" min="0" max="1" step="0.05" value="0.85">
+                </div>
+                <div class="slider-row">
+                  <span>Conscientiousness / Work Ethic:</span>
+                  <input type="range" id="trait-conscientiousness" min="0" max="1" step="0.05" value="0.9">
+                </div>
+                <div class="slider-row">
+                  <span>Extraversion / Leadership:</span>
+                  <input type="range" id="trait-extraversion" min="0" max="1" step="0.05" value="0.75">
+                </div>
+                <div class="slider-row">
+                  <span>Agreeableness / Empathy:</span>
+                  <input type="range" id="trait-agreeableness" min="0" max="1" step="0.05" value="0.8">
+                </div>
+                <div class="slider-row">
+                  <span>Divine Piety (Devotion to You):</span>
+                  <input type="range" id="trait-piety" min="0" max="1" step="0.05" value="0.98">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Species Creator -->
+            <div id="tab-species-content" class="hidden">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Species Name</label>
+                  <input type="text" id="spec-name" value="Star Chimera">
+                </div>
+                <div class="form-group">
+                  <label>Morphology Class</label>
+                  <select id="spec-type">
+                    <option value="alien">Extraterrestrial / Alien</option>
+                    <option value="humanoid">Humanoid Variant</option>
+                    <option value="herbivore">Beast / Grazer</option>
+                    <option value="predator">Apex Predator</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Icon Symbol</label>
+                  <input type="text" id="spec-symbol" value="🦄" maxlength="2">
+                </div>
+                <div class="form-group">
+                  <label>Diet Type</label>
+                  <select id="spec-diet">
+                    <option value="herbivore">Herbivore (Plants & Flora)</option>
+                    <option value="carnivore">Carnivore (Hunts other species)</option>
+                    <option value="omnivore">Omnivore (Adaptive)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Base Lifespan (Years)</label>
+                  <input type="text" id="spec-lifespan" value="85">
+                </div>
+                <div class="form-group">
+                  <label>Species Color</label>
+                  <input type="color" id="spec-color" value="#c084fc" style="height: 38px; padding: 2px; width: 100%;">
+                </div>
+              </div>
+
+              <div class="sliders-section" style="margin-top: 14px;">
+                <div class="section-title">Genetic Genome</div>
+                <div class="slider-row">
+                  <span>Movement Speed:</span>
+                  <input type="range" id="spec-speed" min="0.5" max="2.5" step="0.1" value="1.4">
+                </div>
+                <div class="slider-row">
+                  <span>Cold Resistance (Glacial Biomes):</span>
+                  <input type="range" id="spec-cold" min="0" max="1" step="0.05" value="0.7">
+                </div>
+                <div class="slider-row">
+                  <span>Heat Resistance (Deserts & Calderas):</span>
+                  <input type="range" id="spec-heat" min="0" max="1" step="0.05" value="0.6">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 3: Custom Planet Creator -->
+            <div id="tab-planet-content" class="hidden">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Planet Name</label>
+                  <input type="text" id="planet-name-input" value="Aethelgard Prime">
+                </div>
+                <div class="form-group">
+                  <label>Planet Archetype</label>
+                  <select id="planet-type-input">
+                    <option value="terrestrial">Garden Earth-like</option>
+                    <option value="desert">Arid Sand Dunes</option>
+                    <option value="ice">Glacial Frozen</option>
+                    <option value="volcanic">Volcanic Primordial</option>
+                    <option value="alien">Alien Bioluminescent</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Radius / Size</label>
+                  <input type="range" id="planet-radius-input" min="2.5" max="8.0" step="0.2" value="5.2">
+                </div>
+                <div class="form-group">
+                  <label>Orbital Distance (AU) <span style="font-size:0.7rem; color:#f87171;">(&lt; 40 AU risks solar tidal capture)</span></label>
+                  <input type="range" id="planet-dist-input" min="20" max="260" step="5" value="80">
+                </div>
+                <div class="form-group">
+                  <label>Atmosphere</label>
+                  <select id="planet-atmo-input">
+                    <option value="true">Breathable / Oxygen-Rich</option>
+                    <option value="false">Barren Vacuum</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Planetary Rings</label>
+                  <select id="planet-rings-input">
+                    <option value="false">No Rings</option>
+                    <option value="true">Celestial Rings</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Initial Population / Life</label>
+                  <select id="planet-pop-input">
+                    <option value="true">Seed with Starting Life & Tribes</option>
+                    <option value="false">Uninhabited / Barren</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Primary Tint</label>
+                  <input type="color" id="planet-color-input" value="#2563eb" style="height: 38px; padding: 2px; width: 100%;">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-cancel-workshop" class="btn-secondary">Close</button>
+          <button id="btn-spawn-creation" class="btn-primary">✨ Spawn Creation</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

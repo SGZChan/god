@@ -1,0 +1,308 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "project": {
+    "name": "Genesis & Cosmos — Multi-Scale God Simulator",
+    "version": "2.0.0",
+    "genre": "Cosmic Sandbox / Planetary Life & Civilization Simulation",
+    "summary": "A 3-tier multi-scale god game spanning galactic star fields, orbital Keplerian solar systems, and a 180x110 procedural planetary surface with Minecraft-style architectural rendering, simulated biomes, genetics, A* pathfinding, JEV System 1 AI, warfare, diplomacy, and divine terraforming powers.",
+    "techStack": {
+      "bundler": "Vite 8.3.2",
+      "graphics3D": "Three.js 0.186.1 (WebGL)",
+      "graphics2D": "HTML5 Canvas 2D Context (Optimized Viewport Culling)",
+      "styling": "Vanilla CSS (Custom Glassmorphism, CSS Custom Properties, Dark Mode)",
+      "audio": "HTML5 Web Audio API (Synthesized Real-time DSP Sound Effects)",
+      "automation": "Puppeteer Core 25.12.0 (14 Sub-Agent Autonomous QA Suite)",
+      "runtime": "Node.js (ES Modules, 'type': 'module')"
+    },
+    "entryPoints": {
+      "launchScript": "run.bat",
+      "powerShellScript": "run.ps1",
+      "htmlEntry": "index.html",
+      "javascriptEntry": "src/main.js"
+    }
+  },
+  "architecture": {
+    "hierarchicalTiers": {
+      "tier1_galaxy": {
+        "title": "Macro-Cosmic Galaxy View",
+        "renderer": "Three.js WebGL (PerspectiveCamera, PointsMaterial, AdditiveBlending)",
+        "coordinates": "3D Cartesian Space (-600 to +600 units)",
+        "components": [
+          {
+            "name": "Logarithmic Spiral Galaxy",
+            "particles": 4500,
+            "arms": 2,
+            "features": "Core amber bulge grading outwards to electric blue spiral arms with radial spin rotation."
+          },
+          {
+            "name": "Supermassive Central Black Hole",
+            "features": "Dark event horizon sphere (R=12) with counter-rotating glowing accretion disk (R_inner=14, R_outer=38)."
+          },
+          {
+            "name": "Star System Nodes",
+            "features": "Clickable/selectable star systems procedurally positioned across the spiral galaxy arms."
+          }
+        ]
+      },
+      "tier2_solarSystem": {
+        "title": "Keplerian Solar System View",
+        "renderer": "Three.js WebGL with PointLight shadows and orbit line trajectories",
+        "coordinates": "3D Orbital Space with center star at (0, 0, 0)",
+        "components": [
+          {
+            "name": "Central Star (5 Spectral Classes)",
+            "classes": [
+              { "type": "Yellow Dwarf", "radius": 14, "mass": 12000, "color": "0xffcc33" },
+              { "type": "Red Giant", "radius": 22, "mass": 24000, "color": "0xff4422" },
+              { "type": "Blue Supergiant", "radius": 18, "mass": 35000, "color": "0x66bbff" },
+              { "type": "White Dwarf", "radius": 8, "mass": 16000, "color": "0xeeeeff" },
+              { "type": "Pulsar Neutron Star", "radius": 6, "mass": 45000, "color": "0xaa44ff" }
+            ],
+            "visuals": "Photosphere mesh, additive blending corona glow, and faint orange Roche limit danger boundary."
+          },
+          {
+            "name": "Orbital Celestial Bodies (Planets)",
+            "features": "Dynamic canvas-generated planetary textures, axial tilt, optional ring geometry, atmosphere/cloud layers, and Keplerian orbital paths."
+          },
+          {
+            "name": "Cosmic Singularities (Black Holes)",
+            "features": "Spawnable micro-singularities exerting N-body gravitational perturbations and devouring nearby planets on event horizon contact."
+          },
+          {
+            "name": "Cosmic Asteroids",
+            "features": "Targeted or random trajectory asteroids capable of mass extinction collisions."
+          }
+        ]
+      },
+      "tier3_surface": {
+        "title": "Living Planetary Surface View",
+        "renderer": "HTML5 Canvas 2D (Smooth Pan & Zoom: 0.25x to 6.0x)",
+        "gridDimensions": "180 tiles wide × 110 tiles high (~19,800 active simulation cells)",
+        "components": [
+          {
+            "name": "Procedural Tectonic Terrain",
+            "features": "Continuous simplex/octave elevation noise, Voronoi-like tectonic plates, temperature latitude gradients, moisture mapping, and 12 distinct biomes."
+          },
+          {
+            "name": "Minecraft-Style Structural Architecture",
+            "features": "Top-down blocky isometric rendering of buildings (timber cottages, stone castle keeps with crenellations, temples, farm furrows, watchtowers, and ruins)."
+          },
+          {
+            "name": "Ecosystem & Living Entities",
+            "features": "Autonomous humans, soldiers, guards, criminals, wildlife (deer, wolves), swimming/drowning breath mechanics, genetic traits, and gravestones."
+          },
+          {
+            "name": "Civilizations & Warfare",
+            "features": "Nations with distinct government types, territorial expansion, tech eras, crime, laws, holy crusades, border wars, and ruins rebirth."
+          }
+        ]
+      }
+    }
+  },
+  "subsystems": {
+    "spacePhysicsEngine": {
+      "file": "src/cosmos/spacePhysics.js",
+      "description": "Simulates planetary orbits, stellar gravity, Roche limit tidal capture, black holes, and asteroid impacts.",
+      "mathematicsAndFormulas": {
+        "keplerianOrbitalSpeed": {
+          "formula": "omega = sqrt((G * starMass) / pow(max(solarImpactRadius, distance), 3))",
+          "explanation": "Calculates tangential angular velocity based on Kepler's Third Law, where G is the gravitational constant and starMass is the mass of the parent star."
+        },
+        "rocheLimitTidalCapture": {
+          "formula": "R_roche = starRadius * 2.2",
+          "explanation": "Defines the tidal disruption boundary. If a planet's distance falls below R_roche, coronal plasma drag and tidal gravity decelerate the orbit inward: distance -= (10.0 + pow(proximity, 2) * 40.0) * dt."
+        },
+        "solarIncineration": {
+          "condition": "distance <= (starRadius + planetRadius * 0.7)",
+          "effect": "Direct collision with stellar photosphere. Emits 'STAR_CONSUMED' event, removes planet from physics, triggers solar flare eruption, and plays cataclysmic audio."
+        },
+        "roguePlanetEscape": {
+          "condition": "distance > 420 AU",
+          "effect": "Planet breaks free from solar gravity. Converts tangential velocity into linear vector and drifts into deep interstellar void."
+        },
+        "blackHolePerturbation": {
+          "formula": "pull = (bhPos - planetPos).normalize() * ((bhMass / dist^2) * dt * 0.05)",
+          "eventHorizon": "distToBh < bhRadius * 1.6 triggers instant consumption."
+        }
+      }
+    },
+    "terrainAndTectonics": {
+      "file": "src/planet/terrain.js, src/planet/tectonics.js, src/planet/biomes.js",
+      "description": "Procedural continental crust, climate simulation, natural erosion, and structural corrosion.",
+      "keyMechanics": {
+        "biomeClassification": "Classifies tiles based on elevation, temperature, and moisture into Deep Ocean, Shallow Ocean, Coastal Beach, Temperate Plains, Dense Forest, High Taiga, Snowy Tundra, Glacial Ice, Arid Desert, Savanna, Volcanic Caldera, or Primordial Swamp.",
+        "plateTectonics": "12 tectonic plates moving with randomized drift vectors. Plate boundary convergence raises mountain ranges; boundary divergence opens oceanic trenches.",
+        "naturalLandLoss": "When tectonic shift or sea level changes convert dry land to water (tile.biome.isWater), any standing human structure is destroyed and sunken into submerged ruins ('ruins').",
+        "timeCorrosionSystem": "Time itself slowly corrodes structures: active buildings lose health gradually (-1 to -3 HP per corrosion pulse). Upon reaching 0 HP, they collapse into ruins. Over subsequent epochs, ruins crumble and vanish completely.",
+        "lethalTerraforming": {
+          "raiseMountain": "Violently uplifts continental crust (radius 3-4 tiles, +0.28 elevation). Epicenter structures are crushed to rubble (health 0), and any mortals beneath are crushed and killed ('Crushed by Tectonic Upheaval').",
+          "carveOcean": "Depresses crust into ocean abyss (-0.32 elevation). Submerges structures and drowns non-aquatic beings.",
+          "tsunami": "Sweeps a tidal deluge across coastal tiles, eroding structures and drowning armies.",
+          "volcano": "Creates magma calderas surrounded by molten basalt fissures, incinerating life and structures.",
+          "surfaceSingularity": "Tears a gravitational rift on the planetary crust, destroying all matter."
+        }
+      }
+    },
+    "surfaceRenderer": {
+      "file": "src/planet/surfaceRenderer.js",
+      "description": "High-performance Canvas 2D engine rendering tiles, voxel buildings, entities, and divine visual effects.",
+      "features": {
+        "cameraControls": {
+          "panning": "Middle-click drag, right-click drag, spacebar drag, left-click drag in PAN/INSPECT mode, WASD / Arrow keys (850 px/s), and on-screen directional D-Pad.",
+          "zooming": "Mouse wheel with cursor anchoring (zoom range: 0.25x to 6.0x).",
+          "entityTracking": "Camera follow lock smoothly tracks any chosen mortal or champion across the map."
+        },
+        "minecraftStyleBuildings": "At zoom > 1.6x, buildings switch from simple icons to top-down isometric architectural pixel rendering with pitched wood/brick roofs, stone battlements, temple domes, and agricultural furrows.",
+        "fallenGraveMarkers": "When creatures or humans die, they do not pop out of existence instantly; they render as tombstones ('🪦') with remaining fade for 6 seconds, allowing players to click and inspect their cause of death."
+      }
+    },
+    "lifeAndGenetics": {
+      "file": "src/life/entity.js, src/life/species.js, src/life/ecosystem.js",
+      "description": "Simulates organic beings with genetics, Big Five psychology, religion/atheism, roles, and physiology.",
+      "physiology": {
+        "vitals": ["health (0-100)", "energy (0-100)", "hunger (0-100)", "breath (0-100)", "age (years)"],
+        "swimmingAndDrowning": "Non-aquatic entities entering water lose breath (-12/s in shallow ocean, -22/s in deep ocean). At 0 breath, they drown and suffer 18 HP/s damage until reaching dry land or dying ('Drowning').",
+        "agingAndOldAgeDeath": "Age increments with simulation time (dt * max(1, speedMultiplier) * 0.25). A human lives ~75 years (~3-4 min at 1x speed). Exceeding max age triggers natural peaceful death from 'Old Age' and sends an obituary notification.",
+        "graveDecayTimer": "Entities retain decayTimer = 6.0 on death before being removed from memory."
+      },
+      "beliefSystem": {
+        "wildlife": {
+          "status": "WILDLIFE",
+          "label": "Wild Instinct",
+          "description": "Guided purely by animal survival, grazing, and hunting rather than mortal theologies."
+        },
+        "devoutBeliever": {
+          "status": "DEVOUT_BELIEVER",
+          "label": "Devout Believer",
+          "threshold": "Piety > 0.65",
+          "behavior": "Prays to the Creator, constructs grand holy sanctuaries, and communes with God."
+        },
+        "secularSkeptic": {
+          "status": "SECULAR_SKEPTIC",
+          "label": "Secular Skeptic",
+          "threshold": "Piety between 0.35 and 0.65",
+          "behavior": "Focuses on mortal crafts, technology, architecture, and science."
+        },
+        "atheistHeretic": {
+          "status": "ATHEIST_HERETIC",
+          "label": "Atheist / Heretic",
+          "threshold": "Piety < 0.35",
+          "behavior": "Rejects divine authority, questions miracles, and vandalizes or desecrates holy temples."
+        }
+      },
+      "socialRoles": [
+        "CITIZEN (Farming, trade, building)",
+        "GUARD (Enforces civic law, hunts criminals and heretics)",
+        "SOLDIER (Marches into enemy territory during war, attacks enemy units and sieges buildings)",
+        "CRIMINAL (Low agreeableness, commits theft and banditry)",
+        "HERETIC (Spreads atheism, defies theocratic kings)",
+        "HERBIVORE (Wildlife grazer, flees predators)",
+        "PREDATOR (Wildlife carnivore, hunts herbivores)"
+      ]
+    },
+    "artificialIntelligence": {
+      "pathfinding": {
+        "file": "src/ai/pathfinding.js",
+        "algorithm": "A* (A-Star) Grid Pathfinding with Manhattan Heuristic",
+        "costWeights": {
+          "flatLand": 1.0,
+          "denseForest": 1.5,
+          "mountainPass": 2.2,
+          "waterNonAquatic": 3.5
+        }
+      },
+      "jevEngine": {
+        "file": "src/ai/jevEngine.js",
+        "name": "JEV System 1 AI Engine",
+        "description": "Deterministic structured cognitive evaluation matrix for Champions and Leaders.",
+        "matrixScores": {
+          "piety": "Calculated from personality piety, proximity to temples, and divine miracles witnessed.",
+          "heroism": "Calculated from warfare talent, low neuroticism, and presence of enemies.",
+          "leadership": "Calculated from statesmanship, conscientiousness, and population density."
+        },
+        "noulJudgments": {
+          "willDefyMortalKing": "Boolean: true if Piety > 0.7 and sovereign government is corrupt or atheist.",
+          "readyForSelfSacrifice": "Boolean: true if Heroism > 0.75 and nation is under attack.",
+          "hasReceivedDivineVision": "Boolean: true if player used Blessing or Inspiration nearby."
+        }
+      },
+      "minecraftMobAI": {
+        "file": "src/life/entity.js (executeMinecraftMobAI)",
+        "description": "Finite State Machine covering WANDER, FORAGE, HUNT, FLEE, ENFORCE_LAW, and WAR_MARCH."
+      }
+    },
+    "civilizationAndSociety": {
+      "file": "src/civilization/society.js, src/civilization/techTree.js",
+      "description": "Simulates nations, diplomacy, wars, technological eras, and architectural building/renewal.",
+      "governments": [
+        { "id": "THEOCRACY", "name": "Holy Theocracy", "traits": "Devoted to Creator, persecutes heretics." },
+        { "id": "MONARCHY", "name": "Feudal Monarchy", "traits": "Feudal castles, knights, focus on martial prowess." },
+        { "id": "REPUBLIC", "name": "Civic Republic", "traits": "Elected senate, higher science and commerce." },
+        { "id": "CHIEFTAINCY", "name": "Tribal Chieftaincy", "traits": "Primal martial strength and nomadic resilience." }
+      ],
+      "diplomacyAndWar": {
+        "states": ["PEACE", "TENSION", "WAR"],
+        "triggers": "Nations declare war based on border friction (distance < 45) and religious divergence (piety delta > 40). Armies deploy soldiers to clash and destroy enemy structures.",
+        "collapse": "Famine, asteroid cataclysms, or military conquest collapse empires into ancient ruins."
+      },
+      "demolitionAndRenewal": {
+        "rule": "Civilizations clear and rebuild over ancient ruins, renovate decaying structures (health < 40), and upgrade obsolete buildings into current era structures."
+      },
+      "rebirth": "Nomadic humans discovering abandoned ancient ruins can found Neo-Civilizations inheriting 70% of the lost civilization's technology."
+    },
+    "divinePowersManager": {
+      "file": "src/god/divinePowers.js",
+      "description": "God toolbar providing 13 interactive cosmic and terrestrial powers.",
+      "powers": [
+        { "id": "INSPECT", "name": "Omniscient Eye", "isDraggable": false, "function": "Inspects closest entity or tile within 2.6 radius." },
+        { "id": "PAN", "name": "Pan & Explore", "isDraggable": false, "function": "Click-drag moves viewport; direct entity click inspects." },
+        { "id": "TERRAFORM_RAISE", "name": "Raise Mountain", "isDraggable": true, "function": "Crushes structures, kills life beneath, uplifts crust." },
+        { "id": "TERRAFORM_LOWER", "name": "Carve Ocean", "isDraggable": true, "function": "Depresses crust into water, sinks buildings, drowns mortals." },
+        { "id": "TSUNAMI", "name": "Tsunami Deluge", "isDraggable": true, "function": "Sweeps coastal tiles, destroys buildings, drowns units." },
+        { "id": "VOLCANO", "name": "Volcanic Magma Fissure", "isDraggable": true, "function": "Erupts magma and basalt, incinerates tiles." },
+        { "id": "SINGULARITY", "name": "Surface Gravitational Rift", "isDraggable": false, "function": "Black hole rift vaporizing all matter." },
+        { "id": "PLAGUE", "name": "Divine Pestilence", "isDraggable": true, "function": "Spreads contagious disease through population centers." },
+        { "id": "DIVINE_RAIN", "name": "Rain of Fertility", "isDraggable": true, "function": "Accelerates crop growth, replenishes flora." },
+        { "id": "LIGHTNING", "name": "Lightning Bolt", "isDraggable": true, "function": "Smites heretics or enemy soldiers directly." },
+        { "id": "METEOR", "name": "Meteor Strike", "isDraggable": false, "function": "Obliterates cities and craters terrain." },
+        { "id": "INSPIRATION", "name": "Divine Revelation", "isDraggable": false, "function": "Grants technology points to scholars." },
+        { "id": "BLESSING", "name": "Holy Blessing", "isDraggable": true, "function": "Restores full health and cures plagues." }
+      ]
+    },
+    "omnipresentInspector": {
+      "file": "src/ui/inspector.js",
+      "description": "Contextual right-drawer UI updating in real-time.",
+      "modes": {
+        "wildlife": "Displays animal species, wild instinct, diet (herbivore/predator), speed, lifespan, and vitals.",
+        "human": "Displays identity, civilization, faith status, civic role, Big Five personality, proficiencies, and JEV matrix.",
+        "deceased": "Displays red memorial banner with cause of death and total years lived.",
+        "tile": "Displays biome type, elevation, temperature, moisture, flora, natural resources, and structure HP."
+      },
+      "safetyGuards": "Automatically clears and hides whenever switching outside the Planetary Surface view."
+    }
+  },
+  "simulationLoopAndControls": {
+    "file": "src/main.js",
+    "loop": "requestAnimationFrame tick loop with capped timeDelta (Math.min((now - lastTime) / 1000, 0.1)).",
+    "speedTiers": [
+      { "speed": 0, "name": "Pause" },
+      { "speed": 1, "name": "Mortal Real-Time (1x)" },
+      { "speed": 10, "name": "Civilization Speed (10x)" },
+      { "speed": 100, "name": "Dynasty Speed (100x)" },
+      { "speed": 10000, "name": "Geological & Tectonic Drift Speed (10,000x)" }
+    ],
+    "speedStepButtons": "'-' (btn-speed-down) and '+' (btn-speed-up) buttons smoothly step through speed tiers.",
+    "universeSeed": "Immutable once generated; seeded PRNG ('Genesis-1337' by default) guarantees deterministic cosmic reproduction."
+  },
+  "instructionsForAIAgents": {
+    "buildingProject": "Run 'npm run build' (or 'cmd /c npm run build' on Windows) to bundle assets into /dist.",
+    "runningDevServer": "Run 'npm run dev' to launch local Vite server at http://127.0.0.1:5173/.",
+    "executingAuditSuite": "Execute 'node scripts/multi_agent_audit.js' via Puppeteer to run the 14 automated sub-agents (4 QA, 2 User, 3 Senior SWE, 1 CEO, 3 Client, 1 Player). All must report PASS.",
+    "executingPhysicsTest": "Execute 'node scripts/test_sun_physics.js' to verify Keplerian orbital stability and solar Roche limit consumption.",
+    "modifyingCode": {
+      "nullSafety": "Always verify 'tile.structure' exists before reading 'tile.structure.type' or 'tile.structure.health'.",
+      "inspectorScoping": "Never open the inspector drawer outside 'SURFACE' view; call 'inspector.clear()' on view change.",
+      "coordinateConversions": "Use 'renderer.screenToTile(screenX, screenY)' to obtain both integer {x, y} and floating-point {worldX, worldY} for sub-tile precision."
+    }
+  }
+}
