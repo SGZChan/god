@@ -619,7 +619,7 @@ export class SocietyManager {
 
   // Plans a road between two settlements; builders of each end pave their half.
   connectByRoad(civ, a, b) {
-    const path = this.ecosystem.pathfinder.findPath(a.x, a.y, b.x, b.y, 2500);
+    const path = this.ecosystem.pathfinder.findPath(a.x, a.y, b.x, b.y, 3000, true);
     const kind = roadKindFor(eraTier(civ));
     const half = Math.floor(path.length / 2);
     path.forEach((p, i) => queueRoad(this.terrain, i < half ? a : b, Math.floor(p.x), Math.floor(p.y), kind));

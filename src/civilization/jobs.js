@@ -110,7 +110,8 @@ function walkTo(ent, c, x, y, reach = 1.2) {
     t.lastD = d;
     t.gx = x;
     t.gy = y;
-    ent.requestPath(x + 0.5, y + 0.5, c.world.pathfinder);
+    // a goal behind an obstacle needs a wider search than the usual 300 nodes
+    ent.requestPath(x + 0.5, y + 0.5, c.world.pathfinder, 300 + (t.stuck || 0) * 500);
   }
   if ((t.stuck || 0) >= 5) {
     t.failed = true;
@@ -178,6 +179,10 @@ export function aptitude(ent, job) {
 
 // ---------- the labour market ----------
 
+function foodTargetOf(pop) {
+  return Math.min(70, Math.max(8, pop * 2.5));
+}
+
 function wantedJobs(c, st, members, adults) {
   const { terrain, civ } = c;
   const clock = civ.clock || 0;
@@ -187,10 +192,10 @@ function wantedJobs(c, st, members, adults) {
   const want = [];
   const add = (job, n) => { if (n > 0 && !blocked(job)) want.push([job, Math.round(n)]); };
 
-  const foodTarget = Math.max(8, pop * 3);
+  const foodTarget = foodTargetOf(pop);
   const foodU = eco.foodUnits(st.stock);
   const foodShort = foodU < foodTarget ? 1 - foodU / foodTarget : 0;
-  const foodRich = foodU > foodTarget * 2.2;
+  const foodRich = foodU > foodTarget * 1.3;
   let farmSlots = 0;
   let penSlots = 0;
   for (const b of buildingsOf(terrain, st)) {
@@ -202,7 +207,16 @@ function wantedJobs(c, st, members, adults) {
   const roads = st.roadQueue.length;
 
   add('farmer', Math.min(farmSlots, Math.ceil(N * (foodRich ? 0.12 : foodShort > 0.4 ? 0.5 : 0.3))));
-  add('builder', Math.min(Math.ceil(N * 0.45), sites.length * 2 + (roads > 0 ? 1 : 0)));
+  // builders are only needed where work can actually go on: materials delivered or in the stockpile
+  let workable = 0;
+  for (const s of sites) {
+    if (s.progress < deliveredFraction(s) - 0.002) { workable++; continue; }
+    const inb = (st._inbound && st._inbound.get(s.id)) || {};
+    for (const [res, n] of Object.entries(missingMaterials(s))) {
+      if (n - (inb[res] || 0) > 0.01 && (st.stock[res] || 0) > 0.01) { workable++; break; }
+    }
+  }
+  add('builder', Math.min(Math.ceil(N * 0.4), workable * 2 + (roads > 0 ? 1 : 0)));
   const need = st.need || { wood: 0.5, fibre: 0.5, stone: 0.5, clay: 0, food: foodShort };
   const oreNeed = st.shortage.ore ? 0.5 : 0;
   add('gatherer', (foodShort > 0.25 || farmSlots === 0) ? Math.ceil(N * (0.08 + 0.3 * foodShort + 0.12 * need.fibre)) : (need.fibre > 0.3 ? Math.ceil(N * 0.1 * need.fibre) : 0));
@@ -324,7 +338,7 @@ export function tickSettlement(c, st, members, dt) {
   short.wood = Boolean(short.wood || buffer('wood'));
   short.stone = Boolean(short.stone || (st.stock.stone || 0) < 10);
   short.ore = ['copper', 'tin', 'iron', 'coal'].some(r => isDiscovered(civ, r) && (short[r] || (st.stock[r] || 0) < 6) && countBuilt(terrain, st, 'smithy') > 0);
-  short.food = eco.foodUnits(st.stock) < Math.max(8, members.length * 3);
+  short.food = eco.foodUnits(st.stock) < foodTargetOf(members.length);
   st.shortage = short;
   // how badly each raw material is needed (0 = plenty, 1 = none): stock against a working level plus what sites are missing
   const level = (res, base) => {
@@ -337,7 +351,7 @@ export function tickSettlement(c, st, members, dt) {
     fibre: level('fibre', 12),
     stone: level('stone', 14 + (c.tier >= 1 ? 16 : 0)),
     clay: level('clay', kiln),
-    food: Math.max(0, 1 - eco.foodUnits(st.stock) / Math.max(8, members.length * 3))
+    food: Math.max(0, 1 - eco.foodUnits(st.stock) / foodTargetOf(members.length))
   };
 
   // inbound materials per site, from what builders and haulers carry
@@ -618,6 +632,18 @@ function deliveredFraction(site) {
   return need > 0 ? got / need : 1;
 }
 
+// A site nobody can walk to: skipped for a while; after three failures the plot is given up so the planner picks a better one.
+function abandonSite(c, ent, site) {
+  const t = ent.task;
+  if (t) { t.failed = false; t.stuck = 0; }
+  site.fails = (site.fails || 0) + 1;
+  site.blockedUntil = (c.civ.clock || 0) + 40;
+  if (site.fails >= 3 && site.progress < 0.5) {
+    c.terrain.removeBuilding(site.id, { ruins: false });
+    c.ecosystem.notifications.unshift({ text: `${c.st.name} abandoned an unreachable building plot.`, minor: true, time: Date.now() });
+  }
+}
+
 function siteSpot(site) {
   return { x: site.x + (site.w >> 1), y: site.y + (site.h >> 1) };
 }
@@ -648,7 +674,7 @@ function stepBuilder(ent, c, haulOnly) {
     say(ent, `Hauling materials to the ${BUILDING_TYPES[site.type].name.toLowerCase()}`);
     const spot = siteSpot(site);
     if (!walkTo(ent, c, spot.x, spot.y, 1.8)) {
-      if (t.failed) { t.failed = false; if (returnLoad(ent, c)) t.siteId = undefined; }
+      if (t.failed) { abandonSite(c, ent, site); if (returnLoad(ent, c)) t.siteId = undefined; }
       return true;
     }
     const missing = missingMaterials(site);
@@ -661,13 +687,18 @@ function stepBuilder(ent, c, haulOnly) {
   }
   // 2. pick a site
   const sites = openSites(terrain, st).sort((a, b) => Math.hypot(a.x - ent.x, a.y - ent.y) - Math.hypot(b.x - ent.x, b.y - ent.y));
+  const clock = c.civ.clock || 0;
   for (const site of sites) {
+    if (site.blockedUntil > clock) continue; // unreachable for now
     const fraction = deliveredFraction(site);
     if (!haulOnly && site.progress < fraction - 0.002) {
       t.siteId = site.id;
       say(ent, `Building the ${BUILDING_TYPES[site.type].name.toLowerCase()}`);
       const spot = siteSpot(site);
-      if (!walkTo(ent, c, spot.x, spot.y, 1.9)) return true;
+      if (!walkTo(ent, c, spot.x, spot.y, 1.9)) {
+        if (t.failed) abandonSite(c, ent, site);
+        return true;
+      }
       const def = BUILDING_TYPES[site.type];
       let work = 4.5 * (0.6 + ent.proficiencies.architecture / 100) * toolFactor(st) * sizeFactor(ent);
       work = Math.min(work, Math.max(0.2, (fraction - site.progress) * def.work + 0.2));
@@ -696,9 +727,11 @@ function stepBuilder(ent, c, haulOnly) {
       say(ent, 'Fetching materials from the stockpile');
       if (!here) { walkTo(ent, c, dep.x, dep.y, 2); return true; }
       let room = eco.carryCapacity(ent);
+      const planned = (st._inbound && (st._inbound.get(site.id) || st._inbound.set(site.id, {}).get(site.id))) || null;
       for (const [res, n] of Object.entries(fetch)) {
         const took = eco.take(st.stock, res, Math.min(n, room));
         eco.add(inv, res, took);
+        if (planned) planned[res] = (planned[res] || 0) + took; // others see it is already on its way
         room -= took;
         if (room <= 0) break;
       }
@@ -740,7 +773,8 @@ function chooseRecipe(c) {
   const pop = Math.max(4, st.population || 0);
   const nextReq = ERA_REQUIREMENTS[ERAS[Math.min(ERAS.length - 1, tier + 1)].id] || {};
   for (const rec of eco.RECIPES) {
-    if (rec.tier > tier) continue;
+    const outKey = Object.keys(rec.out)[0];
+    if (rec.tier > tier && !(nextReq.output && nextReq.output[outKey])) continue; // (the goods the next era needs are made early)
     if (rec.needs && !rec.needs.every(n => isDiscovered(civ, n))) continue;
     if (rec.at && countBuilt(terrain, st, rec.at) === 0) continue;
     if (!Object.entries(rec.in).every(([k, n]) => have(k) >= n)) continue;

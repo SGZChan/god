@@ -8,6 +8,19 @@ import { setActiveRng } from '../src/simulation/random.js';
 import { runSimulationSteps } from '../src/simulation/fixedStep.js';
 import { foodUnits } from '../src/civilization/economy.js';
 import { BUILDING_TYPES } from '../src/world/buildings.js';
+import { Entity } from '../src/life/entity.js';
+
+// count how sapients die
+const deaths = {};
+const originalDie = Entity.prototype.die;
+Entity.prototype.die = function (cause = 'Unknown') {
+  const was = this.alive;
+  originalDie.call(this, cause);
+  if (was && !this.alive && this.isSapient) {
+    const key = cause.replace(/Killed in War.*/, 'War').replace(/Hunted by .*/, 'Hunted').replace(/Executed.*/, 'Executed');
+    deaths[key] = (deaths[key] || 0) + 1;
+  }
+};
 
 const seed = process.argv[2] || 'soak-1';
 const years = Number(process.argv[3] || 300);
@@ -53,6 +66,7 @@ function report(year) {
     lines.push(`    stock ${JSON.stringify(stock)}`);
     lines.push(`    output ${JSON.stringify(Object.fromEntries(Object.entries(civ.output).map(([k, v]) => [k, Math.round(v)])))}`);
   }
+  console.log('  sapient deaths so far: ' + JSON.stringify(deaths));
   const animals = ecosystem.entities.filter(e => e.alive && !e.isSapient).length;
   console.log(`--- year ${year} (${((Date.now() - t0) / 1000).toFixed(1)}s wall) entities=${ecosystem.entities.length} animals=${animals} buildings=${terrain.buildings.size}`);
   for (const l of lines) console.log(l);

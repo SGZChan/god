@@ -71,7 +71,8 @@ export class AStarPathfinder {
     this.terrain = terrain;
   }
 
-  findPath(startX, startY, goalX, goalY, maxIterations = 300) {
+  // landOnly: never step onto water (people do not swim); the start tile is exempt so a creature in the water can get out
+  findPath(startX, startY, goalX, goalY, maxIterations = 300, landOnly = false) {
     const sx = Math.floor(startX);
     const sy = Math.floor(startY);
     const gx = Math.floor(goalX);
@@ -114,6 +115,8 @@ export class AStarPathfinder {
         if (closed.has(nKey)) continue;
 
         const tile = this.terrain.getTile(nx, ny);
+
+        if (landOnly && tile.biome.isWater && !(nx === gx && ny === gy)) continue;
 
         // Lava / extreme hazard avoidance
         if (tile.biome.id === 'VOLCANIC' && tile.elevation > 0.8) continue;

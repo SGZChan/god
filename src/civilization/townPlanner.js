@@ -107,6 +107,27 @@ function affordable(civ, terrain, st, type) {
 
 // ---------- placement ----------
 
+// Can the settlement's people walk (on land) from the centre to tile (x, y)? Rivers and lakes cut plots off.
+function reachable(terrain, st, x, y) {
+  const pf = terrain.ecosystem && terrain.ecosystem.pathfinder;
+  if (!pf) return true;
+  if (Math.hypot(st.x - x, st.y - y) < 2) return true;
+  const path = pf.findPath(st.x, st.y, x + 0.5, y + 0.5, 1400, true);
+  if (!path.length) return false;
+  const last = path[path.length - 1];
+  return Math.hypot(last.x - (x + 0.5), last.y - (y + 0.5)) < 1.6;
+}
+
+// The best-scoring candidate (lowest score) that people can actually reach.
+function bestReachable(terrain, st, cands, goalOf) {
+  cands.sort((a, b) => a.score - b.score);
+  for (let i = 0; i < Math.min(cands.length, 4); i++) {
+    const g = goalOf(cands[i]);
+    if (reachable(terrain, st, g.x, g.y)) return cands[i];
+  }
+  return null;
+}
+
 function placeAt(terrain, civ, st, type, x, y, instant) {
   const b = terrain.placeBuilding(type, x, y, {
     civId: civ.id,
@@ -130,8 +151,7 @@ function streetPlot(terrain, civ, st, type, instant) {
   for (let k = 0; k < nrows; k++) {
     rows.push(town.y0 + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * ROW_SPACING));
   }
-  let best = null;
-  let bestScore = Infinity;
+  const cands = [];
   for (let attempt = 0; attempt < 70; attempt++) {
     const row = rows[Math.floor(random() * rows.length)];
     const x = town.cx + Math.round((random() * 2 - 1) * town.rx) - Math.floor(def.w / 2);
@@ -143,8 +163,9 @@ function streetPlot(terrain, civ, st, type, instant) {
     const fx = x + (def.door ? def.door.x : 0);
     if (!terrain.isBuildable(fx, row)) continue;
     const score = Math.hypot(x + def.w / 2 - town.cx, y + def.h - town.y0) + random() * 4;
-    if (score < bestScore) { bestScore = score; best = { x, y, row }; }
+    cands.push({ x, y, row, score });
   }
+  const best = bestReachable(terrain, st, cands, c => ({ x: c.x + (def.door ? def.door.x : 0), y: c.row }));
   if (!best) return null;
   const b = placeAt(terrain, civ, st, type, best.x, best.y, instant);
   if (!b) return null;
@@ -171,8 +192,7 @@ function edgePlot(terrain, civ, st, type, instant) {
   const def = BUILDING_TYPES[type];
   const ex = { x0: town.cx - town.rx - 2, x1: town.cx + town.rx + 2, y0: town.y0 - ROW_SPACING - 5, y1: town.y0 + ROW_SPACING + 3 };
   const wantFertile = type === 'farm' || type === 'pen';
-  let best = null;
-  let bestScore = Infinity;
+  const cands = [];
   for (let attempt = 0; attempt < 60; attempt++) {
     const side = Math.floor(random() * 4);
     const gap = 2 + Math.floor(random() * 6);
@@ -191,8 +211,9 @@ function edgePlot(terrain, civ, st, type, instant) {
       if (fert / def.w < 0.4) continue;
     }
     const score = Math.hypot(x + def.w / 2 - town.cx, y + def.h / 2 - town.y0) + random() * 5;
-    if (score < bestScore) { bestScore = score; best = { x, y }; }
+    cands.push({ x, y, score });
   }
+  const best = bestReachable(terrain, st, cands, c => ({ x: c.x + (def.door ? def.door.x : def.w >> 1), y: c.y + def.h }));
   return best ? placeAt(terrain, civ, st, type, best.x, best.y, instant) : null;
 }
 
@@ -203,16 +224,16 @@ function depositPlot(terrain, civ, st, type, res, instant) {
   if (DISCOVERABLE.includes(res)) target = nearestKnown(civ, terrain, res, st.x, st.y);
   else target = terrain.findNearestDeposit(st.x, st.y, res, 50, { minAmount: 2 });
   if (!target || Math.hypot(target.x - st.x, target.y - st.y) > 60) return null;
-  let best = null;
-  let bestScore = Infinity;
+  const cands = [];
   for (let attempt = 0; attempt < 60; attempt++) {
     const x = target.x + Math.round((random() * 2 - 1) * 7) - 1;
     const y = target.y + Math.round((random() * 2 - 1) * 7) - 1;
     if (!terrain.canPlaceBuilding(type, x, y)) continue;
     if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 1)) continue;
     const score = Math.hypot(x + def.w / 2 - target.x, y + def.h / 2 - target.y) + random();
-    if (score < bestScore) { bestScore = score; best = { x, y }; }
+    cands.push({ x, y, score });
   }
+  const best = bestReachable(terrain, st, cands, c => ({ x: c.x + (def.door ? def.door.x : def.w >> 1), y: c.y + def.h }));
   return best ? placeAt(terrain, civ, st, type, best.x, best.y, instant) : null;
 }
 
@@ -251,17 +272,20 @@ function housingType(civ, terrain, st, tier) {
 }
 
 // The wish list of one settlement: [{ type, weight, kind, res? }]
-function wishes(civ, terrain, st, n, tier) {
+function wishes(civ, terrain, st, n, tier, cn) {
   const pop = Math.max(st.population || 0, 3);
   const list = [];
   const need = new Set();
   const nextEra = ERAS[Math.min(ERAS.length - 1, tier + 1)];
   for (const t of (ERA_REQUIREMENTS[nextEra.id] && ERA_REQUIREMENTS[nextEra.id].buildings) || []) need.add(t);
   const have = type => (n[type] || 0);
+  const civHave = type => (cn[type] || 0);   // across all settlements: specialised buildings are shared by the whole civilization
+  const nSettle = Math.max(1, settlementsOf(civ).length);
   const want = (type, weight, kind = 'plot', res = null) => {
     const def = BUILDING_TYPES[type];
-    if (!def || def.tier > tier || !affordable(civ, terrain, st, type)) return;
-    if (need.has(type) && !(civ.eraBuilt && civ.eraBuilt[type]) && have(type) === 0) weight *= 3;
+    // buildings of the next era's requirements may be raised one era early (a kiln and a smithy lead INTO the bronze age)
+    if (!def || (def.tier > tier && !(def.tier === tier + 1 && need.has(type))) || !affordable(civ, terrain, st, type)) return;
+    if (need.has(type) && civHave(type) === 0) weight *= 3;
     list.push({ type, weight, kind, res });
   };
 
@@ -272,40 +296,40 @@ function wishes(civ, terrain, st, n, tier) {
 
   const farms = have('farm');
   if (farms < Math.min(12, Math.ceil(pop / 7)) || (st.shortage.food && farms < 14)) want('farm', 5, 'edge');
-  if (tier >= 0 && have('lumber_camp') < 1 + Math.floor(pop / 30) && (st.jobs.woodcutter || 0) >= 2) want('lumber_camp', 3, 'deposit', 'wood');
-  if (tier >= 1) {
+  if (have('lumber_camp') < 1 + Math.floor(pop / 30) && (st.jobs.woodcutter || 0) >= 2) want('lumber_camp', 3, 'deposit', 'wood');
+  {
     if (have('granary') < Math.floor(pop / 14) + (pop >= 6 ? 1 : 0)) want('granary', 3);
     if (have('well') < Math.floor(pop / 12) && pop >= 6) want('well', 1.5);
-    if (have('quarry') < 1 && pop >= 6 && !st.noQuarry) want('quarry', need.has('quarry') ? 3 : 1.5, 'deposit', 'stone');
-    if (have('workshop') < Math.floor(pop / 14) + (pop >= 6 ? 1 : 0)) want('workshop', 2.5);
-    if (have('kiln') < 1 + Math.floor(pop / 30) && pop >= 5) want('kiln', 2.5);
-    if (have('smithy') < 1 + Math.floor(pop / 30) && pop >= 6 && (isDiscovered(civ, 'copper') || isDiscovered(civ, 'iron'))) want('smithy', 3);
+    if (have('quarry') < 1 && civHave('quarry') < 1 + Math.floor(nSettle / 2) && pop >= 6 && !st.noQuarry) want('quarry', need.has('quarry') ? 3 : 1.5, 'deposit', 'stone');
+    if (civHave('workshop') < 1 + Math.floor(nSettle / 3) && pop >= 6) want('workshop', 2.5);
+    if (civHave('kiln') < 1 + Math.floor(nSettle / 3) && pop >= 5) want('kiln', 2.5);
+    if (civHave('smithy') < 1 + Math.floor(nSettle / 3) && pop >= 6 && (isDiscovered(civ, 'copper') || isDiscovered(civ, 'iron'))) want('smithy', 3);
     if (have('market_stall') + have('market') < Math.floor(pop / 12) && pop >= 8 && tier < 2) want('market_stall', 1.2);
     if (have('pen') < Math.floor(farms / 2) && farms >= 2) want('pen', 1.5, 'edge');
     if (have('dock') < 1 && pop >= 8 && st.fishNear !== false) want('dock', 1.2, 'dock');
     if (have('watchtower') < Math.min(3, 1 + Math.floor(pop / 14)) && pop >= 8) want('watchtower', 0.8, 'edge');
   }
-  if (tier >= 2) {
-    if (have('market') < 1 && pop >= 8) want('market', 2);
-    if (have('tavern') < Math.floor(pop / 16) + 1 && pop >= 10) want('tavern', 1);
+  {
+    if (civHave('market') < 1 + Math.floor(nSettle / 3) && have('market') < 1 && pop >= 8) want('market', 2);
+    if (civHave('tavern') < 1 + Math.floor(nSettle / 3) && have('tavern') < 1 && pop >= 10) want('tavern', 1);
     if (have('windmill') < Math.floor(farms / 3) && farms >= 3) want('windmill', 1, 'edge');
     for (const [res, k] of [['copper', 1], ['tin', 1], ['iron', 2], ['coal', 2], ['gold', 3]]) {
-      if (isDiscovered(civ, res) && have('mine') < Math.min(4, 1 + Math.floor(pop / 25)) && pop >= 8 && (!k || tier >= 2)) {
+      if (isDiscovered(civ, res) && civHave('mine') < Math.min(6, 1 + Math.floor(nSettle / 2)) && have('mine') < 2 && pop >= 8 && k) {
         want('mine', need.has('mine') ? 3 : 1.2, 'deposit', res);
         break;
       }
     }
   }
-  if (tier >= 3) {
-    if (have('library') < 1 && pop >= 8) want('library', 1.5);
-    if (have('barracks') < 1 && pop >= 14) want('barracks', 1);
+  {
+    if (civHave('library') < 1 + Math.floor(nSettle / 4) && pop >= 8) want('library', 1.5);
+    if (civHave('barracks') < 1 + Math.floor(nSettle / 4) && pop >= 14) want('barracks', 1);
     if (st.capital && have('keep') < 1 && pop >= 18) want('keep', 2.5);
   }
-  if (tier >= 4) {
-    if (have('factory') < Math.floor(pop / 14) + 1 && pop >= 10) want('factory', 2, 'edge');
-    if (have('power_plant') < 1 && pop >= 12) want('power_plant', 1.5, 'edge');
+  {
+    if (civHave('factory') < 1 + Math.floor(nSettle / 3) && pop >= 10) want('factory', 2, 'edge');
+    if (civHave('power_plant') < 1 + Math.floor(nSettle / 4) && pop >= 12) want('power_plant', 1.5, 'edge');
   }
-  if (tier >= 5 && st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
+  if (st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
   return list;
 }
 
@@ -335,11 +359,13 @@ export function planSettlement(civ, terrain, st, { instant = false, maxSites = n
   if (!town.ready) return null;
   const tier = eraTier(civ);
   const n = counts(terrain, st);
+  const cn = {};
+  for (const other of settlementsOf(civ)) for (const [k, v] of Object.entries(other === st ? n : counts(terrain, other))) cn[k] = (cn[k] || 0) + v;
   const sites = openSites(terrain, st).length;
   town.rx = Math.min(24, 6 + Math.floor((n.housing || 0) * 0.9));
-  const cap = maxSites !== null ? maxSites : 2 + Math.min(5, (st.jobs.builder || 0) + (st.jobs.hauler || 0));
+  const cap = maxSites !== null ? maxSites : Math.max(2, 1 + Math.ceil(((st.jobs.builder || 0) + (st.jobs.hauler || 0)) / 2));
   if (sites >= cap && !instant) return null;
-  const list = wishes(civ, terrain, st, n, tier);
+  const list = wishes(civ, terrain, st, n, tier, cn);
   if (!list.length) return null;
   const w = pick(list);
   const type = w.type === 'housing' ? housingType(civ, terrain, st, tier) : w.type;

@@ -143,19 +143,16 @@ export function syncFood(civ) {
       if (need > 0) civ.foodDebt += need * FOOD_SCALE;
     }
   }
-  // spoilage above the ceiling
-  let units = civFoodUnits(civ);
+  // spoilage above the ceiling (each settlement's stores hold FOOD_CAP / FOOD_SCALE units)
   const cap = FOOD_CAP / FOOD_SCALE;
-  if (units > cap) {
-    let excess = units - cap;
-    for (const st of stores) {
-      for (const k of FOOD_ORDER.slice().reverse()) {
-        if (excess <= 0) break;
-        excess -= take(st.stock, k, excess);
-      }
+  for (const st of stores) {
+    let excess = foodUnits(st.stock) - cap;
+    for (const k of FOOD_ORDER.slice().reverse()) {
+      if (excess <= 0) break;
+      excess -= take(st.stock, k, excess);
     }
-    units = civFoodUnits(civ);
   }
+  const units = civFoodUnits(civ);
   // debt is slowly forgiven (people tighten their belts)
   civ.foodDebt = Math.max(0, civ.foodDebt - 0.02);
   civ.food = units * FOOD_SCALE - civ.foodDebt;

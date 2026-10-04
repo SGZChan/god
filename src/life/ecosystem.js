@@ -228,7 +228,8 @@ export class Ecosystem {
 
   // A courting pair that meets may conceive. The mother carries the embryos for a gestation period.
   tryConceive(father, mother) {
-    if (this.entities.length >= MAX_ENTITIES) return false;
+    // wildlife may not crowd the sapients out of the safety cap: animals stop breeding at 80% of it
+    if (this.entities.length >= (mother.isSapient ? MAX_ENTITIES : MAX_ENTITIES * 0.8)) return false;
     if (!father.alive || !mother.alive || father.sex !== 'M' || mother.sex !== 'F') return false;
     if (mother.pregnancy || father.mateCooldown > 0 || mother.mateCooldown > 0) return false;
     if (father.isKinOf(mother) || traitDistance(father.traits, mother.traits) > MATE_THRESHOLD) return false;

@@ -131,8 +131,8 @@ export function popCap(terrain, civ) {
 // A founding spot for a new hamlet within reach of `from` (a settlement): explored, open, buildable land that is not
 // too close to any other settlement, preferably near water and trees. Returns {x, y} or null.
 export function findHamletSite(terrain, civ, from, allCivs, isExplored) {
-  let best = null;
-  let bestScore = -Infinity;
+  const best = null;
+  const cands = [];
   for (let attempt = 0; attempt < 24; attempt++) {
     const ang = random() * Math.PI * 2;
     const dist = 22 + random() * 34;
@@ -162,7 +162,17 @@ export function findHamletSite(terrain, civ, from, allCivs, isExplored) {
       if (t.deposit && t.deposit.type === 'wood') trees++;
     }
     score += (water ? 2 : 0) + Math.min(3, trees * 0.6);
-    if (score > bestScore) { bestScore = score; best = { x: land.x, y: land.y }; }
+    cands.push({ x: land.x, y: land.y, score });
+  }
+  // the best few must be reachable on foot from the parent (no rivers or seas in between)
+  cands.sort((a, b) => b.score - a.score);
+  const pf = terrain.ecosystem && terrain.ecosystem.pathfinder;
+  for (let i = 0; i < Math.min(3, cands.length); i++) {
+    const c = cands[i];
+    if (!pf) return { x: c.x, y: c.y };
+    const path = pf.findPath(from.x, from.y, c.x + 0.5, c.y + 0.5, 4000, true);
+    const last = path[path.length - 1];
+    if (last && Math.hypot(last.x - c.x - 0.5, last.y - c.y - 0.5) < 2) return { x: c.x, y: c.y };
   }
   return best;
 }

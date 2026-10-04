@@ -435,7 +435,7 @@ export const CASTS = {
         else if (tile.structure.anchor) fx.terrain.repairBuilding(tile.structure.buildingId, 40);
       }
     });
-    for (const civ of civsIn(fx, x, y, r)) civ.food = Math.min(FOOD_CAP, civ.food + 140);
+    for (const civ of civsIn(fx, x, y, r)) civ.food = Math.max(civ.food, Math.min(FOOD_CAP, civ.food + 140));
     for (const e of livingNear(fx, x, y, r)) e.hunger = Math.max(0, e.hunger - 45);
     fx.addVisual('harvest', x + 0.5, y + 0.5, { radius: r, life: 3.5 });
     return true;
@@ -456,7 +456,7 @@ export const CASTS = {
     const civ = civNear(fx, x, y);
     if (!civ) return 'No civilization nearby to teach.';
     fx.society.inspireCivWithKnowledge(civ.id, 320);
-    civ.food = Math.min(FOOD_CAP, civ.food + 80);
+    civ.food = Math.max(civ.food, Math.min(FOOD_CAP, civ.food + 80));
     fx.addVisual('fire_gift', civ.capitalX + 0.5, civ.capitalY + 0.5, { radius: 3, life: 4 });
     fx.addVisual('godray', civ.capitalX + 0.5, civ.capitalY + 0.5, { radius: 2.5, life: 3, color: '#fdba74' });
     return true;

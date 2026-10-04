@@ -308,7 +308,7 @@ export class Entity {
         for (let dx = -r; dx <= r; dx++) {
           const tile = terrain.getTile(cx + dx, cy + dy);
           if (!tile.biome.isWater) {
-            this.requestPath(tile.x, tile.y, worldContext.pathfinder);
+            this.requestPath(tile.x, tile.y, worldContext.pathfinder, 300, false);
             return;
           }
         }
@@ -670,9 +670,10 @@ export class Entity {
     }
   }
 
-  requestPath(targetX, targetY, pathfinder) {
+  // Sapients walk on land only (they do not swim across rivers); everyone else may wade.
+  requestPath(targetX, targetY, pathfinder, maxIterations = 300, landOnly = this.isSapient) {
     if (!pathfinder) return;
-    this.path = pathfinder.findPath(this.x, this.y, targetX, targetY);
+    this.path = pathfinder.findPath(this.x, this.y, targetX, targetY, maxIterations, landOnly);
   }
 
   moveAlongPath(sim, speedMultiplier, terrain) {
