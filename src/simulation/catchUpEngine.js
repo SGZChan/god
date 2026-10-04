@@ -32,10 +32,10 @@ export class CatchUpEngine {
       // Tech points accumulated
       const techGained = Math.floor(deltaYears * (0.3 + civ.population * 0.02));
       civ.techPoints += techGained;
-      const newEra = getEraForPoints(civ.techPoints);
-      if (newEra.id !== civ.era.id) {
-        report.civEvents.push(`"${civ.name}" advanced from ${civ.era.name} to ${newEra.name}!`);
-        civ.era = newEra;
+      // (an era needs materials, buildings and goods as well as research, see techTree.ERA_REQUIREMENTS)
+      const before = civ.era;
+      if (society.advanceEra(civ)) {
+        report.civEvents.push(`"${civ.name}" advanced from ${before.name} to ${civ.era.name}!`);
       }
 
       // Population dynamics: real couples had real children (with inherited genes) while you were away

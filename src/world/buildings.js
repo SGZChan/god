@@ -52,7 +52,7 @@ const LIST = [
 
   // ---------- workshops ----------
   T('workshop', 'Workshop', 'workshop', 3, 3, 1, { wood: 14, stone: 4 }, 70, 3, { health: 120, ext: 18, icon: '🔨' }),
-  T('smithy', 'Smithy', 'workshop', 3, 3, 2, { stone: 12, wood: 8, iron: 2 }, 90, 3, { health: 160, ext: 24, icon: '⚒️' }),
+  T('smithy', 'Smithy', 'workshop', 3, 3, 1, { stone: 12, wood: 8 }, 90, 3, { health: 160, ext: 24, icon: '⚒️' }),
   T('kiln', 'Kiln', 'workshop', 2, 2, 1, { clay: 10, stone: 4 }, 40, 2, { health: 100, ext: 20, icon: '🏺', door: { x: 0, y: 1 } }),
 
   // ---------- extraction ----------

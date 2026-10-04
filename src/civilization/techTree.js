@@ -68,3 +68,49 @@ export function getEraForPoints(points) {
   }
   return activeEra;
 }
+
+// ---------- what an era needs besides research points ----------
+// An era is only entered when the civilization has gathered the points AND discovered the materials, built the key
+// buildings and produced the key goods (the settlements' crafters and miners do that). Requirements are cumulative.
+//   discovered  resource types the civ must know a deposit of (civ.knownDeposits, found by scouts)
+//   buildings   building types that must stand finished somewhere in the civ
+//   output      cumulative production { item: amount } (civ.output, counted when goods reach a stockpile)
+//   citizens    population entities
+export const ERA_REQUIREMENTS = {
+  STONE_AGE: {},
+  BRONZE_AGE: { discovered: ['copper', 'tin'], buildings: ['kiln', 'smithy'], output: { bronze: 2 } },
+  CLASSICAL_AGE: { discovered: ['iron', 'coal'], buildings: ['market'], output: { iron_bar: 2 } },
+  MEDIEVAL_AGE: { buildings: ['stone_house', 'quarry'], output: { stone: 60, bricks: 4 }, citizens: 12 },
+  INDUSTRIAL_AGE: { discovered: ['gold'], buildings: ['library', 'mine'], output: { coal: 20, iron_bar: 8 } },
+  SPACE_AGE: { discovered: ['oil', 'uranium'], buildings: ['factory', 'power_plant'], output: { uranium: 2 } }
+};
+
+const RES_NAMES = { copper: 'copper', tin: 'tin', iron: 'iron', coal: 'coal', gold: 'gold', oil: 'oil', uranium: 'uranium' };
+
+// What the civ still lacks for era `eraId` (empty list = ready). `have` = { discovered(type)->bool, built(type)->bool }.
+export function missingForEra(civ, eraId, have) {
+  const req = ERA_REQUIREMENTS[eraId] || {};
+  const out = [];
+  for (const t of req.discovered || []) if (!have.discovered(t)) out.push(`discover ${RES_NAMES[t] || t}`);
+  for (const t of req.buildings || []) if (!have.built(t)) out.push(`build a ${t.replace(/_/g, ' ')}`);
+  for (const [item, n] of Object.entries(req.output || {})) {
+    const got = (civ.output && civ.output[item]) || 0;
+    if (got < n) out.push(`produce ${n - Math.floor(got)} more ${item.replace(/_/g, ' ')}`);
+  }
+  if (req.citizens && (civ.citizens || 0) < req.citizens) out.push(`grow to ${req.citizens} citizens`);
+  return out;
+}
+
+// The highest era whose research points AND requirements are met (never below civ.eraFloor, the knowledge a reborn
+// civilization inherits from the ruins it found).
+export function eraFor(civ, have) {
+  let best = 0;
+  const byPoints = getEraForPoints(civ.techPoints);
+  const maxIndex = ERAS.findIndex(e => e.id === byPoints.id);
+  for (let i = 1; i <= maxIndex; i++) {
+    if (missingForEra(civ, ERAS[i].id, have).length) break;
+    best = i;
+  }
+  best = Math.max(best, Math.min(maxIndex, civ.eraFloor || 0));
+  return ERAS[best];
+}

@@ -4,6 +4,7 @@ import { SpeciesRegistry, MATE_THRESHOLD } from './species.js';
 import { SpatialGrid } from './spatialGrid.js';
 import { AStarPathfinder } from '../ai/pathfinding.js';
 import { MAX_CITIZENS } from '../civilization/society.js';
+import { popCap } from '../civilization/settlements.js';
 import { random } from '../simulation/random.js';
 
 export const MAX_ENTITIES = 700; // safety limit only; real limits are local crowding and food
@@ -60,6 +61,7 @@ export class Ecosystem {
     this.worldEventSeq = 0;
     this.censusTimer = 0;
     this.grid = new SpatialGrid(8);
+    this.byId = new Map();  // entity id -> entity (rebuilt every step)
     this.society = null; // set by SocietyManager so new humans can be assigned a civilization
 
     this.initFauna();
@@ -144,6 +146,7 @@ export class Ecosystem {
     });
     entity.civilization = civ;
     this.entities.push(entity);
+    this.byId.set(entity.id, entity);
     species.population++;
     return entity;
   }
@@ -172,6 +175,8 @@ export class Ecosystem {
     const sim = dt * Math.max(1, speedMultiplier);
     this.timeYears += sim * YEARS_PER_SECOND;
     this.grid.rebuild(this.entities);
+    this.byId.clear();
+    for (const e of this.entities) this.byId.set(e.id, e);
 
     const worldContext = {
       terrain: this.terrain,
@@ -229,7 +234,13 @@ export class Ecosystem {
     if (father.isKinOf(mother) || traitDistance(father.traits, mother.traits) > MATE_THRESHOLD) return false;
 
     const civ = mother.civilization;
-    if (civ && civ.citizens >= MAX_CITIZENS) return false;
+    if (civ && civ.citizens >= this.populationCap(civ)) return false;
+    // Sapients who court become a pair bond (long-term mates); a bonded person only conceives with the partner
+    if (mother.isSapient) {
+      if ((father.mateId && father.mateId !== mother.id) || (mother.mateId && mother.mateId !== father.id)) return false;
+      father.mateId = mother.id;
+      mother.mateId = father.id;
+    }
 
     // Courtship does not always succeed; well-fed nations have more children, starving ones fewer
     let chance = 0.3 + 0.4 * mother.traits.fertility + 0.2 * (father.traits.sociality + mother.traits.sociality) / 2;
@@ -245,6 +256,13 @@ export class Ecosystem {
     };
     father.mateCooldown = 6 + mother.stats.gestationSec * 0.3;
     return true;
+  }
+
+  // How many citizens a civilization can have: limited by its housing (see civilization/settlements.js popCap);
+  // a civilization without settlements (a bare test world) keeps the old flat limit.
+  populationCap(civ) {
+    if (civ.settlements && civ.settlements.length) return popCap(this.terrain, civ);
+    return MAX_CITIZENS;
   }
 
   giveBirth(mother) {
@@ -286,12 +304,16 @@ export class Ecosystem {
     baby.homeX = mother.homeX;
     baby.homeY = mother.homeY;
     baby.civilization = mother.civilization;
+    // A child belongs to its mother's clan (its father's if she has none), settlement and household
+    baby.clanId = mother.clanId || (father && father.clanId) || null;
+    baby.settlementId = mother.settlementId;
+    baby.homeId = mother.homeId;
     this.entities.push(baby);
+    this.byId.set(baby.id, baby);
     this.births++;
     // Too different from every species: it may be the first of a new one
     if (!matched) this.registry.considerFounder(baby, mother.species, this.timeYears, (s, parent) => this.announceSpecies(s, parent));
-    // Raising a child costs the nation food
-    if (mother.civilization) mother.civilization.food -= 20;
+    // (raising a child costs food because children eat from the settlement's stores, see civilization/families.js)
     return baby;
   }
 
@@ -349,7 +371,7 @@ export class Ecosystem {
     const fathers = adults.filter(e => e.sex === 'M');
     let born = 0;
     for (let i = 0; i < count && mothers.length && fathers.length; i++) {
-      if (this.entities.length >= MAX_ENTITIES || civ.citizens + born >= MAX_CITIZENS) break;
+      if (this.entities.length >= MAX_ENTITIES || civ.citizens + born >= this.populationCap(civ)) break;
       for (let attempt = 0; attempt < 12; attempt++) {
         const mother = mothers[Math.floor(random() * mothers.length)];
         const father = fathers[Math.floor(random() * fathers.length)];

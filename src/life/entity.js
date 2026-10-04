@@ -100,6 +100,17 @@ export class Entity {
     this.actionCooldown = random() * 2;
     this.lastJevDecision = null;
     this.civilization = null;
+
+    // Society (see civilization/jobs.js, clans.js, families.js). All plain JSON so it saves.
+    this.clanId = config.clanId || null;
+    this.settlementId = config.settlementId || null;
+    this.mateId = config.mateId || null;   // pair bond (long-term mate)
+    this.guardianId = config.guardianId || null; // the adult who took an orphan in
+    this.homeId = config.homeId || null;   // building id of the house the person lives in
+    this.job = config.job || null;         // farmer, builder, miner...
+    this.task = null;                      // multi-step job state
+    this.inventory = {};                   // carried goods { item: amount }
+    this.activity = '';                    // what the person is doing, for the inspector
   }
 
   // ---------- who am I ----------
@@ -238,7 +249,9 @@ export class Entity {
     // pressure that makes populations adapt to hot or cold lands over generations.
     const ideal = this.stats.idealTemp;
     const t = curTile.temperature;
-    const excess = t < ideal ? (ideal - t) - this.stats.coldTolerance : (t - ideal) - this.stats.heatTolerance;
+    let excess = t < ideal ? (ideal - t) - this.stats.coldTolerance : (t - ideal) - this.stats.heatTolerance;
+    // A roof over one's head takes the edge off the weather: homeless people feel the full cold
+    if (excess > 0 && this.homeId) excess = Math.max(0, excess - 0.06);
     this.thermalStress = Math.max(0, excess);
     if (excess > 0) {
       this.health -= excess * 12 * sim;
@@ -349,6 +362,12 @@ export class Entity {
   }
 
   canMateWith(other) {
+    // Sapients keep long-term pair bonds and court within their own settlement
+    if (this.isSapient) {
+      if (this.mateId && other.id !== this.mateId) return false;
+      if (other.mateId && other.mateId !== this.id) return false;
+      if (this.settlementId !== other.settlementId) return false;
+    }
     return other.alive && other !== this && other.sex !== this.sex && other.isAdult && other.stage !== 'elder'
       && other.mateCooldown <= 0 && !other.pregnancy && other.hunger < 75 && !this.isKinOf(other)
       && traitDistance(this.traits, other.traits) <= MATE_THRESHOLD;
@@ -358,6 +377,9 @@ export class Entity {
     const terrain = world.terrain;
     const range = this.stats.perceptionRange;
     const nearby = this.creaturesNear(world, range);
+    const society = world.ecosystem.society;
+    const civ = this.civilization;
+    const citizen = Boolean(this.isSapient && civ && civ.isAlive && society && civ.settlements && civ.settlements.length > 0);
 
     // Sapient beings still obey their civic duties first (war, law enforcement)
     if (this.isSapient && this.executeRoleAI(world)) return;
@@ -386,7 +408,7 @@ export class Entity {
     }
 
     // HUNT (and scavenge): meat eaters go after prey or eat fresh carcasses
-    if (this.traits.carnivory > 0.3 && this.hunger > 35) {
+    if (this.traits.carnivory > 0.3 && this.hunger > (citizen ? 85 : 35)) {
       let prey = null;
       let preyDistance = Infinity;
       for (const e of nearby) {
@@ -439,19 +461,11 @@ export class Entity {
       }
     }
 
-    // EAT FROM THE STORES: citizens near their capital eat from the nation's granary (until farming exists)
-    const civ = this.civilization;
-    if (this.isSapient && civ && civ.isAlive && civ.food > 10 && this.hunger > 30
-        && Math.hypot(this.x - civ.capitalX, this.y - civ.capitalY) < 18) {
-      options.push({ score: (this.hunger / 100) * 1.05, run: () => {
-        this.state = 'EAT';
-        this.hunger = Math.max(0, this.hunger - 40);
-        civ.food -= 4;
-      } });
-    }
+    // SAPIENT SOCIETY: eating from the settlement's stockpile, working at a job, migrating (civilization/jobs.js)
+    if (citizen) society.sapientOptions(this, world, options);
 
-    // FORAGE: plant eaters graze where the flora is thick
-    if (this.traits.herbivory > 0.25 && this.hunger > 30) {
+    // FORAGE: plant eaters graze where the flora is thick (citizens live off their settlement and graze only when starving)
+    if (this.traits.herbivory > 0.25 && this.hunger > (citizen ? 80 : 30)) {
       const here = terrain.getTile(Math.floor(this.x), Math.floor(this.y));
       if (here.flora > 15 && !here.biome.isWater) {
         options.push({ score: (this.hunger / 100) * 0.95, run: () => {
@@ -554,7 +568,9 @@ export class Entity {
     } });
 
     options.sort((a, b) => b.score - a.score);
-    options[0].run();
+    for (const option of options) {
+      if (option.run() !== false) break; // an option that cannot be carried out returns false: try the next best
+    }
   }
 
   // Duties of sapient creatures: soldiers fight, guards enforce the law. Returns true if handled.
@@ -669,6 +685,8 @@ export class Entity {
 
     if (dist < 0.25) {
       this.path.shift();
+      // a worker whose walk has ended decides again quickly
+      if (this.path.length === 0 && this.task) this.actionCooldown = Math.min(this.actionCooldown, 0.25);
       return;
     }
 
@@ -699,6 +717,16 @@ export class Entity {
     // The planet has edges: never walk off the map
     this.x = Math.max(0.01, Math.min(terrain.width - 0.01, this.x));
     this.y = Math.max(0.01, Math.min(terrain.height - 0.01, this.y));
+    // Foot traffic wears desire paths into roads (society.footstep); a worker whose walk ends decides again quickly
+    if (this.isSapient && terrain.society) {
+      const tx = Math.floor(this.x);
+      const ty = Math.floor(this.y);
+      if (tx !== this._tx || ty !== this._ty) {
+        this._tx = tx;
+        this._ty = ty;
+        if (terrain.society.footstep) terrain.society.footstep(tx, ty);
+      }
+    }
   }
 
   findNearestEntity(entities, filter) {

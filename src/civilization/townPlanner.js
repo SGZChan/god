@@ -1,20 +1,27 @@
-// INTERIM town planner. The society/economy agent will replace this with creatures that really haul materials and
-// build; until then each civilization lays out a small, sparse, sensible town around its capital and "builds" it
-// over time. Everything is deterministic (random() from simulation/random.js) and saved inside civ.town (plain JSON).
+// The town PLANNER. It decides WHERE and WHAT a settlement should build next and enqueues construction sites
+// (terrain.placeBuilding(..., progress 0)); it never builds anything itself. Creatures do the building: builders and
+// haulers fetch materials from the stockpile (or the people extract them), deliver them (terrain.deliverMaterial) and
+// work (terrain.advanceConstruction) stage by stage, see civilization/jobs.js. Streets are queued in
+// settlement.roadQueue and paved tile by tile by builders; foot traffic wears dirt roads on its own (society.footstep).
 //
-// Layout: the hall (or keep) stands at the centre, its door facing the MAIN STREET (row civ.town.y0). More streets run
-// parallel every 8 rows and every house, hut, workshop... stands on the north side of a street with its door on the
-// street; two avenues run north-south at x = cx +/- 8. Gaps of at least one tile separate buildings. Farm fields,
-// pens, graveyard, windmill, camps and towers go on the edge on suitable land. From the Bronze Age on a palisade (later a
-// stone wall with gates and corner towers) rings the town. Territory (tile.civId) stays the influence area.
+// Layout (unchanged idea of the interim planner): the hall (or keep) stands at the centre with its door facing the MAIN
+// STREET (row town.y0); further streets run parallel every 8 rows; houses, huts, workshops stand on the north side of a
+// street with their door on it; two avenues run north-south at x = cx +/- 8. Farm fields, pens, camps, towers go on the
+// edge on suitable land; quarries, mines and lumber camps next to their deposit. Never on water, ice or peaks.
 //
-//   initTown(civ, terrain)      places the hall (moving the capital to its front door), a street and a few starter huts
-//   growTown(civ, terrain)      plans ONE new building (a construction site) if the town wants one
-//   tickTown(civ, terrain, dt)  advances construction of the civ's sites and plans growth on a timer
-//   eraTier(civ)                0..5 index into techTree ERAS
-import { ERAS } from './techTree.js';
+//   initTown(civ, terrain, { instant })      founds the capital settlement: hall site, starter huts, a field
+//   foundHamlet(civ, terrain, site, opts)    founds another settlement (clan splinter) with its first sites
+//   planSettlement(civ, terrain, st, opts)   plans ONE new building site if the settlement wants one
+//   growTown(civ, terrain, opts)             same for the first settlement that wants one (compat)
+//   tickTown(civ, terrain, dt)               timers: plans growth now and then (never advances construction)
+//   eraTier(civ)                             0..5 index into techTree ERAS
+// `instant: true` (tests, dev tools) places finished buildings instead of sites.
+import { ERAS, ERA_REQUIREMENTS } from './techTree.js';
 import { random } from '../simulation/random.js';
 import { BUILDING_TYPES, doorTile, frontTile } from '../world/buildings.js';
+import { RESOURCES } from '../world/resources.js';
+import { createSettlement, settlementsOf, buildingsOf, housesOf, housingCapacity, openSites, STARTER_KIT } from './settlements.js';
+import { isDiscovered, nearestKnown, DISCOVERABLE, revealAround } from './exploration.js';
 
 const ROW_SPACING = 8;
 const PLAN_INTERVAL = 4;      // simulated seconds between planned buildings
@@ -22,11 +29,6 @@ const PLAN_INTERVAL = 4;      // simulated seconds between planned buildings
 export function eraTier(civ) {
   const i = ERAS.findIndex(e => civ.era && e.id === civ.era.id);
   return i < 0 ? 0 : i;
-}
-
-function ensureTown(civ) {
-  if (!civ.town) civ.town = { cx: civ.capitalX, y0: civ.capitalY, rx: 6, ring: null, cooldown: 0, ready: false };
-  return civ.town;
 }
 
 // ---------- geometry helpers ----------
@@ -47,52 +49,84 @@ function roadFree(terrain, x, y, w, h) {
   return true;
 }
 
-function counts(terrain, civ) {
+export function roadKindFor(tier) {
+  return tier >= 3 ? 'cobble' : (tier >= 2 ? 'gravel' : 'dirt');
+}
+
+// Queues a road tile for the builders (once; not where a road or a solid building already is).
+export function queueRoad(terrain, st, x, y, kind) {
+  if (!terrain.inBounds(x, y) || !terrain.isBuildable(x, y)) return false;
+  const tile = terrain.getTile(x, y);
+  if ((tile.structure && tile.structure.solid) || (tile.road && tile.road === kind)) return false;
+  if (st.roadQueue.some(r => r.x === x && r.y === y)) return false;
+  st.roadQueue.push({ x, y, kind });
+  return true;
+}
+
+function queueRow(terrain, st, x0, x1, y, kind) {
+  for (let x = x0; x <= x1; x++) queueRoad(terrain, st, x, y, kind);
+}
+
+function queueColumn(terrain, st, x, y0, y1, kind) {
+  for (let y = y0; y <= y1; y++) queueRoad(terrain, st, x, y, kind);
+}
+
+// ---------- what exists / what can be had ----------
+
+function counts(terrain, st) {
   const n = {};
-  for (const b of terrain.buildings.values()) {
-    if (b.civId !== civ.id || b.type === 'ruins') continue;
+  for (const b of buildingsOf(terrain, st)) {
+    const cat = BUILDING_TYPES[b.type].category;
     n[b.type] = (n[b.type] || 0) + 1;
-    n[BUILDING_TYPES[b.type].category] = (n[BUILDING_TYPES[b.type].category] || 0) + 1;
+    n[cat] = (n[cat] || 0) + 1;
+    if (b.progress >= 1) n['done_' + b.type] = (n['done_' + b.type] || 0) + 1;
     n.all = (n.all || 0) + 1;
   }
   return n;
 }
 
-function paveRow(terrain, x0, x1, y, kind) {
-  for (let x = x0; x <= x1; x++) {
-    const s = terrain.getTile(x, y).structure;
-    if (s && s.solid) continue;
-    terrain.setRoad(x, y, kind);
-  }
+// Can the settlement get `res`? Stock, or (common) a deposit within reach, or (ores) a discovered deposit.
+function obtainable(civ, terrain, st, res) {
+  if ((st.stock[res] || 0) >= 1) return true;
+  if (DISCOVERABLE.includes(res)) return isDiscovered(civ, res);
+  if (!RESOURCES[res]) return true; // produced goods are made by crafters
+  if (!st._near) Object.defineProperty(st, '_near', { value: new Map(), writable: true, configurable: true, enumerable: false });
+  const hit = st._near.get(res);
+  if (hit && hit.t > (civ._clock || 0) - 60) return hit.ok;
+  const d = terrain.findNearestDeposit(st.x, st.y, res, 70);
+  const ok = Boolean(d);
+  st._near.set(res, { ok, t: civ._clock || 0 });
+  return ok;
 }
 
-function paveColumn(terrain, x, y0, y1, kind) {
-  for (let y = y0; y <= y1; y++) {
-    const s = terrain.getTile(x, y).structure;
-    if (s && s.solid) continue;
-    terrain.setRoad(x, y, kind);
-  }
-}
-
-function roadKindFor(tier) {
-  return tier >= 3 ? 'cobble' : (tier >= 2 ? 'gravel' : 'dirt');
+function affordable(civ, terrain, st, type) {
+  const def = BUILDING_TYPES[type];
+  for (const res of Object.keys(def.cost)) if (!obtainable(civ, terrain, st, res)) return false;
+  return true;
 }
 
 // ---------- placement ----------
 
-function placeAt(terrain, civ, type, x, y, instant) {
-  return terrain.placeBuilding(type, x, y, {
+function placeAt(terrain, civ, st, type, x, y, instant) {
+  const b = terrain.placeBuilding(type, x, y, {
     civId: civ.id,
     progress: instant ? 1 : 0,
     style: { ...terrain.styleFor(type, x, y), accent: civ.color }
   });
+  if (!b) return null;
+  b.settlementId = st.id;
+  if (type === 'farm' || type === 'pen') b.growth = instant ? 1 : 0;
+  b.residents = BUILDING_TYPES[type].category === 'housing' ? [] : undefined;
+  if (b.residents === undefined) delete b.residents;
+  return b;
 }
 
 // A plot on a street: the building stands on the north side of street row `row`, door on the street.
-function streetPlot(terrain, civ, town, type, instant) {
+function streetPlot(terrain, civ, st, type, instant) {
+  const town = st.town;
   const def = BUILDING_TYPES[type];
   const rows = [];
-  const nrows = 1 + Math.min(4, Math.floor(Object.keys(terrain.buildingsOfCiv(civ.id)).length / 10));
+  const nrows = 1 + Math.min(4, Math.floor(buildingsOf(terrain, st).length / 10));
   for (let k = 0; k < nrows; k++) {
     rows.push(town.y0 + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * ROW_SPACING));
   }
@@ -106,36 +140,36 @@ function streetPlot(terrain, civ, town, type, instant) {
     if (!terrain.canPlaceBuilding(type, x, y)) continue;
     if (!roadFree(terrain, x, y, def.w, def.h)) continue;
     if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 0)) continue;
-    // the street in front must be land
     const fx = x + (def.door ? def.door.x : 0);
     if (!terrain.isBuildable(fx, row)) continue;
     const score = Math.hypot(x + def.w / 2 - town.cx, y + def.h - town.y0) + random() * 4;
     if (score < bestScore) { bestScore = score; best = { x, y, row }; }
   }
   if (!best) return null;
-  const b = placeAt(terrain, civ, type, best.x, best.y, instant);
+  const b = placeAt(terrain, civ, st, type, best.x, best.y, instant);
   if (!b) return null;
-  paveStreet(terrain, civ, town, best.row);
+  queueStreet(terrain, civ, st, best.row, instant);
   return b;
 }
 
-function paveStreet(terrain, civ, town, row) {
+function queueStreet(terrain, civ, st, row, instant) {
+  const town = st.town;
   const kind = roadKindFor(eraTier(civ));
   const x0 = town.cx - town.rx - 2;
   const x1 = town.cx + town.rx + 2;
-  if (town.ring) {
-    paveRow(terrain, Math.max(x0, town.ring.x0 + 1), Math.min(x1, town.ring.x1 - 1), row, kind);
-  } else {
-    paveRow(terrain, x0, x1, row, kind);
+  if (instant) {
+    for (let x = x0; x <= x1; x++) terrain.setRoad(x, row, kind);
+    for (const ax of [town.cx - 8, town.cx + 8]) for (let y = town.y0 - ROW_SPACING * 2; y <= town.y0 + ROW_SPACING * 2; y++) terrain.setRoad(ax, y, kind);
+    return;
   }
-  for (const ax of [town.cx - 8, town.cx + 8]) paveColumn(terrain, ax, town.y0 - ROW_SPACING * 2, town.y0 + ROW_SPACING * 2, kind);
+  queueRow(terrain, st, x0, x1, row, kind);
 }
 
 // Edge land around (outside) the built-up area: fields, pens, camps, towers...
-function edgePlot(terrain, civ, town, type, instant) {
+function edgePlot(terrain, civ, st, type, instant) {
+  const town = st.town;
   const def = BUILDING_TYPES[type];
-  const ex = town.ring ? { x0: town.ring.x0 - 1, x1: town.ring.x1 + 1, y0: town.ring.y0 - 1, y1: town.ring.y1 + 1 }
-    : { x0: town.cx - town.rx - 2, x1: town.cx + town.rx + 2, y0: town.y0 - ROW_SPACING - 5, y1: town.y0 + ROW_SPACING + 3 };
+  const ex = { x0: town.cx - town.rx - 2, x1: town.cx + town.rx + 2, y0: town.y0 - ROW_SPACING - 5, y1: town.y0 + ROW_SPACING + 3 };
   const wantFertile = type === 'farm' || type === 'pen';
   let best = null;
   let bestScore = Infinity;
@@ -159,99 +193,119 @@ function edgePlot(terrain, civ, town, type, instant) {
     const score = Math.hypot(x + def.w / 2 - town.cx, y + def.h / 2 - town.y0) + random() * 5;
     if (score < bestScore) { bestScore = score; best = { x, y }; }
   }
-  return best ? placeAt(terrain, civ, type, best.x, best.y, instant) : null;
+  return best ? placeAt(terrain, civ, st, type, best.x, best.y, instant) : null;
 }
 
-// ---------- the wall ring ----------
+// Next to a deposit (lumber camps, quarries, mines): a spot beside the nearest deposit of `res` within reach.
+function depositPlot(terrain, civ, st, type, res, instant) {
+  const def = BUILDING_TYPES[type];
+  let target = null;
+  if (DISCOVERABLE.includes(res)) target = nearestKnown(civ, terrain, res, st.x, st.y);
+  else target = terrain.findNearestDeposit(st.x, st.y, res, 50, { minAmount: 2 });
+  if (!target || Math.hypot(target.x - st.x, target.y - st.y) > 60) return null;
+  let best = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const x = target.x + Math.round((random() * 2 - 1) * 7) - 1;
+    const y = target.y + Math.round((random() * 2 - 1) * 7) - 1;
+    if (!terrain.canPlaceBuilding(type, x, y)) continue;
+    if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 1)) continue;
+    const score = Math.hypot(x + def.w / 2 - target.x, y + def.h / 2 - target.y) + random();
+    if (score < bestScore) { bestScore = score; best = { x, y }; }
+  }
+  return best ? placeAt(terrain, civ, st, type, best.x, best.y, instant) : null;
+}
 
-function buildRing(terrain, civ, town, instant) {
-  const tier = eraTier(civ);
-  const stone = tier >= 2;
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const b of terrain.buildings.values()) {
-    if (b.civId !== civ.id || b.type === 'ruins') continue;
-    const d = BUILDING_TYPES[b.type];
-    if (d.category === 'farm' || b.type === 'graveyard' || b.type === 'windmill' || b.type === 'lumber_camp') continue;
-    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+// A dock on the shore nearest to the settlement.
+function dockPlot(terrain, civ, st, instant) {
+  const def = BUILDING_TYPES.dock;
+  let best = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const x = st.x + Math.round((random() * 2 - 1) * 32);
+    const y = st.y + Math.round((random() * 2 - 1) * 32);
+    if (!terrain.canPlaceBuilding('dock', x, y)) continue;
+    const score = Math.hypot(x - st.x, y - st.y);
+    if (score < bestScore) { bestScore = score; best = { x, y, def }; }
   }
-  if (!isFinite(x0)) return;
-  x0 -= 3; y0 -= 3; x1 += 3; y1 += 2;
-  town.ring = { x0, y0, x1, y1, stone };
-  const wallType = stone ? 'stone_wall' : 'palisade';
-  const gateType = stone ? 'stone_gate' : 'palisade_gate';
-  if (stone) {
-    for (const [tx, ty] of [[x0, y0], [x1 - 1, y0], [x0, y1 - 1], [x1 - 1, y1 - 1]]) placeAt(terrain, civ, 'wall_tower', tx, ty, instant);
-  }
-  const put = (x, y) => {
-    const t = terrain.getTile(x, y);
-    if (t.structure) return;
-    // a road crossing the wall becomes a gate, otherwise a wall piece
-    const type = t.road ? gateType : wallType;
-    if (!terrain.canPlaceBuilding(type, x, y)) return;
-    const b = terrain.placeBuilding(type, x, y, { civId: civ.id, progress: instant ? 1 : 0, style: { ...terrain.styleFor(type, x, y), accent: civ.color } });
-    if (b && type === gateType) terrain.setRoad(x, y, roadKindFor(eraTier(civ)));
-  };
-  // the roads that will cross the wall are laid first so they become gates
-  const kind = roadKindFor(eraTier(civ));
-  paveRow(terrain, x0, x1 - 1, town.y0, kind);
-  for (const ax of [town.cx - 8, town.cx + 8]) paveColumn(terrain, ax, y0, y1 - 1, kind);
-  for (let x = x0; x < x1; x++) { put(x, y0); put(x, y1 - 1); }
-  for (let y = y0 + 1; y < y1 - 1; y++) { put(x0, y); put(x1 - 1, y); }
+  return best ? placeAt(terrain, civ, st, 'dock', best.x, best.y, instant) : null;
 }
 
 // ---------- the wish list ----------
 
-function housingType(tier) {
-  const r = random();
-  if (tier === 0) return r < 0.4 ? 'tent' : 'hut';
-  if (tier === 1) return r < 0.2 ? 'hut' : (r < 0.7 ? 'wooden_house' : 'longhouse');
-  if (tier === 2) return r < 0.3 ? 'wooden_house' : (r < 0.8 ? 'stone_house' : 'longhouse');
-  if (tier === 3) return r < 0.2 ? 'wooden_house' : (r < 0.6 ? 'stone_house' : 'manor');
-  return r < 0.5 ? 'manor' : 'stone_house';
+function housingType(civ, terrain, st, tier) {
+  const options = [];
+  const consider = (type, w) => { if (BUILDING_TYPES[type].tier <= tier && affordable(civ, terrain, st, type)) options.push([type, w]); };
+  consider('tent', tier === 0 ? 1.2 : 0.1);
+  consider('hut', tier === 0 ? 2 : 0.4);
+  consider('wooden_house', tier === 1 ? 3 : (tier === 2 ? 1 : 0.4));
+  consider('longhouse', tier === 1 ? 1.5 : 0.8);
+  consider('stone_house', tier === 2 ? 3 : (tier >= 3 ? 2 : 0));
+  consider('manor', tier >= 3 ? 2 : 0);
+  if (!options.length) return 'tent';
+  let total = 0;
+  for (const o of options) total += o[1];
+  let r = random() * total;
+  for (const o of options) { r -= o[1]; if (r <= 0) return o[0]; }
+  return options[options.length - 1][0];
 }
 
-function wishes(civ, n, tier) {
-  const houses = n.housing || 0;
-  const citizens = Math.max(civ.citizens || 0, 3);
-  const wantHouses = Math.min(40, Math.ceil(citizens / 2) + 2);
+// The wish list of one settlement: [{ type, weight, kind, res? }]
+function wishes(civ, terrain, st, n, tier) {
+  const pop = Math.max(st.population || 0, 3);
   const list = [];
-  const want = (type, weight, kind = 'plot') => list.push({ type, weight, kind });
-  if (houses < wantHouses) want('housing', 6 + (wantHouses - houses), 'plot');
-  const farms = n.farm || 0;
-  if (farms < Math.ceil(houses / 3) && houses >= 2) want('farm', 3, 'edge');
+  const need = new Set();
+  const nextEra = ERAS[Math.min(ERAS.length - 1, tier + 1)];
+  for (const t of (ERA_REQUIREMENTS[nextEra.id] && ERA_REQUIREMENTS[nextEra.id].buildings) || []) need.add(t);
+  const have = type => (n[type] || 0);
+  const want = (type, weight, kind = 'plot', res = null) => {
+    const def = BUILDING_TYPES[type];
+    if (!def || def.tier > tier || !affordable(civ, terrain, st, type)) return;
+    if (need.has(type) && !(civ.eraBuilt && civ.eraBuilt[type]) && have(type) === 0) weight *= 3;
+    list.push({ type, weight, kind, res });
+  };
+
+  // shelter first: nobody should sleep rough for long
+  const openHousing = openSites(terrain, st).filter(b => BUILDING_TYPES[b.type].category === 'housing').length;
+  const freeBeds = housingCapacity(terrain, st) - (st.adults || 0);
+  if ((st.homeless > 0 || freeBeds < 2) && openHousing < 1 + Math.floor(pop / 12)) list.push({ type: 'housing', weight: 8 + (st.homeless || 0), kind: 'plot' });
+
+  const farms = have('farm');
+  if (farms < Math.min(12, Math.ceil(pop / 7)) || (st.shortage.food && farms < 14)) want('farm', 5, 'edge');
+  if (tier >= 0 && have('lumber_camp') < 1 + Math.floor(pop / 30) && (st.jobs.woodcutter || 0) >= 2) want('lumber_camp', 3, 'deposit', 'wood');
   if (tier >= 1) {
-    if ((n.well || 0) < Math.floor(houses / 8) + (houses >= 4 ? 1 : 0)) want('well', 2);
-    if ((n.granary || 0) < Math.floor(citizens / 10) + 1 && houses >= 3) want('granary', 2);
-    if ((n.shrine || 0) + (n.temple || 0) < 1 && houses >= 3) want('shrine', 2);
-    if ((n.workshop || 0) < Math.floor(houses / 6) && houses >= 4) want('workshop', 2);
-    if ((n.kiln || 0) < 1 && houses >= 5) want('kiln', 1);
-    if ((n.market_stall || 0) + (n.market || 0) < Math.floor(houses / 8) && houses >= 5 && tier < 2) want('market_stall', 1.5);
-    if ((n.pen || 0) < Math.floor(farms / 2) && farms >= 2) want('pen', 1.2, 'edge');
-    if ((n.watchtower || 0) < Math.min(3, 1 + Math.floor(houses / 8)) && houses >= 4) want('watchtower', 1, 'edge');
-    if ((n.graveyard || 0) < 1 && houses >= 8) want('graveyard', 1, 'edge');
-    if ((n.lumber_camp || 0) < 1 && houses >= 3) want('lumber_camp', 1.2, 'edge');
+    if (have('granary') < Math.floor(pop / 14) + (pop >= 6 ? 1 : 0)) want('granary', 3);
+    if (have('well') < Math.floor(pop / 12) && pop >= 6) want('well', 1.5);
+    if (have('quarry') < 1 && pop >= 6 && !st.noQuarry) want('quarry', need.has('quarry') ? 3 : 1.5, 'deposit', 'stone');
+    if (have('workshop') < Math.floor(pop / 14) + (pop >= 6 ? 1 : 0)) want('workshop', 2.5);
+    if (have('kiln') < 1 + Math.floor(pop / 30) && pop >= 5) want('kiln', 2.5);
+    if (have('smithy') < 1 + Math.floor(pop / 30) && pop >= 6 && (isDiscovered(civ, 'copper') || isDiscovered(civ, 'iron'))) want('smithy', 3);
+    if (have('market_stall') + have('market') < Math.floor(pop / 12) && pop >= 8 && tier < 2) want('market_stall', 1.2);
+    if (have('pen') < Math.floor(farms / 2) && farms >= 2) want('pen', 1.5, 'edge');
+    if (have('dock') < 1 && pop >= 8 && st.fishNear !== false) want('dock', 1.2, 'dock');
+    if (have('watchtower') < Math.min(3, 1 + Math.floor(pop / 14)) && pop >= 8) want('watchtower', 0.8, 'edge');
   }
   if (tier >= 2) {
-    if ((n.market || 0) < 1 && houses >= 6) want('market', 2);
-    if ((n.smithy || 0) < 1 && houses >= 6) want('smithy', 1.5);
-    if ((n.tavern || 0) < Math.floor(houses / 10) + 1 && houses >= 7) want('tavern', 1.2);
-    if ((n.temple || 0) < 1 + Math.floor(houses / 20) && houses >= 6) want('temple', 2);
-    if ((n.windmill || 0) < Math.floor(farms / 3) && farms >= 3) want('windmill', 1, 'edge');
+    if (have('market') < 1 && pop >= 8) want('market', 2);
+    if (have('tavern') < Math.floor(pop / 16) + 1 && pop >= 10) want('tavern', 1);
+    if (have('windmill') < Math.floor(farms / 3) && farms >= 3) want('windmill', 1, 'edge');
+    for (const [res, k] of [['copper', 1], ['tin', 1], ['iron', 2], ['coal', 2], ['gold', 3]]) {
+      if (isDiscovered(civ, res) && have('mine') < Math.min(4, 1 + Math.floor(pop / 25)) && pop >= 8 && (!k || tier >= 2)) {
+        want('mine', need.has('mine') ? 3 : 1.2, 'deposit', res);
+        break;
+      }
+    }
   }
   if (tier >= 3) {
-    if ((n.keep || 0) < 1 && houses >= 8) want('keep', 3);
-    if ((n.library || 0) < 1 && houses >= 9) want('library', 1.5);
-    if ((n.barracks || 0) < 1 && houses >= 9) want('barracks', 1.5);
-    if ((n.cathedral || 0) < 1 && houses >= 10) want('cathedral', 1.5);
+    if (have('library') < 1 && pop >= 8) want('library', 1.5);
+    if (have('barracks') < 1 && pop >= 14) want('barracks', 1);
+    if (st.capital && have('keep') < 1 && pop >= 18) want('keep', 2.5);
   }
   if (tier >= 4) {
-    if ((n.factory || 0) < Math.floor(houses / 10) + 1 && houses >= 8) want('factory', 2, 'edge');
-    if ((n.power_plant || 0) < 1 && houses >= 10) want('power_plant', 1.5, 'edge');
+    if (have('factory') < Math.floor(pop / 14) + 1 && pop >= 10) want('factory', 2, 'edge');
+    if (have('power_plant') < 1 && pop >= 12) want('power_plant', 1.5, 'edge');
   }
-  if (tier >= 5 && (n.spaceport || 0) < 1 && houses >= 12) want('spaceport', 3, 'edge');
+  if (tier >= 5 && st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
   return list;
 }
 
@@ -268,9 +322,53 @@ function pick(list) {
 
 // ---------- public API ----------
 
-// The hall stands north of the main street, its door on the street; the capital moves to that street tile.
-export function initTown(civ, terrain) {
-  const town = ensureTown(civ);
+function ensureCensusFields(st) {
+  if (!st.shortage) st.shortage = {};
+  if (!st.jobs) st.jobs = {};
+  if (!st.roadQueue) st.roadQueue = [];
+}
+
+// Plans one building (a construction site, or finished with { instant: true }). Returns it or null.
+export function planSettlement(civ, terrain, st, { instant = false, maxSites = null } = {}) {
+  ensureCensusFields(st);
+  const town = st.town;
+  if (!town.ready) return null;
+  const tier = eraTier(civ);
+  const n = counts(terrain, st);
+  const sites = openSites(terrain, st).length;
+  town.rx = Math.min(24, 6 + Math.floor((n.housing || 0) * 0.9));
+  const cap = maxSites !== null ? maxSites : 2 + Math.min(5, (st.jobs.builder || 0) + (st.jobs.hauler || 0));
+  if (sites >= cap && !instant) return null;
+  const list = wishes(civ, terrain, st, n, tier);
+  if (!list.length) return null;
+  const w = pick(list);
+  const type = w.type === 'housing' ? housingType(civ, terrain, st, tier) : w.type;
+  let b = null;
+  if (w.kind === 'edge') b = edgePlot(terrain, civ, st, type, instant);
+  else if (w.kind === 'deposit') b = depositPlot(terrain, civ, st, type, w.res, instant);
+  else if (w.kind === 'dock') {
+    b = dockPlot(terrain, civ, st, instant);
+    if (!b) st.fishNear = false;
+  } else b = streetPlot(terrain, civ, st, type, instant);
+  if (!b && w.type === 'quarry') st.noQuarry = true;
+  if (!b && w.type === 'housing') return edgePlot(terrain, civ, st, 'tent', instant);
+  return b;
+}
+
+export function growTown(civ, terrain, opts = {}) {
+  for (const st of settlementsOf(civ)) {
+    const b = planSettlement(civ, terrain, st, opts);
+    if (b) return b;
+  }
+  return null;
+}
+
+// Founds the capital: a settlement at the civ's capital point with a hall site (the hall's door street becomes the
+// capital), a few starter dwellings and a field. With { instant } they stand finished.
+export function initTown(civ, terrain, { instant = false, stock = STARTER_KIT } = {}) {
+  if (settlementsOf(civ).length) return null;
+  const st = createSettlement(civ, civ.capitalX, civ.capitalY, { capital: true, stock });
+  const town = st.town;
   let type = eraTier(civ) >= 3 ? 'keep' : 'hall';
   let def = BUILDING_TYPES[type];
   const tryAt = (cx, cy) => {
@@ -279,7 +377,6 @@ export function initTown(civ, terrain) {
     return terrain.canPlaceBuilding(type, x, y) ? { x, y } : null;
   };
   let spot = null;
-  // the hall first; on cramped or rugged ground a smaller keep-less hall, then a hut
   for (const candidate of [type, 'hall', 'longhouse', 'hut']) {
     type = candidate;
     def = BUILDING_TYPES[type];
@@ -293,70 +390,62 @@ export function initTown(civ, terrain) {
     if (spot) break;
   }
   if (!spot) { town.ready = false; return null; }
-  const hall = placeAt(terrain, civ, type, spot.x, spot.y, true);
+  const hall = placeAt(terrain, civ, st, type, spot.x, spot.y, instant);
   if (!hall) return null;
   const front = frontTile(hall);
   civ.capitalX = front.x;
   civ.capitalY = front.y;
+  st.x = front.x;
+  st.y = front.y;
   town.cx = front.x;
   town.y0 = front.y;
   town.ready = true;
-  paveStreet(terrain, civ, town, town.y0);
-  // a few starter dwellings so the capital never looks empty
-  for (let i = 0; i < 3; i++) streetPlot(terrain, civ, town, housingType(eraTier(civ)), true);
+  queueStreet(terrain, civ, st, town.y0, instant);
+  starterSites(civ, terrain, st, instant, 2);
   return hall;
 }
 
-// Plans one building (as a construction site, or finished with { instant: true }). Returns it or null.
-export function growTown(civ, terrain, { instant = false, maxSites = 3 } = {}) {
-  const town = ensureTown(civ);
-  if (!town.ready) return null;
+function starterSites(civ, terrain, st, instant, homes) {
   const tier = eraTier(civ);
-  let sites = 0;
-  for (const b of terrain.buildings.values()) if (b.civId === civ.id && b.progress < 1 && b.type !== 'ruins') sites++;
-  const n = counts(terrain, civ);
-  town.rx = Math.min(24, 6 + Math.floor((n.housing || 0) * 0.9));
+  for (let i = 0; i < homes; i++) streetPlot(terrain, civ, st, tier === 0 ? 'tent' : housingType(civ, terrain, st, tier), instant);
+  edgePlot(terrain, civ, st, 'farm', instant);
+}
 
-  // renewal: old tents and huts are pulled down once better housing exists
-  if (tier >= 2 && random() < 0.25) {
-    for (const b of terrain.buildings.values()) {
-      if (b.civId === civ.id && (b.type === 'tent' || b.type === 'hut') && b.progress >= 1) { terrain.removeBuilding(b.id, { ruins: false }); break; }
+// A new hamlet at `site` {x,y} (found by the clan splinter). Returns the settlement.
+export function foundHamlet(civ, terrain, site, { instant = false, name = null, year = 0 } = {}) {
+  const st = createSettlement(civ, site.x, site.y, { name, capital: false, year });
+  const town = st.town;
+  town.cx = site.x;
+  town.y0 = site.y;
+  town.ready = true;
+  revealAround(civ, terrain, site.x, site.y, 10);
+  // the camp's plaza and a main street
+  queueStreet(terrain, civ, st, town.y0, instant);
+  starterSites(civ, terrain, st, instant, 2);
+  // the new hamlet claims the land around it
+  for (let i = 0; i < 12; i++) {
+    const tx = site.x + Math.round((random() - 0.5) * 10);
+    const ty = site.y + Math.round((random() - 0.5) * 10);
+    if (!terrain.inBounds(tx, ty)) continue;
+    const t = terrain.getTile(tx, ty);
+    if (t.biome.isWater || (t.civId && t.civId !== civ.id)) continue;
+    t.civId = civ.id;
+    if (!civ.territory.some(p => p.x === tx && p.y === ty)) civ.territory.push({ x: tx, y: ty });
+  }
+  return st;
+}
+
+// Timers: plans growth now and then. Construction itself is done by the settlement's people (jobs.js).
+export function tickTown(civ, terrain, dt) {
+  for (const st of settlementsOf(civ)) {
+    const town = st.town;
+    if (!town || !town.ready) continue;
+    town.cooldown -= dt;
+    if (town.cooldown <= 0) {
+      town.cooldown = PLAN_INTERVAL;
+      planSettlement(civ, terrain, st);
     }
   }
-  // the wall ring, once the town is big enough for its era
-  if (!town.ring && tier >= 1 && (n.housing || 0) >= 8 + tier) {
-    buildRing(terrain, civ, town, instant);
-    return null;
-  }
-  if (sites >= maxSites && !instant) return null;
-  const list = wishes(civ, n, tier);
-  if (!list.length) return null;
-  const w = pick(list);
-  const type = w.type === 'housing' ? housingType(tier) : w.type;
-  const b = w.kind === 'edge' ? edgePlot(terrain, civ, town, type, instant) : streetPlot(terrain, civ, town, type, instant);
-  if (!b && w.type === 'housing') return edgePlot(terrain, civ, town, 'tent', instant);
-  return b;
 }
 
-// Builds the civ's sites (their citizens' effort) and plans a new one now and then. dt: simulated seconds.
-export function tickTown(civ, terrain, dt) {
-  const town = civ.town;
-  if (!town || !town.ready) return;
-  let budget = dt * (0.8 + (civ.citizens || 0) * 0.3);
-  for (const b of terrain.buildings.values()) {
-    if (budget <= 0) break;
-    if (b.civId !== civ.id || b.progress >= 1 || b.type === 'ruins') continue;
-    const def = BUILDING_TYPES[b.type];
-    const need = (1 - b.progress) * def.work;
-    const spend = Math.min(budget, need);
-    terrain.advanceConstruction(b.id, spend);
-    budget -= spend;
-  }
-  town.cooldown -= dt;
-  if (town.cooldown <= 0) {
-    town.cooldown = PLAN_INTERVAL;
-    growTown(civ, terrain);
-  }
-}
-
-export { doorTile };
+export { doorTile, housesOf };
