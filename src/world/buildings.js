@@ -40,6 +40,8 @@ const LIST = [
   T('longhouse', 'Longhouse', 'housing', 4, 3, 1, { wood: 22, fibre: 6 }, 90, 8, { health: 140, ext: 20, door: { x: 1, y: 2 } }),
   T('stone_house', 'Stone House', 'housing', 3, 3, 2, { stone: 16, wood: 6 }, 100, 5, { health: 200, ext: 22 }),
   T('manor', 'Manor Townhouse', 'housing', 4, 3, 3, { stone: 24, wood: 12, clay: 6 }, 160, 8, { health: 260, ext: 28, door: { x: 1, y: 2 } }),
+  T('tenement', 'Brick Tenement', 'housing', 4, 3, 4, { stone: 18, clay: 14, iron: 4 }, 180, 12, { health: 300, ext: 36, door: { x: 1, y: 2 } }),
+  T('habitat', 'Habitat Dome', 'housing', 3, 3, 5, { iron: 14, stone: 10, clay: 6 }, 160, 8, { health: 320, ext: 24, icon: '🫧' }),
   T('hall', "Chieftain's Hall", 'civic', 5, 3, 0, { wood: 26, fibre: 8, stone: 4 }, 120, 10, { health: 200, ext: 24, icon: '🏛️', door: { x: 2, y: 2 } }),
 
   // ---------- storage ----------

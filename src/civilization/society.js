@@ -1,7 +1,7 @@
 import { ERAS, getEraForPoints, eraFor } from './techTree.js';
 import { scaleChance } from '../simulation/fixedStep.js';
 import { random } from '../simulation/random.js';
-import { initTown, tickTown, foundHamlet, queueRoad, roadKindFor, eraTier } from './townPlanner.js';
+import { initTown, tickTown, foundHamlet, queueRoad, roadKindFor, eraTier, retireOldHouse } from './townPlanner.js';
 import { settlementsOf, getSettlement, nearestSettlement, createSettlement, findHamletSite, builtSomewhere, buildingsOf, foodCapOf } from './settlements.js';
 import { sapientOptions, tickSettlement, seasonOf } from './jobs.js';
 import { syncFood, prosperityOf, FOOD_CAP as ECON_FOOD_CAP, take, add } from './economy.js';
@@ -508,6 +508,17 @@ export class SocietyManager {
   onBuildingComplete(c, b) {
     const def = BUILDING_TYPES[b.type];
     this.famTimer = 99; // housing may have changed: reassign homes at the next family tick
+    // a home of the current age replaces the settlement's oldest outdated one (the ages change towns gradually)
+    if (def.category === 'housing' && c.civ) {
+      const old = retireOldHouse(c.civ, this.terrain, c.st);
+      if (old) {
+        this.ecosystem.notifications.unshift({
+          text: `🏚️ ${c.st.name} pulled down an old ${BUILDING_TYPES[old.type].name.toLowerCase()} for a new ${def.name.toLowerCase()}.`,
+          minor: true,
+          time: Date.now()
+        });
+      }
+    }
     if (def.category !== 'housing' && b.type !== 'farm' && b.type !== 'pen' && b.type !== 'palisade' && b.type !== 'stone_wall') {
       this.ecosystem.notifications.unshift({
         text: `🏗️ ${c.st.name} finished building a ${def.name.toLowerCase()}.`,

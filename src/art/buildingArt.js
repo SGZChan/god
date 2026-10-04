@@ -4,6 +4,7 @@
 // over the body, and growing last while a building is under construction).
 import { hex, shade, mix, hash, brick, logs, planks, plaster, roofPlane, snowOnRoof } from './pixelKit.js';
 import { TILE_PX } from '../world/buildings.js';
+import { drawAgeBuilding } from './eraArchitecture.js';
 
 const T = TILE_PX;
 
@@ -16,6 +17,7 @@ const LOG = { mid: hex('#8d5d31'), hi: hex('#bc844a'), lo: hex('#5b3a1d'), ring:
 const ADOBE = { mid: hex('#cfa968'), hi: hex('#e6c987'), lo: hex('#a98046'), ring: hex('#e9d29a') };
 
 export const ROOFS = {
+  metal: [hex('#e6ebf2'), hex('#c3ccd8'), hex('#9aa6b6'), hex('#5f6b7c')],
   thatch: [hex('#e2c56e'), hex('#c6a34c'), hex('#9b7933'), hex('#5e4a20')],
   shingle: [hex('#b07c50'), hex('#8c5c38'), hex('#6a4328'), hex('#412819')],
   tile: [hex('#e58552'), hex('#c45f34'), hex('#9a4326'), hex('#612a19')],
@@ -216,6 +218,8 @@ function stoneShadowBand(p, x, y, w) {
 // ---------- gabled houses and halls ----------
 
 function gable(c, o) {
+  // a building stamped with an age is drawn in that age's architecture (eraArchitecture.js)
+  if (o.era !== undefined) return drawAgeBuilding(c, o, o.era, o.variant || 0);
   const { body, roof, P, def } = c;
   const bx0 = c.x0 + 1;
   const bx1 = c.x1 - 2;
@@ -237,7 +241,17 @@ function gable(c, o) {
   const rh = roofBottom - roofTop + 1;
   const inset = o.inset !== undefined ? o.inset : Math.min(bw * 0.3, rh * 0.5);
   const cols = P.snow ? ROOFS.snow : ROOFS[o.roof];
-  roofPlane(roof, bx0 - 2, bx1 + 2, roofTop, roofBottom, inset, P.snow ? 'shingle' : o.roof, cols, seed);
+  roofPlane(roof, bx0 - 2, bx1 + 2, roofTop, roofBottom, inset, P.snow ? 'shingle' : (o.roof === 'metal' ? 'slate' : o.roof), cols, seed);
+  // Space Age: solar panels on the roof
+  if (o.solar && !P.snow) {
+    const py = Math.round((roofTop + roofBottom) / 2);
+    for (let k = 0; k < 3; k++) {
+      const x = Math.round(bx0 + bw * (0.18 + k * 0.24));
+      roof.rect(x, py, 6, 4, hex('#1e3a8a'));
+      roof.hline(x, py, 6, hex('#60a5fa'));
+      roof.vline(x + 3, py, 4, hex('#93c5fd'));
+    }
+  }
   if (o.trim) {
     roof.hline(bx0 - 2, roofBottom - 2, bw + 4, P.accent);
     roof.hline(bx0 - 2, roofBottom - 3, bw + 4, P.accentHi);
@@ -260,10 +274,17 @@ function gable(c, o) {
   const wh = Math.max(4, Math.min(7, o.wallH - 12));
   const n = o.windows || 0;
   const slotW = bw / (n + 1);
-  for (let i = 1; i <= n; i++) {
-    const wx = Math.round(bx0 + slotW * i - 2);
-    if (Math.abs(wx + 2 - doorCx) < dw / 2 + 5) continue;
-    windowAt(body, wx, wy, 5, wh, P, o.lit !== false && hash(i, 1, seed) > 0.55, o.wall === 'brick');
+  const storeys = o.storeys || 1;
+  for (let k = 0; k < storeys; k++) {
+    const rowY = wy + k * 11;
+    for (let i = 1; i <= n; i++) {
+      const wx = Math.round(bx0 + slotW * i - 2);
+      // the ground floor keeps room for the door; upper floors have a window in every slot
+      if (k === storeys - 1 && Math.abs(wx + 2 - doorCx) < dw / 2 + 5) continue;
+      if (rowY + wh > c.fy1 - dh - 1 && Math.abs(wx + 2 - doorCx) < dw / 2 + 5) continue;
+      windowAt(body, wx, rowY, 5, wh, P, (o.lit === true) || (o.lit !== false && hash(i + k * 7, 1, seed) > 0.55), o.wall === 'brick');
+    }
+    if (k > 0) body.hline(bx0, rowY - 3, bw, shade(P.brick.mid, 0.75)); // floor band
   }
   if (o.sign) {
     body.vline(bx1 - 3, wallTop + 6, 8, P.woodLo);
@@ -1163,6 +1184,39 @@ function ruins(c) {
   }
 }
 
+// Space Age home: a glass dome on a ring foundation, with an airlock door and a small antenna
+function habitat(c) {
+  const { body, roof, P } = c;
+  const bx0 = c.x0 + 1;
+  const bx1 = c.x1 - 2;
+  const bw = bx1 - bx0 + 1;
+  const cx = (bx0 + bx1) / 2;
+  const r = bw / 2;
+  const base = c.fy1 - 6;
+  // ring foundation
+  for (let x = bx0; x <= bx1; x++) for (let y = base; y < c.fy1; y++) body.set(x, y, y === base ? hex('#d7dde6') : (hash(x, y, c.seed) > 0.5 ? hex('#9aa3b1') : hex('#8b94a3')));
+  // dome
+  for (let y = 0; y <= r; y++) {
+    const half = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
+    for (let x = -half; x <= half; x++) {
+      const px = Math.round(cx + x);
+      const py = base - y;
+      let col = x < -half * 0.4 ? hex('#cfe9ff') : (x > half * 0.45 ? hex('#5f86ad') : hex('#8fb8de'));
+      if (Math.abs(x) === half || y === Math.round(r)) col = hex('#e8eef5');
+      if ((x + 64) % 8 === 0 || y % 7 === 0) col = hex('#e8eef5'); // ribs
+      roof.set(px, py, col);
+    }
+  }
+  // warm light inside
+  for (let k = 0; k < 3; k++) roof.set(Math.round(cx - 6 + k * 6), base - 4, P.glow);
+  // airlock
+  body.rect(Math.round(cx) - 4, c.fy1 - 12, 8, 12, hex('#c9d1dc'));
+  body.rect(Math.round(cx) - 2, c.fy1 - 10, 4, 10, hex('#3a4656'));
+  // antenna
+  roof.vline(Math.round(cx + r * 0.5), base - Math.round(r) - 6, 8, hex('#c9d1dc'));
+  roof.set(Math.round(cx + r * 0.5), base - Math.round(r) - 7, hex('#ef4444'));
+}
+
 // ---------- the table: building id -> routine and parameters ----------
 
 export const ART = {
@@ -1172,6 +1226,8 @@ export const ART = {
   longhouse: { fn: gable, o: { wall: 'log', wallH: 19, roof: 'thatch', windows: 3, props: ['logs'], doorW: 7 } },
   stone_house: { fn: gable, o: { wall: 'brick', wallH: 23, roof: 'tile', windows: 2, chimney: true } },
   manor: { fn: gable, o: { wall: 'brick', wallH: 27, roof: 'slate', windows: 4, chimney: true, trim: true, dormer: true, doorW: 8, doorH: 15 } },
+  tenement: { fn: gable, o: { wall: 'brick', wallH: 38, roof: 'slate', windows: 5, storeys: 3, chimney: true, trim: true, doorW: 8, doorH: 13, inset: 3 } },
+  habitat: { fn: habitat },
   hall: { fn: gable, o: { wall: 'log', wallH: 22, roof: 'thatch', windows: 4, banner: true, trim: true, doorW: 9, doorH: 15, archDoor: false, props: ['barrel'] } },
   well: { fn: well },
   granary: { fn: gable, o: { wall: 'plank', wallH: 19, roof: 'thatch', windows: 0, doorW: 9, doorH: 14, props: ['sacks'] } },
@@ -1207,4 +1263,4 @@ export const ART = {
   ruins: { fn: ruins, flat: true }
 };
 
-export { windowAt, doorAt, barrel, crate, logPile, flame, flag };
+export { windowAt, doorAt, barrel, crate, logPile, flame, flag, sack };

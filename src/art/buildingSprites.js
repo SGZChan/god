@@ -35,7 +35,15 @@ export function damageLevel(damage) {
 
 export function styleKey(style) {
   const s = style || {};
-  return `${s.pal || 'stone'}${s.snow ? '+snow' : ''}${s.accent || ''}`;
+  return `${s.pal || 'stone'}${s.snow ? '+snow' : ''}${s.accent || ''}${s.era !== undefined ? `@${s.era}.${s.variant || 0}` : ''}`;
+}
+
+// The same building looks like the age it was built (or last renovated) in: style.era is the civilization's era
+// index (0 stone ... 5 space) and style.variant (0..2) picks one of three designs of that age. Walled buildings (the
+// gable family) are then drawn in that age's architecture (art/eraArchitecture.js); others keep their own art.
+export function eraOptions(o, era, variant = 0) {
+  if (era === undefined || !o || !o.wall || !o.roof) return o;
+  return { ...o, era, variant };
 }
 
 // ---------- construction ----------
@@ -190,7 +198,7 @@ export function composeBuilding(type, opts = {}) {
   const flat = Boolean(art.flat);
   if (flat) c.growth = stage === 7 ? 1 : Math.max(0.05, progress);
   if (type === 'ruins') c.def = { ...def, w: fw, h: fh };
-  art.fn(c, art.o || {});
+  art.fn(c, eraOptions(art.o || {}, style.era, style.variant));
 
   // drop shadow: a soft wedge on the ground to the right/below, only for tall buildings
   const sh = flat ? 0 : Math.min(10, Math.max(3, def.ext * 0.3));

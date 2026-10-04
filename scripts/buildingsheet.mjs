@@ -1,19 +1,23 @@
 // Renders the building sprites to a PNG with no browser (pure composeBuilding + zlib).
-// Usage: node scripts/buildingsheet.mjs out.png [pal=stone|timber|sandstone] [progress=1] [damage=0] [snow=0] [scale=3] [types=a,b,c]
+// Usage: node scripts/buildingsheet.mjs out.png [pal=stone|timber|sandstone] [progress=1] [damage=0] [snow=0] [scale=3] [types=a,b,c] [era=none|0..5|all]
+// era=all draws every type once per age (0 stone ... 5 space), one row per type.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
 import { composeBuilding } from '../src/art/buildingSprites.js';
 import { BUILDING_IDS } from '../src/world/buildings.js';
 
-const [out = 'buildings.png', pal = 'stone', progress = '1', damage = '0', snow = '0', scale = '3', types] = process.argv.slice(2);
+const [out = 'buildings.png', pal = 'stone', progress = '1', damage = '0', snow = '0', scale = '3', types, era = 'none'] = process.argv.slice(2);
 const SC = Number(scale);
 const ids = types ? types.split(',') : [...BUILDING_IDS, 'ruins'];
 const GRASS = [0x4f8a3a, 0x58943f];
-const sprites = ids.map(id => {
-  const style = { pal, snow: snow === '1', accent: '#38bdf8' };
+const eras = era === 'all' ? [0, 1, 2, 3, 4, 5] : [era === 'none' ? undefined : Number(era)];
+// VARIANTS=1 draws the three designs of every age (style.variant 0..2)
+const variants = process.env.VARIANTS ? [0, 1, 2] : [0];
+const sprites = ids.flatMap(id => eras.flatMap(e => variants.map(vr => ({ e, vr }))).map(({ e, vr }, k) => {
+  const style = { pal, snow: snow === '1', accent: '#38bdf8', era: e, variant: vr };
   const mask = id.includes('wall') || id.includes('palisade') ? 10 : 0;
-  return { id, s: composeBuilding(id, { style, progress: Number(progress), damage: Number(damage), mask, w: id === 'ruins' ? 3 : undefined, h: id === 'ruins' ? 3 : undefined }) };
-});
+  return { id, newRow: era === 'all' && k === 0, s: composeBuilding(id, { style, progress: Number(progress), damage: Number(damage), mask, w: id === 'ruins' ? 3 : undefined, h: id === 'ruins' ? 3 : undefined }) };
+}));
 const maxW = 1800;
 let x = 6;
 let y = 6;
@@ -21,7 +25,7 @@ let rowH = 0;
 const placed = [];
 for (const sp of sprites) {
   const w = sp.s.w * SC + 14;
-  if (x + w > maxW) { x = 6; y += rowH + 10; rowH = 0; }
+  if (x + w > maxW || (sp.newRow && x > 6)) { x = 6; y += rowH + 10; rowH = 0; }
   placed.push({ ...sp, x, y });
   x += w;
   rowH = Math.max(rowH, sp.s.h * SC + 6);

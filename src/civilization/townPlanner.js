@@ -128,11 +128,21 @@ function bestReachable(terrain, st, cands, goalOf) {
   return null;
 }
 
+// The look of a building raised now by `civ`: local materials, the civ's colour and its current age (art uses
+// style.era to pick wall and roof materials, see art/buildingSprites.js eraOptions).
+export function styleOf(civ, terrain, type, x, y) {
+  const era = eraTier(civ);
+  const base = terrain.styleFor(type, x, y);
+  // from the Middle Ages on, towns are built of stone even where they used to be built of timber
+  const pal = base.pal === 'timber' && era >= 3 ? 'stone' : base.pal;
+  return { ...base, pal, accent: civ.color, era };
+}
+
 function placeAt(terrain, civ, st, type, x, y, instant) {
   const b = terrain.placeBuilding(type, x, y, {
     civId: civ.id,
     progress: instant ? 1 : 0,
-    style: { ...terrain.styleFor(type, x, y), accent: civ.color }
+    style: styleOf(civ, terrain, type, x, y)
   });
   if (!b) return null;
   b.settlementId = st.id;
@@ -257,13 +267,16 @@ function dockPlot(terrain, civ, st, instant) {
 function housingType(civ, terrain, st, tier) {
   const options = [];
   const consider = (type, w) => { if (BUILDING_TYPES[type].tier <= tier && affordable(civ, terrain, st, type)) options.push([type, w]); };
-  consider('tent', tier === 0 ? 1.2 : 0.1);
-  consider('hut', tier === 0 ? 2 : 0.4);
-  consider('wooden_house', tier === 1 ? 3 : (tier === 2 ? 1 : 0.4));
-  consider('longhouse', tier === 1 ? 1.5 : 0.8);
-  consider('stone_house', tier === 2 ? 3 : (tier >= 3 ? 2 : 0));
-  consider('manor', tier >= 3 ? 2 : 0);
-  if (!options.length) return 'tent';
+  // each age builds its own kind of home; the previous age's homes stay possible for a while, older ones no more
+  consider('tent', tier === 0 ? 1.2 : 0);
+  consider('hut', tier === 0 ? 2 : (tier === 1 ? 0.2 : 0));
+  consider('wooden_house', tier === 1 ? 3 : (tier === 2 ? 0.8 : 0));
+  consider('longhouse', tier === 1 ? 1.5 : (tier === 2 ? 0.4 : 0));
+  consider('stone_house', tier === 2 ? 3 : (tier === 3 ? 1 : 0));
+  consider('manor', tier === 3 ? 3 : (tier === 4 ? 0.8 : 0));
+  consider('tenement', tier === 4 ? 3 : (tier === 5 ? 0.8 : 0));
+  consider('habitat', tier >= 5 ? 3 : 0);
+  if (!options.length) return tier === 0 ? 'tent' : (affordable(civ, terrain, st, 'hut') ? 'hut' : 'tent');
   let total = 0;
   for (const o of options) total += o[1];
   let r = random() * total;
@@ -293,6 +306,8 @@ export function wishes(civ, terrain, st, n, tier, cn) {
   const openHousing = openSites(terrain, st).filter(b => BUILDING_TYPES[b.type].category === 'housing').length;
   const freeBeds = housingCapacity(terrain, st) - (st.adults || 0);
   if ((st.homeless > 0 || freeBeds < 2) && openHousing < 1 + Math.floor(pop / 12)) list.push({ type: 'housing', weight: 8 + (st.homeless || 0), kind: 'plot' });
+  // renewal: homes from an earlier age are replaced one at a time by homes of this age (see retireOldHouse)
+  else if (openHousing < 1 && outdatedHouses(terrain, st, tier).length) list.push({ type: 'housing', weight: 3, kind: 'plot' });
 
   const farms = have('farm');
   if (farms < Math.min(12, Math.ceil(pop / 7)) || (st.shortage.food && farms < 14)) want('farm', 5, 'edge');
@@ -474,7 +489,57 @@ export function foundHamlet(civ, terrain, site, { instant = false, name = null, 
   return st;
 }
 
-// Timers: plans growth now and then. Construction itself is done by the settlement's people (jobs.js).
+// ---------- the passing of the ages: renovation and renewal ----------
+
+// The age a building was built in (style.era), or the first age its type belongs to (old saves)
+export function eraOfBuilding(b) {
+  if (b.style && b.style.era !== undefined) return b.style.era;
+  return BUILDING_TYPES[b.type] ? BUILDING_TYPES[b.type].tier : 0;
+}
+
+// Finished homes of an age before the previous one (and every tent once the Stone Age is over), oldest age first.
+export function outdatedHouses(terrain, st, tier) {
+  return housesOf(terrain, st)
+    .filter(b => BUILDING_TYPES[b.type].tier < tier - 1 || (tier >= 1 && b.type === 'tent'))
+    .sort((a, b) => (BUILDING_TYPES[a.type].tier - BUILDING_TYPES[b.type].tier) || (a.id - b.id));
+}
+
+// A new home was finished: if the settlement can spare its oldest outdated home, it is pulled down (its people move
+// into the new one at the next family tick). Returns the removed building or null.
+export function retireOldHouse(civ, terrain, st) {
+  const old = outdatedHouses(terrain, st, eraTier(civ))[0];
+  if (!old) return null;
+  const spare = housingCapacity(terrain, st) - BUILDING_TYPES[old.type].capacity - (st.adults || 0);
+  if (spare < 0) return null;
+  terrain.removeBuilding(old.id, { ruins: false });
+  return old;
+}
+
+export const RENOVATE_INTERVAL = 6; // simulated seconds between two renovations in one settlement
+
+// Now and then one building of an earlier age is renovated in the style of the current age (new walls, roof, trim),
+// so a town changes its look gradually as its people move from age to age. Returns the renovated building or null.
+export function renovateOne(civ, terrain, st) {
+  const tier = eraTier(civ);
+  let pick = null;
+  for (const b of buildingsOf(terrain, st)) {
+    if (b.progress < 1 || b.type === 'ruins' || eraOfBuilding(b) >= tier) continue;
+    if (!pick || eraOfBuilding(b) < eraOfBuilding(pick) || (eraOfBuilding(b) === eraOfBuilding(pick) && b.id < pick.id)) pick = b;
+  }
+  if (!pick) return null;
+  // an age at a time: a Stone Age hut does not jump straight into the Space Age
+  const era = Math.min(tier, eraOfBuilding(pick) + 1);
+  const base = pick.style || terrain.styleFor(pick.type, pick.x, pick.y);
+  pick.style = { ...base, pal: base.pal === 'timber' && era >= 3 ? 'stone' : base.pal, accent: civ.color, era };
+  terrain.syncBuildingTiles(pick);
+  if (terrain.spawnParticles) {
+    const def = BUILDING_TYPES[pick.type];
+    terrain.spawnParticles(pick.x + def.w / 2, pick.y + def.h / 2, 10, '#d6c7a1', 1);
+  }
+  return pick;
+}
+
+// Timers: plans growth now and then, and renovates. Construction itself is done by the settlement's people (jobs.js).
 export function tickTown(civ, terrain, dt) {
   for (const st of settlementsOf(civ)) {
     const town = st.town;
@@ -483,6 +548,11 @@ export function tickTown(civ, terrain, dt) {
     if (town.cooldown <= 0) {
       town.cooldown = PLAN_INTERVAL;
       planSettlement(civ, terrain, st);
+    }
+    st.renovateTimer = (st.renovateTimer === undefined ? RENOVATE_INTERVAL : st.renovateTimer) - dt;
+    if (st.renovateTimer <= 0) {
+      st.renovateTimer = RENOVATE_INTERVAL;
+      renovateOne(civ, terrain, st);
     }
   }
 }

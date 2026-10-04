@@ -71,7 +71,9 @@ export class BuildingRenderer {
     const accent = civ || (b.style && b.style.accent) || '#c0392b';
     let s = this.styles.get(b);
     if (!s || s.accent !== accent || s.base !== b.style) {
-      s = { accent, base: b.style, style: { ...(b.style || {}), accent } };
+      // a stable design variant per building, so a street of one age does not repeat (eraArchitecture.js)
+      const variant = b.style && b.style.variant !== undefined ? b.style.variant : (Math.imul(b.id | 0, 2654435761) >>> 0) % 3;
+      s = { accent, base: b.style, style: { ...(b.style || {}), accent, variant } };
       this.styles.set(b, s);
     }
     return s.style;
