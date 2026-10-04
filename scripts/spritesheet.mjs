@@ -10,7 +10,7 @@ await page.setViewport({ width: 1500, height: 1500 });
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto(`${base}/dev/sprites.html?seed=${seed}`, { waitUntil: 'load' });
+await page.goto(`${base}/dev/${process.env.SHEET || 'sprites'}.html?seed=${seed}`, { waitUntil: 'load' });
 await page.waitForFunction(() => document.title === 'ready', { timeout: 15000 });
 await page.screenshot({ path: out, fullPage: true });
 await browser.close();

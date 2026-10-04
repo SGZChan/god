@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Building sprite sheet (dev)</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #1b2434; color: #cbd5e1; font: 13px sans-serif; }
+    h2 { margin: 18px 0 6px; font-size: 14px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .cell { background: #4f8a3a; padding: 6px; text-align: center; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .stage { display: flex; gap: 4px; align-items: flex-end; }
+    canvas { image-rendering: pixelated; display: block; }
+  </style>
+</head>
+<body>
+  <p>Query: ?pal=stone|timber|sandstone &amp; snow=1 &amp; scale=3 &amp; accent=%2338bdf8. The white bar beside a building is a 20 px creature.</p>
+  <h2>Complete buildings</h2>
+  <div id="all" class="row"></div>
+  <h2>Construction stages (stone house, wooden house, temple)</h2>
+  <div id="stages" class="row"></div>
+  <h2>Damage levels (keep, house)</h2>
+  <div id="damage" class="row"></div>
+  <h2>Styles (manor)</h2>
+  <div id="styles" class="row"></div>
+  <h2>Roads (mask 0, 5, 10, 15)</h2>
+  <div id="roads" class="row"></div>
+  <script type="module">
+    import { BUILDING_IDS } from '/src/world/buildings.js';
+    import { getBuildingCanvas } from '/src/art/buildingSprites.js';
+    import { roadCanvas } from '/src/art/buildingRenderer.js';
+
+    const q = new URLSearchParams(location.search);
+    const SCALE = Number(q.get('scale') || 3);
+    const style = { pal: q.get('pal') || 'stone', snow: q.get('snow') === '1', accent: q.get('accent') || '#38bdf8' };
+
+    function add(parent, type, opts, label) {
+      const sprite = getBuildingCanvas(type, { style, ...opts });
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const wrap = document.createElement('div');
+      wrap.className = 'stage';
+      const canvas = document.createElement('canvas');
+      canvas.width = sprite.w * SCALE;
+      canvas.height = sprite.h * SCALE;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sprite.canvas, 0, 0, canvas.width, canvas.height);
+      const ref = document.createElement('div');
+      ref.style.cssText = `width:${SCALE}px;height:${20 * SCALE}px;background:#fff;margin-bottom:${5 * SCALE}px`;
+      wrap.append(canvas, ref);
+      cell.append(wrap, document.createTextNode(label || type));
+      parent.appendChild(cell);
+    }
+
+    for (const id of BUILDING_IDS) add(document.getElementById('all'), id, { mask: id.includes('wall') || id.includes('palisade') ? 10 : 0 });
+    add(document.getElementById('all'), 'ruins', { w: 3, h: 3 });
+    for (const type of ['stone_house', 'wooden_house', 'temple']) {
+      for (const p of [0.05, 0.16, 0.3, 0.46, 0.63, 0.79, 0.93, 1]) add(document.getElementById('stages'), type, { progress: p }, `${type} ${Math.round(p * 100)}%`);
+    }
+    for (const type of ['keep', 'stone_house']) for (const d of [0, 0.2, 0.5, 0.9]) add(document.getElementById('damage'), type, { damage: d }, `${type} dmg ${d}`);
+    for (const pal of ['stone', 'timber', 'sandstone']) {
+      for (const snow of [false, true]) {
+        const sprite = getBuildingCanvas('manor', { style: { pal, snow, accent: '#e11d48' } });
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const canvas = document.createElement('canvas');
+        canvas.width = sprite.w * SCALE;
+        canvas.height = sprite.h * SCALE;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sprite.canvas, 0, 0, canvas.width, canvas.height);
+        cell.append(canvas, document.createTextNode(pal + (snow ? ' + snow' : '')));
+        document.getElementById('styles').appendChild(cell);
+      }
+    }
+    for (const kind of ['dirt', 'gravel', 'cobble']) {
+      for (const mask of [0, 5, 10, 15]) {
+        const c = roadCanvas(kind, mask, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = c.width * SCALE * 2;
+        canvas.height = c.height * SCALE * 2;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(c, 0, 0, canvas.width, canvas.height);
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.append(canvas, document.createTextNode(`${kind} ${mask}`));
+        document.getElementById('roads').appendChild(cell);
+      }
+    }
+    document.title = 'ready';
+  </script>
+</body>
+</html>

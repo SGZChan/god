@@ -81,3 +81,30 @@ player; both depend on 3.
   Known: renewables regrow only while their chunk is loaded; god powers that reshape terrain leave deposits where they were (e.g. a tree on newly flooded
   tile); the overview/minimap shows generated terrain, not god-power edits; creatures do not use resources yet (sub-project 3 builds on the API).
 - Powers: categorized palette, 54 powers, ActiveEffects manager, world event bus (docs/POWERS.md). Tests: tests/powers_test.js, scripts/smoke_powers.mjs.
+
+
+## Buildings (sub-project 5, first half: DONE 2026-10-04)
+
+Buildings are now real multi-tile objects (huts 2x2, houses 3x3, halls 4-5x3, temples 4x4, keeps 6x6, 1x1 wall pieces and gates), drawn as large
+pixel-art sprites in the style of the reference scene (stone brick with crenellated tops, log palisades with ring-log ends, dirt roads),
+depth-sorted with creatures. A house is ~60 px tall next to a 20 px creature. Town layout is an INTERIM planner
+(`src/civilization/townPlanner.js`) that the society agent should replace with creatures that really build.
+
+**For the society/economy agent - API summary**
+- Catalogue and helpers: `src/world/buildings.js` (`BUILDING_TYPES[id]`: category, w/h, tier = ERAS index 0..5, `cost` {resource: n}, `work`, `capacity`,
+  `door`, `solid`, `health`; `doorTile(b)`, `frontTile(b)`, `missingMaterials(b)`, `typesForTier(t)`; `ROAD_KINDS`).
+- Terrain (`src/planet/terrain.js`, documented in its header): `canPlaceBuilding(type,x,y)`, `placeBuilding(type,x,y,{civId,clanId,progress,style})`
+  (progress 0 = a construction site), `deliverMaterial(id,res,n)` (records `building.delivered`), `advanceConstruction(id,work)` (true when complete),
+  `damageBuilding` / `repairBuilding` / `removeBuilding(id,{ruins})`, `getBuildingAt`, `buildingsInRect`, `buildingsOfCiv`, `setRoad(x,y,kind)`, `isSolid`.
+- Walking: completed buildings block every footprint tile except the door (`tile.structure.solid`); sites, fields, ruins, markets and quarries are open.
+  A* (`ai/pathfinding.js`) and `Entity.moveAlongPath` respect this, roads are cheaper (0.82 dirt, 0.74 gravel, 0.67 cobble), a creature caught inside a
+  newly finished building can still walk out. Aim paths at `frontTile(b)` / `doorTile(b)`.
+- `tile.structure` = `{type, buildingId, ox, oy, anchor, name, icon, health, solid}`; old one-tile structures (type `ruins`, no buildingId) remain only for legacy code.
+- Persistence: tile.structure/tile.road are tile deltas, the registry is saved in the terrain section (`buildings`, `nextBuildingId`); SAVE_VERSION unchanged
+  (older v3 saves load without buildings and the civ gets a hall via `expandTerritory`).
+- Planner hooks: `initTown` (initDefaultCivs, ruins rebirth, expandTerritory when `civ.town` is missing), `tickTown` (Civilization.update). Replace
+  these calls; `civ.town` is plain JSON saved with the civ. `civ.capitalX/Y` is now the road tile in front of the hall door.
+- Art: `art/buildingSprites.js` (`composeBuilding`, `getBuildingCanvas`, stages/damage/hooks for smoke and fire), `art/buildingRenderer.js`,
+  `art/roadTiles.js`. Dev sheets: `dev/buildings.html` (`SHEET=buildings node scripts/spritesheet.mjs <url> out.png`) and the browser-free
+  `node scripts/buildingsheet.mjs out.png [pal] [progress] [damage] [snow] [scale] [types]`. Browser check: `scripts/smoke_buildings.mjs`.
+- Rules of thumb: metals, coal, gems, oil and uranium deposits are never built over (mines and quarries may); stone/flint scatter and trees may be.
