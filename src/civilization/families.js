@@ -9,6 +9,7 @@
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { housesOf, getSettlement, depotOf } from './settlements.js';
 import * as eco from './economy.js';
+import { random } from '../simulation/random.js';
 
 // Marries off founders: pairs of opposite sex become couples. Returns the number of couples.
 export function bondFounders(entities) {
@@ -141,6 +142,21 @@ export function feedChildren(terrain, st, members) {
     eco.take(st.stock, k, 1);
     e.hunger = Math.max(0, e.hunger - eco.NOURISHMENT[k]);
   }
+}
+
+// A couple that shares a house is together at night: each family round they may conceive without having to meet in the
+// field (work keeps partners apart all day). The usual rules apply (ecosystem.tryConceive: fertility, prosperity, cooldowns, housing cap).
+export function householdConceptions(ecosystem, members, byId, chance = 0.4) {
+  let n = 0;
+  for (const mother of members) {
+    if (!mother.alive || mother.sex !== 'F' || !mother.mateId || !mother.homeId || mother.pregnancy) continue;
+    const father = byId.get(mother.mateId);
+    if (!father || !father.alive || father.sex !== 'M' || father.homeId !== mother.homeId) continue;
+    if (!mother.readyToMate([]) || !father.readyToMate([])) continue;
+    if (random() > chance) continue;
+    if (ecosystem.tryConceive(father, mother)) n++;
+  }
+  return n;
 }
 
 // Widow(er)s: clear the dead partner.

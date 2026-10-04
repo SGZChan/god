@@ -7,7 +7,8 @@ import { MAX_CITIZENS } from '../civilization/society.js';
 import { popCap } from '../civilization/settlements.js';
 import { random } from '../simulation/random.js';
 
-export const MAX_ENTITIES = 700; // safety limit only; real limits are local crowding and food
+export const MAX_ENTITIES = 900; // safety limit only; real limits are local crowding and food
+export const MAX_ANIMALS = 560;  // wildlife stops breeding at this many animals, so a growing society never crowds nature out (nor the reverse)
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 const CENSUS_INTERVAL = 3;     // simulated seconds between species censuses
 
@@ -62,6 +63,7 @@ export class Ecosystem {
     this.censusTimer = 0;
     this.grid = new SpatialGrid(8);
     this.byId = new Map();  // entity id -> entity (rebuilt every step)
+    this.sapientCount = 0;  // living and dead sapient bodies in `entities` (refreshed every step)
     this.society = null; // set by SocietyManager so new humans can be assigned a civilization
 
     this.initFauna();
@@ -176,7 +178,12 @@ export class Ecosystem {
     this.timeYears += sim * YEARS_PER_SECOND;
     this.grid.rebuild(this.entities);
     this.byId.clear();
-    for (const e of this.entities) this.byId.set(e.id, e);
+    let sapients = 0;
+    for (const e of this.entities) {
+      this.byId.set(e.id, e);
+      if (e.isSapient) sapients++;
+    }
+    this.sapientCount = sapients;
 
     const worldContext = {
       terrain: this.terrain,
@@ -228,8 +235,8 @@ export class Ecosystem {
 
   // A courting pair that meets may conceive. The mother carries the embryos for a gestation period.
   tryConceive(father, mother) {
-    // wildlife may not crowd the sapients out of the safety cap: animals stop breeding at 80% of it
-    if (this.entities.length >= (mother.isSapient ? MAX_ENTITIES : MAX_ENTITIES * 0.8)) return false;
+    // sapients and animals have separate ceilings (MAX_ANIMALS counts only the animals)
+    if (this.entities.length >= MAX_ENTITIES || (!mother.isSapient && this.entities.length - this.sapientCount >= MAX_ANIMALS)) return false;
     if (!father.alive || !mother.alive || father.sex !== 'M' || mother.sex !== 'F') return false;
     if (mother.pregnancy || father.mateCooldown > 0 || mother.mateCooldown > 0) return false;
     if (father.isKinOf(mother) || traitDistance(father.traits, mother.traits) > MATE_THRESHOLD) return false;

@@ -15,7 +15,7 @@ import { random } from '../simulation/random.js';
 import { BUILDING_TYPES, missingMaterials, doorTile, frontTile } from '../world/buildings.js';
 import { RESOURCES } from '../world/resources.js';
 import * as eco from './economy.js';
-import { getSettlement, nearestSettlement, depotOf, buildingsOf, openSites, countBuilt, settlementsOf } from './settlements.js';
+import { getSettlement, nearestSettlement, depotOf, buildingsOf, openSites, countBuilt, settlementsOf, foodCapOf } from './settlements.js';
 import { revealAround, scanForDeposits, nearestKnown, isExplored, isDiscovered, syncDiscoveries, DISCOVERABLE } from './exploration.js';
 import { ERA_REQUIREMENTS, ERAS } from './techTree.js';
 import { eraTier } from './townPlanner.js';
@@ -179,8 +179,9 @@ export function aptitude(ent, job) {
 
 // ---------- the labour market ----------
 
-function foodTargetOf(pop) {
-  return Math.min(70, Math.max(8, pop * 2.5));
+// the food a settlement aims to keep in store (a bit below what its stores can hold)
+function foodTargetOf(pop, cap = 60) {
+  return Math.min(cap * 0.75, Math.max(8, pop * 2.5));
 }
 
 function wantedJobs(c, st, members, adults) {
@@ -192,7 +193,7 @@ function wantedJobs(c, st, members, adults) {
   const want = [];
   const add = (job, n) => { if (n > 0 && !blocked(job)) want.push([job, Math.round(n)]); };
 
-  const foodTarget = foodTargetOf(pop);
+  const foodTarget = foodTargetOf(pop, foodCapOf(terrain, st));
   const foodU = eco.foodUnits(st.stock);
   const foodShort = foodU < foodTarget ? 1 - foodU / foodTarget : 0;
   const foodRich = foodU > foodTarget * 1.3;
@@ -220,7 +221,8 @@ function wantedJobs(c, st, members, adults) {
   const need = st.need || { wood: 0.5, fibre: 0.5, stone: 0.5, clay: 0, food: foodShort };
   const oreNeed = st.shortage.ore ? 0.5 : 0;
   add('gatherer', (foodShort > 0.25 || farmSlots === 0) ? Math.ceil(N * (0.08 + 0.3 * foodShort + 0.12 * need.fibre)) : (need.fibre > 0.3 ? Math.ceil(N * 0.1 * need.fibre) : 0));
-  add('hunter', foodShort > 0.15 || N >= 8 ? Math.ceil(N * (foodShort > 0.15 ? 0.15 : 0.05)) : 0);
+  // hunting thins the herds: only when food is short
+  add('hunter', foodShort > 0.2 ? Math.ceil(N * 0.1) : 0);
   add('woodcutter', need.wood > 0.05 ? Math.ceil(N * (0.05 + 0.3 * need.wood)) : 0);
   const mineNeed = Math.max(need.stone, need.clay, oreNeed);
   add('miner', mineNeed > 0.05 || oreNeed ? Math.ceil(N * (0.04 + 0.28 * mineNeed)) : 0);
@@ -338,7 +340,7 @@ export function tickSettlement(c, st, members, dt) {
   short.wood = Boolean(short.wood || buffer('wood'));
   short.stone = Boolean(short.stone || (st.stock.stone || 0) < 10);
   short.ore = ['copper', 'tin', 'iron', 'coal'].some(r => isDiscovered(civ, r) && (short[r] || (st.stock[r] || 0) < 6) && countBuilt(terrain, st, 'smithy') > 0);
-  short.food = eco.foodUnits(st.stock) < foodTargetOf(members.length);
+  short.food = eco.foodUnits(st.stock) < foodTargetOf(members.length, foodCapOf(terrain, st));
   st.shortage = short;
   // how badly each raw material is needed (0 = plenty, 1 = none): stock against a working level plus what sites are missing
   const level = (res, base) => {
@@ -351,7 +353,7 @@ export function tickSettlement(c, st, members, dt) {
     fibre: level('fibre', 12),
     stone: level('stone', 14 + (c.tier >= 1 ? 16 : 0)),
     clay: level('clay', kiln),
-    food: Math.max(0, 1 - eco.foodUnits(st.stock) / foodTargetOf(members.length))
+    food: Math.max(0, 1 - eco.foodUnits(st.stock) / foodTargetOf(members.length, foodCapOf(terrain, st)))
   };
 
   // inbound materials per site, from what builders and haulers carry
@@ -599,6 +601,10 @@ function stepHunter(ent, c) {
       if (d < bestD) { bestD = d; prey = e; }
     }
     if (!prey) return failTask(ent, c, 'No game nearby');
+    // leave a breeding herd alone: hunters need a few animals in sight to take one
+    let herd = 0;
+    for (const e of c.world.grid.within(prey.x, prey.y, 14)) if (e.alive && e.species === prey.species) herd++;
+    if (herd < 4) return failTask(ent, c, 'The herd is too small to hunt');
     t.preyId = prey.id;
   }
   say(ent, 'Hunting');

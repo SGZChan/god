@@ -362,11 +362,11 @@ export class Entity {
   }
 
   canMateWith(other) {
-    // Sapients keep long-term pair bonds and court within their own settlement
+    // Sapients keep long-term pair bonds and court within their own civilization
     if (this.isSapient) {
       if (this.mateId && other.id !== this.mateId) return false;
       if (other.mateId && other.mateId !== this.id) return false;
-      if (this.settlementId !== other.settlementId) return false;
+      if (this.civilization !== other.civilization) return false;
     }
     return other.alive && other !== this && other.sex !== this.sex && other.isAdult && other.stage !== 'elder'
       && other.mateCooldown <= 0 && !other.pregnancy && other.hunger < 75 && !this.isKinOf(other)
@@ -601,7 +601,8 @@ export class Entity {
     // 2. LAW ENFORCEMENT & CRIME: Guards hunt criminals / Heretics
     if (this.role === 'GUARD') {
       const criminal = this.findNearestEntity(worldContext.entities, e =>
-        e.alive && (e.role === 'CRIMINAL' || (e.belief.status === 'ATHEIST_HERETIC' && this.personality.piety > 0.8)) && Math.hypot(this.x - e.x, this.y - e.y) < 8
+        e.alive && (e.role === 'CRIMINAL' || (e.belief.status === 'ATHEIST_HERETIC' && this.personality.piety > 0.8
+          && this.civilization && this.civilization.government.id === 'THEOCRACY')) && Math.hypot(this.x - e.x, this.y - e.y) < 8
       );
       if (criminal) {
         this.state = 'ENFORCE_LAW';

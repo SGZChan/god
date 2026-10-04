@@ -126,5 +126,9 @@ export function pickSplinter(clan, entities) {
     }
   }
   const out = members.filter(e => chosen.has(e.id));
-  return out.filter(e => e.isAdult).length >= 2 ? out : [];
+  // a viable hamlet needs grown men and women (so that couples can form) and some hands
+  const grown = out.filter(e => e.isAdult);
+  const women = grown.filter(e => e.sex === 'F').length;
+  const men = grown.filter(e => e.sex === 'M').length;
+  return women >= 2 && men >= 2 ? out : [];
 }

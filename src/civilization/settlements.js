@@ -84,6 +84,11 @@ export function housesOf(terrain, st) {
   return buildingsOf(terrain, st).filter(b => b.progress >= 1 && BUILDING_TYPES[b.type].category === 'housing');
 }
 
+// Units of food a settlement's stores hold before the surplus spoils: a basic store plus 50 per granary.
+export function foodCapOf(terrain, st) {
+  return 60 + 50 * countBuilt(terrain, st, 'granary');
+}
+
 export function housingCapacity(terrain, st) {
   let n = 0;
   for (const b of housesOf(terrain, st)) n += BUILDING_TYPES[b.type].capacity;
@@ -130,7 +135,7 @@ export function popCap(terrain, civ) {
 
 // A founding spot for a new hamlet within reach of `from` (a settlement): explored, open, buildable land that is not
 // too close to any other settlement, preferably near water and trees. Returns {x, y} or null.
-export function findHamletSite(terrain, civ, from, allCivs, isExplored) {
+export function findHamletSite(terrain, civ, from, allCivs, isExplored, comfortable = null) {
   const best = null;
   const cands = [];
   for (let attempt = 0; attempt < 24; attempt++) {
@@ -144,6 +149,7 @@ export function findHamletSite(terrain, civ, from, allCivs, isExplored) {
     const tile = terrain.getTile(land.x, land.y);
     if (!terrain.isBuildable(land.x, land.y) || (tile.civId && tile.civId !== civ.id)) continue;
     if (isExplored && !isExplored(land.x, land.y)) continue;
+    if (comfortable && !comfortable(tile.temperature)) continue; // the settlers must be able to live in that climate
     let tooClose = false;
     for (const c of allCivs) {
       for (const s of c.settlements || []) if (Math.hypot(s.x - land.x, s.y - land.y) < 20) tooClose = true;

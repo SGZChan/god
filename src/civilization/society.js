@@ -2,11 +2,11 @@ import { ERAS, getEraForPoints, eraFor } from './techTree.js';
 import { scaleChance } from '../simulation/fixedStep.js';
 import { random } from '../simulation/random.js';
 import { initTown, tickTown, foundHamlet, queueRoad, roadKindFor, eraTier } from './townPlanner.js';
-import { settlementsOf, getSettlement, nearestSettlement, createSettlement, findHamletSite, builtSomewhere, buildingsOf } from './settlements.js';
+import { settlementsOf, getSettlement, nearestSettlement, createSettlement, findHamletSite, builtSomewhere, buildingsOf, foodCapOf } from './settlements.js';
 import { sapientOptions, tickSettlement, seasonOf } from './jobs.js';
 import { syncFood, prosperityOf, FOOD_CAP as ECON_FOOD_CAP, take, add } from './economy.js';
 import { refreshClans, ensureClan, createClan, pickSplinter, CLAN_SPLIT_SIZE, getClan } from './clans.js';
-import { bondFounders, assignHomes, adoptOrphans, feedChildren, clearDeadMates } from './families.js';
+import { bondFounders, assignHomes, adoptOrphans, feedChildren, clearDeadMates, householdConceptions } from './families.js';
 import { revealAround, syncDiscoveries, isExplored, isDiscovered } from './exploration.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
 
@@ -558,7 +558,7 @@ export class SocietyManager {
     for (const st of settlementsOf(civ)) revealAround(civ, terrain, st.x, st.y, 14);
 
     // food: the aggregate of the stockpiles; prosperity follows it
-    syncFood(civ);
+    syncFood(civ, st => foodCapOf(terrain, st));
     civ.prosperity = prosperityOf(civ);
 
     // the next era
@@ -576,13 +576,17 @@ export class SocietyManager {
   // A clan that outgrew CLAN_SPLIT_SIZE sends a splinter group to found a new hamlet.
   splitClans(civ) {
     if (civ.settlements.length >= MAX_SETTLEMENTS || !civ.isAlive) return false;
+    // do not fragment a small people into ever smaller hamlets: about ten citizens per settlement are needed
+    if (civ.citizens < 12 * civ.settlements.length) return false;
     for (const clan of civ.clans) {
       if (clan.memberIds.length < CLAN_SPLIT_SIZE || (clan.splitCd || 0) > civ.clock) continue;
       const parent = getSettlement(civ, clan.settlementId) || nearestSettlement(civ, this.terrain.home.x, this.terrain.home.y);
       if (!parent || !parent.town.ready) { clan.splitCd = civ.clock + 30; continue; }
       const group = pickSplinter(clan, this.ecosystem.entities);
       if (!group.length) { clan.splitCd = civ.clock + 30; continue; }
-      const site = findHamletSite(this.terrain, civ, parent, this.civilizations, (x, y) => isExplored(civ, this.terrain, x, y));
+      const s = group[0].stats;
+      const comfortable = t => t >= s.idealTemp - s.coldTolerance + 0.02 && t <= s.idealTemp + s.heatTolerance - 0.02;
+      const site = findHamletSite(this.terrain, civ, parent, this.civilizations, (x, y) => isExplored(civ, this.terrain, x, y), comfortable);
       if (!site) { clan.splitCd = civ.clock + 40; continue; }
       this.sendSettlers(civ, clan, group, parent, site);
       clan.splitCd = civ.clock + 80;
@@ -639,6 +643,7 @@ export class SocietyManager {
         assignHomes(terrain, civ, st, members, byId);
         adoptOrphans(members, byId);
         feedChildren(terrain, st, members);
+        householdConceptions(ecosystem, members, byId);
       }
     }
   }
@@ -686,8 +691,10 @@ export class SocietyManager {
 
       const x = tile.x;
       const y = tile.y;
+      // nomads (people without a nation, or the last survivors of a dying one) found the new civilization; a thriving
+      // nation's citizens are not taken from it
       const nearbyHuman = this.ecosystem.entities.find(e =>
-        e.alive && e.isSapient && Math.hypot(e.x - x, e.y - y) < 10
+        e.alive && e.isSapient && Math.hypot(e.x - x, e.y - y) < 10 && (!e.civilization || e.civilization.citizens <= 3)
       );
       if (!nearbyHuman) return false;
 

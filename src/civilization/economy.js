@@ -115,11 +115,12 @@ export function civFoodUnits(civ) {
   return n;
 }
 
+// Food a settlement can keep before it spoils: a basic store plus 50 units per granary (civilization/settlements.foodCapOf).
 // civ.food is the aggregate of every settlement's food stockpile (x FOOD_SCALE). Powers and old code add to or subtract
 // from civ.food directly; this reconciles such writes with the real stockpiles: the difference since the last
 // reconcile is added to (or taken from) the capital's stockpile, a famine deeper than the stores becomes food debt that
 // later harvests repay. Called once per civ update.
-export function syncFood(civ) {
+export function syncFood(civ, capUnitsOf = null) {
   const stores = settlementsOf(civ);
   if (!stores.length) return;
   if (civ.foodDebt === undefined) civ.foodDebt = 0;
@@ -144,9 +145,9 @@ export function syncFood(civ) {
     }
   }
   // spoilage above the ceiling (each settlement's stores hold FOOD_CAP / FOOD_SCALE units)
-  const cap = FOOD_CAP / FOOD_SCALE;
+  const flatCap = FOOD_CAP / FOOD_SCALE;
   for (const st of stores) {
-    let excess = foodUnits(st.stock) - cap;
+    let excess = foodUnits(st.stock) - (capUnitsOf ? capUnitsOf(st) : flatCap);
     for (const k of FOOD_ORDER.slice().reverse()) {
       if (excess <= 0) break;
       excess -= take(st.stock, k, excess);
