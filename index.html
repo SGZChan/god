@@ -37,6 +37,7 @@
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5M7 9l5-5 5 5M5 20h14"/></symbol>
       <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 114 2c-1 .7-1.6 1.2-1.6 2.6M12 17.2v.3"/></symbol>
+      <symbol id="i-panels" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M3 10h6"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
       <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.3"/><path d="M17 14c2.5 0 4 1.8 4 4.5"/></symbol>
       <symbol id="i-sword" viewBox="0 0 24 24"><path d="M14.5 4H20v5.5L10 19.5 4.5 14zM6 17l-3 3M8.5 14.5l3 3"/></symbol>
@@ -112,6 +113,12 @@
             </button>
           </div>
         </div>
+
+        <!-- Surface view: show or hide the side panels (overview, planet map, resources, pan pad) -->
+        <button id="btn-toggle-panels" class="icon-btn" title="Show panels: world overview, planet map, resources (H)" aria-pressed="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-panels"/></svg><span class="sr-only">Panels</span>
+          <span class="unread-dot" hidden></span>
+        </button>
       </div>
 
       <div class="hud-cluster hud-center">
@@ -174,6 +181,11 @@
           👑 Create Life Here
         </button>
       </div>
+      <div class="focus-cosmic">
+        <span class="focus-cosmic-label">Cosmic events</span>
+        <button id="btn-focus-asteroid" class="btn-focus-ghost" title="Hurl a rogue asteroid at this planet">☄️ Asteroid</button>
+        <button id="btn-focus-blackhole" class="btn-focus-ghost" title="Spawn a black hole in this system">🕳️ Black hole</button>
+      </div>
     </div>
 
     <!-- ACTIVE POWER HINT BANNER -->
@@ -188,7 +200,7 @@
         <button class="inspector-close-btn" id="btn-initial-close-inspector" title="Close Panel">&times;</button>
         <div class="empty-icon">👁️</div>
         <h3>Omniscient Eye</h3>
-        <p>Click on any human, creature, city, or tile on the planet to inspect its mind, DNA, and JEV decision matrix.</p>
+        <p>Click on any human, creature, city, or tile on the planet to inspect its mind, genes and society. Press Esc to close.</p>
       </div>
     </aside>
 
@@ -302,21 +314,21 @@
             <div class="guide-step-icon">🪐</div>
             <div class="guide-step-body">
               <h4>1. Explore the Multi-Scale Cosmos</h4>
-              <p>Switch smoothly between <strong>🌌 Galaxy</strong>, <strong>🪐 Solar System</strong>, and <strong>🌍 Planetary Surface</strong> in the top-left HUD. In 3D space, click on any planet to orbit and focus on it.</p>
+              <p>Switch between <strong>Universe</strong>, <strong>Galaxy</strong>, <strong>System</strong> and <strong>Surface</strong> in the top-left HUD (keys 1-4, Backspace goes up). In space, click a galaxy, star or planet to fly to it.</p>
             </div>
           </div>
           <div class="guide-step">
             <div class="guide-step-icon">🌍</div>
             <div class="guide-step-body">
               <h4>2. Descend to the Living Surface</h4>
-              <p>Click <strong>"Descend to Surface"</strong> on any planet to explore its procedural biomes, wildlife, tribes, and continental drift in real time.</p>
+              <p>Click <strong>"Descend to Surface"</strong> on any planet to explore its biomes, wildlife and clans. The surface starts uncluttered: press <strong>H</strong> (or the panels button) for the world overview, planet map and resources. <strong>Esc</strong> closes any open window.</p>
             </div>
           </div>
           <div class="guide-step">
             <div class="guide-step-icon">👑</div>
             <div class="guide-step-body">
               <h4>3. The God Creation Workshop</h4>
-              <p>Click the <strong>Crown 👑</strong> button in the bottom dock. Design custom humans/champions with <strong>⚡ JEV System 1 AI</strong> or <strong>🧭 Minecraft Mob AI</strong>, create custom species with genetic traits, or forge brand new planets!</p>
+              <p>Click <strong>Workshop</strong> in the power bar (or <strong>Create Life Here</strong> on a planet). Raise a <strong>champion</strong> guided by <strong>✦ Laya AI</strong>, design a <strong>species</strong> from genes and watch its founders breed and evolve, or forge a brand new <strong>planet</strong>.</p>
             </div>
           </div>
           <div class="guide-step">
@@ -340,244 +352,168 @@
       </div>
     </div>
 
-    <!-- THE GOD CREATION WORKSHOP MODAL -->
-    <div id="workshop-modal" class="modal-overlay hidden">
-      <div class="modal-content">
+    <!-- THE GOD CREATION WORKSHOP MODAL (filled and wired by src/workshop/creator.js) -->
+    <div id="workshop-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="workshop-title">
+      <div class="modal-content workshop">
         <div class="modal-header">
-          <h2>👑 The God Creation Workshop</h2>
-          <button id="btn-close-workshop" class="close-btn">&times;</button>
+          <h2 id="workshop-title">👑 God Creation Workshop</h2>
+          <button id="btn-close-workshop" class="close-btn" aria-label="Close workshop">&times;</button>
         </div>
 
-        <div class="modal-body">
-          <!-- Left Column: Procedural Avatar Preview & Presets -->
-          <div class="preview-col" id="workshop-preview-col">
-            <canvas id="avatar-preview-canvas" width="200" height="200"></canvas>
-            <div id="preview-name-display" class="preview-title">Eve</div>
-            <div id="preview-epithet-display" class="preview-epithet">The Firstborn Prophet</div>
+        <div class="ws-tabs" role="tablist" aria-label="What to create">
+          <button class="ws-tab active" data-tab="champion" role="tab" aria-selected="true">Champion</button>
+          <button class="ws-tab" data-tab="species" role="tab" aria-selected="false">Species</button>
+          <button class="ws-tab" data-tab="planet" role="tab" aria-selected="false">Planet</button>
+        </div>
 
-            <div class="presets-container" id="champion-presets-box">
-              <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">Archetype Presets:</div>
+        <div class="modal-body ws-body">
+          <!-- Live preview: the real creature sprite (or the planet) -->
+          <div class="ws-preview">
+            <div class="ws-stage"><canvas id="ws-preview-canvas" width="176" height="176"></canvas></div>
+            <div id="ws-preview-title" class="preview-title"></div>
+            <div id="ws-preview-sub" class="preview-epithet"></div>
+            <p id="ws-preview-note" class="ws-note"></p>
+            <div class="ws-preview-actions" data-for="champion">
+              <div class="ws-mini-label">Archetypes</div>
               <button class="preset-btn" data-preset="prophet">✨ Prophet of Light</button>
               <button class="preset-btn" data-preset="warlord">⚔️ Divine Warmaster</button>
               <button class="preset-btn" data-preset="architect">🏛️ Master Architect</button>
+              <button class="preset-btn" data-preset="sage">📜 Sage of the Stars</button>
+            </div>
+            <div class="ws-preview-actions" data-for="species" hidden>
+              <button class="preset-btn" id="ws-reroll-look">🎲 New look</button>
             </div>
           </div>
 
-          <!-- Right Column: Granular Customization Form -->
-          <div class="controls-col">
-            <div class="tab-bar">
-              <button id="tab-champion-btn" class="tab-btn active">Champion / Human</button>
-              <button id="tab-species-btn" class="tab-btn">Living Species</button>
-              <button id="tab-planet-btn" class="tab-btn">Custom Planet</button>
-            </div>
-
-            <!-- Tab 1: Champion Creator -->
-            <div id="tab-champion-content">
+          <div class="ws-form">
+            <!-- Champion: a person of this planet's people, with a mind you shape -->
+            <section data-panel="champion" role="tabpanel">
               <div class="form-grid">
-                <div class="form-group">
-                  <label>Name</label>
-                  <input type="text" id="champ-name" value="Eve">
-                </div>
-                <div class="form-group">
-                  <label>Epithet / Sacred Title</label>
-                  <input type="text" id="champ-epithet" value="The Firstborn Prophet">
-                </div>
-                <div class="form-group">
-                  <label>Gender / Identity</label>
-                  <select id="champ-gender">
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                    <option value="Non-binary">Non-binary</option>
-                    <option value="Celestial / Ascendant">Celestial / Ascendant</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Attire / Regalia</label>
-                  <select id="champ-attire">
-                    <option value="robes">Sacred Robes</option>
-                    <option value="armor">Holy Plate Armor</option>
-                    <option value="scholar">Sage Vestments</option>
-                    <option value="tribal">Primal Furs</option>
-                    <option value="celestial">Solar Regalia</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Hairstyle</label>
-                  <select id="champ-hair-style">
-                    <option value="long">Long Flowing</option>
-                    <option value="short">Short Warrior</option>
-                    <option value="braided">Braided Locks</option>
-                    <option value="crown">Royal Crown</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Hair Color</label>
-                  <input type="color" id="champ-hair-color" value="#4a2511" style="height: 38px; padding: 2px; width: 100%;">
-                </div>
-                <div class="form-group">
-                  <label>Skin Tone</label>
-                  <input type="color" id="champ-skin-color" value="#f3c192" style="height: 38px; padding: 2px; width: 100%;">
-                </div>
-                <div class="form-group">
-                  <label>Divine Aura Color</label>
-                  <input type="color" id="champ-aura-color" value="#ffd700" style="height: 38px; padding: 2px; width: 100%;">
-                </div>
+                <label class="form-group"><span>Name</span><input type="text" data-field="champion.name" maxlength="24"></label>
+                <label class="form-group"><span>Title</span><input type="text" data-field="champion.epithet" maxlength="40"></label>
+                <label class="form-group"><span>Sex</span>
+                  <select data-field="champion.gender"><option value="Female">Female</option><option value="Male">Male</option></select>
+                </label>
+                <label class="form-group"><span>Aura colour</span><input type="color" data-field="champion.appearance.auraColor"></label>
               </div>
 
-              <!-- AI System Selector -->
-              <div class="ai-selector-box" style="margin-top: 14px;">
-                <label style="font-size: 0.8rem; font-weight: 600; color: #fff;">Cognitive AI Architecture</label>
-                <div class="ai-options">
-                  <label class="ai-option-label">
-                    <input type="radio" name="champ-ai" value="JEV" checked>
-                    <span>⚡ JEV System 1 (Choice, Score, Noul Fast Evaluations)</span>
-                  </label>
-                  <label class="ai-option-label">
-                    <input type="radio" name="champ-ai" value="MINECRAFT">
-                    <span>🧭 Minecraft Mob A* AI (Grid Wander & Flee)</span>
-                  </label>
-                </div>
-              </div>
+              <fieldset class="ws-group">
+                <legend>Mind</legend>
+                <label class="ai-option-label">
+                  <input type="radio" name="champ-ai" value="LAYA" data-field="champion.aiSystem">
+                  <span><strong>✦ Laya AI</strong> — weighs intent, rates piety, heroism and leadership, and judges when to act: builds shrines, preaches, communes with you.</span>
+                </label>
+                <label class="ai-option-label">
+                  <input type="radio" name="champ-ai" value="MINECRAFT" data-field="champion.aiSystem">
+                  <span><strong>🧭 Needs &amp; Jobs AI</strong> — lives like any mortal: takes a job, eats, rests and raises a family.</span>
+                </label>
+              </fieldset>
 
-              <!-- Personality Sliders (Big 5 + Piety) -->
-              <div class="sliders-section" style="margin-top: 14px;">
-                <div class="section-title">Personality Matrix (Big Five + Devotion)</div>
-                <div class="slider-row">
-                  <span>Openness / Curiosity:</span>
-                  <input type="range" id="trait-openness" min="0" max="1" step="0.05" value="0.85">
-                </div>
-                <div class="slider-row">
-                  <span>Conscientiousness / Work Ethic:</span>
-                  <input type="range" id="trait-conscientiousness" min="0" max="1" step="0.05" value="0.9">
-                </div>
-                <div class="slider-row">
-                  <span>Extraversion / Leadership:</span>
-                  <input type="range" id="trait-extraversion" min="0" max="1" step="0.05" value="0.75">
-                </div>
-                <div class="slider-row">
-                  <span>Agreeableness / Empathy:</span>
-                  <input type="range" id="trait-agreeableness" min="0" max="1" step="0.05" value="0.8">
-                </div>
-                <div class="slider-row">
-                  <span>Divine Piety (Devotion to You):</span>
-                  <input type="range" id="trait-piety" min="0" max="1" step="0.05" value="0.98">
-                </div>
-              </div>
-            </div>
+              <fieldset class="ws-group">
+                <legend>Personality</legend>
+                <label class="ws-slider"><span>Curiosity</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.openness" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Work ethic</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.conscientiousness" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Leadership</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.extraversion" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Empathy</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.agreeableness" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Devotion to you</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.piety" data-format="pct"><output></output></label>
+              </fieldset>
 
-            <!-- Tab 2: Species Creator -->
-            <div id="tab-species-content" class="hidden">
+              <fieldset class="ws-group">
+                <legend>Talents</legend>
+                <label class="ws-slider"><span>Building</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.architecture" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Warfare</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.warfare" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Statecraft</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.statesmanship" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Farming</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.farming" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Science</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.science" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Mysticism</span><input type="range" min="0" max="100" step="5" data-field="champion.proficiencies.mysticism" data-format="int"><output></output></label>
+              </fieldset>
+            </section>
+
+            <!-- Species: a founding group built from genes; after that they breed and evolve on their own -->
+            <section data-panel="species" role="tabpanel" hidden>
               <div class="form-grid">
-                <div class="form-group">
-                  <label>Species Name</label>
-                  <input type="text" id="spec-name" value="Star Chimera">
-                </div>
-                <div class="form-group">
-                  <label>Morphology Class</label>
-                  <select id="spec-type">
-                    <option value="alien">Extraterrestrial / Alien</option>
-                    <option value="humanoid">Humanoid Variant</option>
-                    <option value="herbivore">Beast / Grazer</option>
-                    <option value="predator">Apex Predator</option>
+                <label class="form-group"><span>Species name</span><input type="text" data-field="species.name" maxlength="28"></label>
+                <label class="form-group"><span>Kind</span>
+                  <select data-field="species.type">
+                    <option value="herbivore">Animal</option>
+                    <option value="humanoid">Sapient people (walk upright, join clans)</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Icon Symbol</label>
-                  <input type="text" id="spec-symbol" value="🦄" maxlength="2">
-                </div>
-                <div class="form-group">
-                  <label>Diet Type</label>
-                  <select id="spec-diet">
-                    <option value="herbivore">Herbivore (Plants & Flora)</option>
-                    <option value="carnivore">Carnivore (Hunts other species)</option>
-                    <option value="omnivore">Omnivore (Adaptive)</option>
+                </label>
+                <label class="form-group"><span>Diet</span>
+                  <select data-field="species.diet">
+                    <option value="herbivore">Herbivore — grazes plants</option>
+                    <option value="omnivore">Omnivore — eats what it finds</option>
+                    <option value="carnivore">Carnivore — hunts other creatures</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Base Lifespan (Years)</label>
-                  <input type="text" id="spec-lifespan" value="85">
-                </div>
-                <div class="form-group">
-                  <label>Species Color</label>
-                  <input type="color" id="spec-color" value="#c084fc" style="height: 38px; padding: 2px; width: 100%;">
-                </div>
+                </label>
+                <label class="form-group"><span>Founders</span>
+                  <select data-field="species.founders" data-type="number">
+                    <option value="4">4 (fragile)</option>
+                    <option value="8">8</option>
+                    <option value="12">12</option>
+                    <option value="16">16 (robust)</option>
+                  </select>
+                </label>
               </div>
 
-              <div class="sliders-section" style="margin-top: 14px;">
-                <div class="section-title">Genetic Genome</div>
-                <div class="slider-row">
-                  <span>Movement Speed:</span>
-                  <input type="range" id="spec-speed" min="0.5" max="2.5" step="0.1" value="1.4">
-                </div>
-                <div class="slider-row">
-                  <span>Cold Resistance (Glacial Biomes):</span>
-                  <input type="range" id="spec-cold" min="0" max="1" step="0.05" value="0.7">
-                </div>
-                <div class="slider-row">
-                  <span>Heat Resistance (Deserts & Calderas):</span>
-                  <input type="range" id="spec-heat" min="0" max="1" step="0.05" value="0.6">
-                </div>
-              </div>
-            </div>
+              <fieldset class="ws-group">
+                <legend>Genes</legend>
+                <label class="ws-slider"><span>Body size</span><input type="range" min="0.5" max="2" step="0.05" data-field="species.size" data-format="x"><output></output></label>
+                <label class="ws-slider"><span>Speed</span><input type="range" min="0.6" max="1.75" step="0.05" data-field="species.speed" data-format="x"><output></output></label>
+                <label class="ws-slider"><span>Lifespan</span><input type="range" min="6" max="90" step="1" data-field="species.lifespan" data-format="yrs"><output></output></label>
+                <label class="ws-slider"><span>Cold tolerance</span><input type="range" min="0" max="1" step="0.05" data-field="species.coldResist" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Heat tolerance</span><input type="range" min="0" max="1" step="0.05" data-field="species.heatResist" data-format="pct"><output></output></label>
+              </fieldset>
+              <p class="ws-note">Founders are placed where you click. From then on nothing spawns: they mate, mutate and may split into new species.</p>
+            </section>
 
-            <!-- Tab 3: Custom Planet Creator -->
-            <div id="tab-planet-content" class="hidden">
+            <!-- Planet: added to the current star system -->
+            <section data-panel="planet" role="tabpanel" hidden>
               <div class="form-grid">
-                <div class="form-group">
-                  <label>Planet Name</label>
-                  <input type="text" id="planet-name-input" value="Aethelgard Prime">
-                </div>
-                <div class="form-group">
-                  <label>Planet Archetype</label>
-                  <select id="planet-type-input">
+                <label class="form-group"><span>Planet name</span><input type="text" data-field="planet.name" maxlength="28"></label>
+                <label class="form-group"><span>Archetype</span>
+                  <select data-field="planet.type">
                     <option value="terrestrial">Garden Earth-like</option>
                     <option value="desert">Arid Sand Dunes</option>
                     <option value="ice">Glacial Frozen</option>
                     <option value="volcanic">Volcanic Primordial</option>
                     <option value="alien">Alien Bioluminescent</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Radius / Size</label>
-                  <input type="range" id="planet-radius-input" min="2.5" max="8.0" step="0.2" value="5.2">
-                </div>
-                <div class="form-group">
-                  <label>Orbital Distance (AU) <span style="font-size:0.7rem; color:#f87171;">(&lt; 40 AU risks solar tidal capture)</span></label>
-                  <input type="range" id="planet-dist-input" min="20" max="260" step="5" value="80">
-                </div>
-                <div class="form-group">
-                  <label>Atmosphere</label>
-                  <select id="planet-atmo-input">
-                    <option value="true">Breathable / Oxygen-Rich</option>
-                    <option value="false">Barren Vacuum</option>
+                </label>
+                <label class="form-group"><span>Atmosphere</span>
+                  <select data-field="planet.hasAtmosphere" data-type="boolean">
+                    <option value="true">Breathable</option>
+                    <option value="false">Barren vacuum</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Planetary Rings</label>
-                  <select id="planet-rings-input">
-                    <option value="false">No Rings</option>
-                    <option value="true">Celestial Rings</option>
+                </label>
+                <label class="form-group"><span>Rings</span>
+                  <select data-field="planet.hasRings" data-type="boolean">
+                    <option value="false">No rings</option>
+                    <option value="true">Rings</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Initial Population / Life</label>
-                  <select id="planet-pop-input">
-                    <option value="true">Seed with Starting Life & Tribes</option>
-                    <option value="false">Uninhabited / Barren</option>
+                </label>
+                <label class="form-group"><span>Life</span>
+                  <select data-field="planet.isPopulated" data-type="boolean">
+                    <option value="true">Seed with wildlife and a first people</option>
+                    <option value="false">Uninhabited</option>
                   </select>
-                </div>
-                <div class="form-group">
-                  <label>Primary Tint</label>
-                  <input type="color" id="planet-color-input" value="#2563eb" style="height: 38px; padding: 2px; width: 100%;">
-                </div>
+                </label>
+                <label class="form-group"><span>Tint</span><input type="color" data-field="planet.color"></label>
               </div>
-            </div>
+              <fieldset class="ws-group">
+                <legend>Orbit</legend>
+                <label class="ws-slider"><span>Size (map size)</span><input type="range" min="2.5" max="8" step="0.2" data-field="planet.radius" data-format="dec"><output></output></label>
+                <label class="ws-slider"><span>Distance from star</span><input type="range" min="20" max="260" step="5" data-field="planet.distance" data-format="au"><output></output></label>
+              </fieldset>
+              <p class="ws-note">Closer than about 40 AU, the star's tides can pull the planet in.</p>
+            </section>
           </div>
         </div>
 
         <div class="modal-footer">
+          <span id="ws-target" class="ws-target"></span>
           <button id="btn-cancel-workshop" class="btn-secondary">Close</button>
-          <button id="btn-spawn-creation" class="btn-primary">✨ Spawn Creation</button>
+          <button id="btn-spawn-creation" class="btn-primary">✨ Place on planet</button>
         </div>
       </div>
     </div>

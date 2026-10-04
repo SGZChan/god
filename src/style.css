@@ -198,7 +198,7 @@ body, html {
 /* --- PLANET FOCUS QUICK-ACTION CARD --- */
 .planet-focus-card {
   position: absolute;
-  bottom: 96px;
+  bottom: 24px;
   left: 24px;
   background: var(--bg-surface-elevated);
   backdrop-filter: blur(20px);
@@ -307,7 +307,11 @@ body, html {
   pointer-events: none;
   z-index: 10;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.4s ease;
 }
+
+.power-hint-banner.show { opacity: 1; }
 
 /* --- SURFACE NAVIGATION COMPASS & DPAD --- */
 .surface-nav-dpad {
@@ -593,7 +597,7 @@ body, html {
   border-radius: 6px;
 }
 
-.badge-jev {
+.badge-laya {
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
   color: #fff;
   box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
@@ -708,8 +712,8 @@ body, html {
   color: var(--text-muted);
 }
 
-/* JEV Section */
-.jev-section {
+/* Laya AI section */
+.laya-section {
   background: rgba(99, 102, 241, 0.08);
   border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: 10px;
@@ -726,7 +730,7 @@ body, html {
   letter-spacing: 0.5px;
 }
 
-.jev-choice-box {
+.laya-choice-box {
   background: rgba(0, 0, 0, 0.35);
   padding: 8px;
   border-radius: 6px;
@@ -750,7 +754,7 @@ body, html {
   margin-top: 2px;
 }
 
-.jev-scores-grid {
+.laya-scores-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
@@ -776,19 +780,19 @@ body, html {
   color: var(--accent-cyan);
 }
 
-.noul-header {
+.judgment-header {
   font-size: 0.7rem;
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
 
-.noul-tags {
+.judgment-tags {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.noul-tag {
+.judgment-tag {
   font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 4px;
@@ -796,7 +800,7 @@ body, html {
   color: var(--text-muted);
 }
 
-.noul-tag.active {
+.judgment-tag.active {
   background: rgba(34, 197, 94, 0.15);
   color: #4ade80;
   border: 1px solid rgba(74, 222, 128, 0.3);
@@ -1215,25 +1219,6 @@ body, html {
   overflow-y: auto;
 }
 
-.preview-col {
-  width: 240px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-glass);
-  border-radius: 14px;
-  padding: 16px;
-}
-
-#avatar-preview-canvas {
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, #1e293b 0%, #0b0f19 100%);
-  border-radius: 12px;
-  border: 1px solid var(--border-glass);
-}
-
 .preview-title {
   margin-top: 12px;
   font-size: 1rem;
@@ -1245,11 +1230,6 @@ body, html {
   font-size: 0.78rem;
   color: var(--accent-gold);
   text-align: center;
-}
-
-.presets-container {
-  margin-top: 14px;
-  width: 100%;
 }
 
 .preset-btn {
@@ -1268,36 +1248,6 @@ body, html {
 .preset-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
-}
-
-.controls-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.tab-bar {
-  display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--border-glass);
-  padding-bottom: 8px;
-}
-
-.tab-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-btn.active {
-  color: var(--accent-gold);
-  border-bottom: 2px solid var(--accent-gold);
 }
 
 .form-grid {
@@ -1335,19 +1285,6 @@ body, html {
   border-color: var(--accent-gold);
 }
 
-.ai-selector-box {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(139, 92, 246, 0.4);
-  padding: 12px;
-  border-radius: 10px;
-}
-
-.ai-options {
-  display: flex;
-  gap: 12px;
-  margin-top: 6px;
-}
-
 .ai-option-label {
   flex: 1;
   display: flex;
@@ -1361,25 +1298,6 @@ body, html {
 .ai-option-label input:checked + span {
   color: #a855f7;
   font-weight: 700;
-}
-
-.sliders-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.slider-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-.slider-row input[type="range"] {
-  width: 180px;
-  accent-color: var(--accent-gold);
 }
 
 .modal-footer {
@@ -2411,7 +2329,7 @@ button:focus:not(:focus-visible) {
   .pp-tab { padding: 0 10px; }
   .pp-cell { width: 52px; height: 52px; }
   .pp-grid { min-height: 66px; }
-  .power-hint-banner { display: flex !important; bottom: 224px; max-width: calc(100vw - 24px); font-size: 0.74rem; }
+  .power-hint-banner { bottom: 224px; max-width: calc(100vw - 24px); font-size: 0.74rem; }
   .notifications-container { bottom: 240px; }
   .pp-extra.pp-workshop .creator-btn-text { display: none; }
   .pp-extra.pp-workshop { width: 40px; padding: 0; }
@@ -2431,3 +2349,244 @@ button:focus:not(:focus-visible) {
 @media (prefers-reduced-motion: reduce) {
   .pp-tab, .pp-tool, .pp-extra, .pp-energy-fill, .toggle-dot, .toggle-dot::after { transition: none; }
 }
+
+/* ==========================================================================
+   View chrome: each view shows only its own controls (body[data-view] is set by main.js)
+   ========================================================================== */
+body:not([data-view="SURFACE"]) #power-palette,
+body:not([data-view="SURFACE"]) #pp-tooltip,
+body:not([data-view="SURFACE"]) #power-hint-banner,
+body:not([data-view="SURFACE"]) #btn-toggle-panels {
+  display: none !important;
+}
+
+/* Without the power bar, toasts sit low in the corner */
+body:not([data-view="SURFACE"]) .notifications-container { bottom: 24px; }
+
+/* Surface panels are hidden until the player asks for them (panels button / H) */
+body.panels-hidden #overview-panel,
+body.panels-hidden #planet-tools,
+body.panels-hidden #surface-nav-controls {
+  display: none !important;
+}
+
+#btn-toggle-panels { position: relative; }
+#btn-toggle-panels[aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: var(--accent-cyan);
+}
+
+.unread-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  box-shadow: 0 0 6px var(--accent-gold-glow);
+}
+
+.unread-dot[hidden] { display: none; }
+
+/* Planet card: cosmic events (system view) */
+.focus-cosmic {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-glass);
+}
+
+.focus-cosmic-label {
+  flex: 1;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.btn-focus-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-focus-ghost:hover { background: rgba(255, 255, 255, 0.14); }
+
+@media (max-width: 640px) {
+  .planet-focus-card { left: 12px; right: 12px; bottom: 12px; min-width: 0; }
+}
+
+/* ==========================================================================
+   God Creation Workshop
+   ========================================================================== */
+.modal-content.workshop {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.ws-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 24px 0;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.ws-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.ws-tab:hover { color: #fff; }
+.ws-tab.active { color: var(--accent-gold); border-bottom-color: var(--accent-gold); }
+
+.ws-body { align-items: flex-start; }
+
+.ws-preview {
+  position: sticky;
+  top: 0;
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+}
+
+.ws-stage {
+  width: 176px;
+  height: 176px;
+  border-radius: 12px;
+  border: 1px solid var(--border-glass);
+  background: radial-gradient(circle, #1e293b 0%, #0b0f19 100%);
+}
+
+.ws-stage canvas { display: block; width: 176px; height: 176px; image-rendering: pixelated; }
+
+.ws-note {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ws-form .ws-note { text-align: left; margin-top: 10px; }
+
+.ws-preview-actions { width: 100%; margin-top: 8px; }
+.ws-preview-actions[hidden] { display: none; }
+
+.ws-mini-label {
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ws-form { flex: 1; min-width: 0; }
+.ws-form section[hidden] { display: none; }
+
+.form-group > span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-group input[type="color"] {
+  width: 100%;
+  height: 36px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ws-group {
+  margin-top: 16px;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-group legend {
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-purple);
+}
+
+.ws-slider {
+  display: grid;
+  grid-template-columns: 130px 1fr 58px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.ws-slider input[type="range"] { width: 100%; accent-color: var(--accent-gold); }
+.ws-slider output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+.ws-group .ai-option-label {
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  line-height: 1.4;
+}
+
+.ws-group .ai-option-label:has(input:checked) {
+  border-color: rgba(168, 85, 247, 0.6);
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.ws-group .ai-option-label input { margin-top: 3px; }
+.ws-group .ai-option-label input:checked + span { font-weight: 400; color: var(--text-primary); }
+.ws-group .ai-option-label strong { color: #d8b4fe; }
+
+.modal-footer .ws-target {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+@media (max-width: 720px) {
+  .ws-body { flex-direction: column; align-items: stretch; padding: 16px; }
+  .ws-preview { position: static; width: auto; flex: none; }
+  .form-grid { grid-template-columns: 1fr; }
+  .ws-slider { grid-template-columns: 100px 1fr 52px; }
+  .modal-footer .ws-target { display: none; }
+}
+
+/* The pan pad sits under the HUD, clear of the power bar and the toasts */
+.surface-nav-dpad { top: 84px; bottom: auto; }
+
+/* Same height on every tab, so switching tabs does not make the window jump */
+.modal-content.workshop { height: min(800px, 92vh); }
+.modal-content.workshop .ws-body { flex: 1; }

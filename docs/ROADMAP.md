@@ -142,3 +142,9 @@ chooses sites).
 **Verification**: tests/society_test.js (122 checks), the whole suite is green; scripts/smoke_society.mjs (browser), scripts/soak_society.mjs (headless soak, numbers below); `node scripts/run_tests.mjs` runs every test file even after a failure.
 
 **Known gaps / hooks**: no walls or palisades yet (the old ring planner is gone; walls were "later"); trade only moves goods between a civ's own settlements (a `trader` task could target a friendly civ's depot: the hook is `stepTrader`); no storehouse building type (stock is per settlement); the offscreen catch-up engine does not simulate the economy (eras advance there only if requirements are already met); settlers and scouts cannot cross rivers or seas (no bridges/boats); religion is untouched (`clan.beliefs`, the `priest` job and shrines/temples are for the next agent); the planner never builds shrines, temples, cathedrals or graveyards.
+- UI pass (2026-10-04): the power bar, hint banner and toasts belong to the surface only (body[data-view] in style.css), so the
+  Descend button is never covered; cosmic events moved onto the planet card in the system view. The surface starts with its
+  side panels hidden (panels button / H), world news goes to the overview's event log instead of pop-ups, the hint banner
+  only flashes when the power changes, and every window closes with Esc or a backdrop click. The inspector no longer loses
+  clicks on its close button while it redraws. Workshop rebuilt (src/workshop/creator.js): sprite previews, talents,
+  founders count, gene-driven look; champions use Laya AI (src/ai/layaEngine.js, formerly JEV; old saves are migrated).

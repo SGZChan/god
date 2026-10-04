@@ -1,7 +1,8 @@
-// JEV AI System - System One Fast Structured Decision Architecture
-// Modeled after TypeSafe AI's Jev (Fast, typed evaluations in <1ms)
+// Laya AI - the mind of champions created in the God Creation Workshop.
+// One fast pass per decision: pick an intent from context-scored candidates, rate the champion on a few
+// continuous rubrics [0..1], then make yes/no judgments. Ordinary mortals use the needs-driven brain in entity.js.
 
-export class JEVEngine {
+export class LayaEngine {
   constructor() {
     this.decisionHistory = [];
   }
@@ -30,7 +31,7 @@ export class JEVEngine {
     const civ = entity.civilization;
     const tile = worldContext.terrain.getTile(Math.floor(entity.x), Math.floor(entity.y));
 
-    // --- 1. JEV "CHOICE" EVALUATION ---
+    // --- 1. Intent: the best-scoring candidate action ---
     // Generate context-sensitive candidate action pool
     const candidates = [];
 
@@ -86,7 +87,7 @@ export class JEVEngine {
       });
     }
 
-    // Sort candidates to find highest scoring JEV Choice
+    // Highest score wins
     candidates.sort((a, b) => b.score - a.score);
     const chosen = candidates[0] || {
       action: 'ContemplateExistence',
@@ -94,13 +95,13 @@ export class JEVEngine {
       reason: 'Watching the stars drift across the cosmic sky'
     };
 
-    // --- 2. JEV "SCORE" (Continuous rubric ratings [0.0 - 1.0]) ---
+    // --- 2. Ratings (continuous rubrics [0.0 - 1.0]) ---
     const pietyScore = Math.min(1.0, personality.piety * 0.9 + (proficiencies.mysticism / 200));
     const heroismScore = Math.min(1.0, (1 - personality.neuroticism) * 0.5 + (proficiencies.warfare / 150));
     const leadershipScore = Math.min(1.0, personality.extraversion * 0.6 + (proficiencies.statesmanship / 160));
 
-    // --- 3. JEV "NOUL" (Deterministic Boolean Judgments) ---
-    const noulDecisions = {
+    // --- 3. Judgments (deterministic yes/no) ---
+    const judgments = {
       willDefyMortalKing: personality.piety > 0.7 && personality.agreeableness < 0.4,
       readyForSelfSacrifice: personality.agreeableness > 0.7 && personality.piety > 0.65,
       hasReceivedDivineVision: personality.piety > 0.85 || proficiencies.mysticism > 75,
@@ -108,7 +109,7 @@ export class JEVEngine {
     };
 
     // Formulate structured thought log
-    const thoughtLog = `${chosen.reason}. [JEV Action: ${chosen.action}]`;
+    const thoughtLog = `${chosen.reason}. [Laya intent: ${chosen.action}]`;
 
     const decision = {
       timestamp: Date.now(),
@@ -120,7 +121,7 @@ export class JEVEngine {
         heroism: parseFloat(heroismScore.toFixed(2)),
         leadership: parseFloat(leadershipScore.toFixed(2))
       },
-      noul: noulDecisions
+      judgments
     };
 
     this.decisionHistory.unshift(decision);
@@ -130,4 +131,4 @@ export class JEVEngine {
   }
 }
 
-export const jevEngine = new JEVEngine();
+export const layaEngine = new LayaEngine();

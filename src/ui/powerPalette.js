@@ -251,6 +251,13 @@ export class PowerPalette {
         ? `${power.name} — ${power.description || ''}`
         : `${power.name}${cost} — ${power.description}`;
     }
+    // The hint only flashes up when the power changes, then gets out of the way
+    const banner = document.getElementById('power-hint-banner');
+    if (banner) {
+      banner.classList.add('show');
+      clearTimeout(this.bannerTimer);
+      this.bannerTimer = setTimeout(() => banner.classList.remove('show'), 3000);
+    }
   }
 
   showTip(power, anchor) {

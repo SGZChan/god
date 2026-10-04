@@ -12,7 +12,7 @@ import { catchUpEngine } from '../src/simulation/catchUpEngine.js';
 import { SeededRNG } from '../src/cosmos/seed.js';
 import { Entity } from '../src/life/entity.js';
 import { BIOMES } from '../src/planet/biomes.js';
-import { jevEngine } from '../src/ai/jevEngine.js';
+import { layaEngine } from '../src/ai/layaEngine.js';
 import {
   SIM_STEP,
   MAX_STEPS_PER_FRAME,
@@ -369,18 +369,18 @@ section('Buildings: a creature standing in the sea does not erect a temple');
   const w = emptyWorld();
   const civ = addCiv(w, 'Alpha', 30, 20, 0);
   const pilgrim = addHuman(w, civ, 10.5, 10.5);
-  pilgrim.aiSystem = 'JEV';
+  pilgrim.aiSystem = 'LAYA';
   w.terrain.getTile(10, 10).biome = BIOMES.OCEAN;
-  const original = jevEngine.evaluate;
-  jevEngine.evaluate = () => ({ action: 'ErectHolySanctuary', reason: 'test', scores: {} });
+  const original = layaEngine.evaluate;
+  layaEngine.evaluate = () => ({ action: 'ErectHolySanctuary', reason: 'test', scores: {} });
   pilgrim.belief = { status: 'DEVOUT_BELIEVER' };
-  pilgrim.executeJevAI({ terrain: w.terrain, pathfinder: null, entities: [pilgrim], ecosystem: w.ecosystem });
+  pilgrim.executeLayaAI({ terrain: w.terrain, pathfinder: null, entities: [pilgrim], ecosystem: w.ecosystem });
   const seaBuilt = Boolean(w.terrain.getTile(10, 10).structure);
   pilgrim.x = 12.5;
   pilgrim.y = 12.5;
-  pilgrim.executeJevAI({ terrain: w.terrain, pathfinder: null, entities: [pilgrim], ecosystem: w.ecosystem });
+  pilgrim.executeLayaAI({ terrain: w.terrain, pathfinder: null, entities: [pilgrim], ecosystem: w.ecosystem });
   const landBuilt = Boolean(w.terrain.getTile(12, 12).structure);
-  jevEngine.evaluate = original;
+  layaEngine.evaluate = original;
   assert(!seaBuilt, 'nothing was built on the water tile');
   assert(landBuilt, 'the same creature does build on dry land');
 }

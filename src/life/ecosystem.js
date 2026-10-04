@@ -348,7 +348,8 @@ export class Ecosystem {
       intelligence: sapient ? 0.9 : 0.25
     };
     if (sapient) Object.assign(genes, { legs: 1, wings: 0 });
-    const template = Genome.pure(genes);
+    // `look` pins the body-plan and colour genes chosen in the workshop preview
+    const template = Genome.pure({ ...(config.look || {}), ...genes });
     const species = this.registry.found(template.phenotype(), {
       sapient,
       name: config.name || null,

@@ -99,6 +99,7 @@ export class DivinePowersManager {
               name: config.name,
               epithet: config.epithet,
               gender: config.gender,
+              sex: config.gender === 'Male' ? 'M' : 'F',
               aiSystem: config.aiSystem,
               appearance: config.appearance,
               personality: config.personality,
@@ -109,14 +110,17 @@ export class DivinePowersManager {
             this.terrain.spawnParticles(tileX, tileY, 50, config.appearance.auraColor || '#ffd700', 2.5);
             this.ecosystem.notifications.unshift({
               text: `👑 The Champion "${config.name}, ${config.epithet}" has descended onto the world!`,
+              player: true, // a reply to the player's own action: shown as a toast (see main.js)
               time: Date.now()
             });
           } else if (this.pendingSpawn.type === 'species') {
             // Divine creation: a founding group (half female, half male) of the new species
-            const founders = this.ecosystem.spawnFounders(this.pendingSpawn.species, 8, tileX, tileY, null, 3);
+            const count = Math.max(4, Math.min(16, Math.round(this.pendingSpawn.founders || 8)));
+            const founders = this.ecosystem.spawnFounders(this.pendingSpawn.species, count, tileX, tileY, null, 3);
             this.terrain.spawnParticles(tileX, tileY, 50, '#c084fc', 2.5);
             this.ecosystem.notifications.unshift({
               text: `✨ ${founders.length} ${this.pendingSpawn.species.name} appear at your command. From here on they must breed on their own.`,
+              player: true,
               time: Date.now()
             });
           }

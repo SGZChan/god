@@ -15,7 +15,7 @@ const iconUrl = (type) => {
   if (!iconUrls.has(type)) iconUrls.set(type, getResourceIcon(type).toDataURL());
   return iconUrls.get(type);
 };
-// Real-time Inspector Panel for Beings, Tiles, Civilizations, and JEV AI Brains
+// Real-time Inspector Panel for Beings, Tiles, Civilizations, and Laya AI minds
 
 export class InspectorPanel {
   constructor(containerElement) {
@@ -23,6 +23,23 @@ export class InspectorPanel {
     this.currentTarget = null;
     this.targetType = null;
     this.sim = null; // set by the game loop: the simulation being shown (family lookups)
+    this.pointerDown = false;
+
+    // The panel is redrawn several times a second, so its buttons are recreated: listen on the container
+    // (delegation) and hold redraws while a button is pressed, or the click would be lost.
+    containerElement.addEventListener('pointerdown', () => { this.pointerDown = true; });
+    window.addEventListener('pointerup', () => { this.pointerDown = false; });
+    window.addEventListener('pointercancel', () => { this.pointerDown = false; });
+    containerElement.addEventListener('click', (e) => {
+      if (e.target.closest('.inspector-close-btn')) {
+        this.clear();
+      } else if (e.target.closest('#btn-follow-entity')) {
+        if (this.targetType === 'entity' && this.currentTarget && this.onFollowEntity) this.onFollowEntity(this.currentTarget);
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.currentTarget && !document.querySelector('.modal-overlay:not(.hidden)')) this.clear();
+    });
   }
 
   // Job, clan, home, family, load and current task of a citizen.
@@ -72,6 +89,7 @@ export class InspectorPanel {
       this.clear();
       return;
     }
+    if (this.pointerDown) return;
 
     if (this.targetType === 'entity') {
       this.renderEntity(this.currentTarget);
@@ -81,30 +99,13 @@ export class InspectorPanel {
       this.renderPlanet(this.currentTarget);
     }
 
-    // Attach close button listener
-    const closeBtn = this.container.querySelector('.inspector-close-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        this.clear();
-      });
-    }
-
-    // Attach follow camera listener
-    const followBtn = this.container.querySelector('#btn-follow-entity');
-    if (followBtn && this.targetType === 'entity' && this.currentTarget) {
-      followBtn.addEventListener('click', () => {
-        if (this.onFollowEntity) {
-          this.onFollowEntity(this.currentTarget);
-        }
-      });
-    }
   }
 
   renderEntity(ent) {
     const isAnimal = !ent.isSapient;
-    const isJev = ent.aiSystem === 'JEV';
+    const isLaya = ent.aiSystem === 'LAYA';
     const p = ent.personality;
-    const jev = ent.lastJevDecision;
+    const laya = ent.lastLayaDecision;
     const belief = ent.belief || { label: 'Secular Skeptic', symbol: '⚖️', status: 'SECULAR_SKEPTIC', desc: 'Focuses on mortal crafts.' };
     const maxAge = Math.round(ent.maxAge);
     const agePercent = Math.min(100, (ent.age / ent.maxAge) * 100);
@@ -164,8 +165,8 @@ export class InspectorPanel {
 
         <!-- Social Role & AI Badges -->
         <div class="ai-badge-row">
-          <span class="ai-badge ${isJev ? 'badge-jev' : 'badge-mc'}">
-            ${isJev ? '⚡ JEV System 1 AI' : (isAnimal ? '🧭 Instinctual Fauna AI' : '🧭 Minecraft Mob A* AI')}
+          <span class="ai-badge ${isLaya ? 'badge-laya' : 'badge-mc'}">
+            ${isLaya ? '✦ Laya AI' : (isAnimal ? '🧭 Instinctual Fauna AI' : '🧭 Needs & Jobs AI')}
           </span>
           <span class="role-badge role-${(ent.role || 'citizen').toLowerCase()}">${ent.role || (isAnimal ? 'WILDLIFE' : 'CITIZEN')}</span>
           <span class="state-badge">${ent.state}</span>
@@ -216,25 +217,25 @@ export class InspectorPanel {
             .map(([label, gene]) => `<div class="trait-row"><span>${label}:</span><div class="trait-bar"><div style="width: ${ent.traits[gene] * 100}%"></div></div></div>`).join('')}
         </div>
 
-        ${isJev && jev ? `
-          <!-- JEV SYSTEM 1 STRUCTURED DECISION MATRIX -->
-          <div class="jev-section">
-            <div class="section-title">⚡ JEV Structured Evaluation</div>
-            <div class="jev-choice-box">
-              <div class="choice-title">Active Choice: <span class="highlight">${jev.action}</span></div>
-              <div class="choice-reason">"${jev.reason}"</div>
+        ${isLaya && laya ? `
+          <!-- LAYA AI: intent, ratings and judgments of the last decision -->
+          <div class="laya-section">
+            <div class="section-title">✦ Laya AI Decision</div>
+            <div class="laya-choice-box">
+              <div class="choice-title">Intent: <span class="highlight">${laya.action}</span></div>
+              <div class="choice-reason">"${laya.reason}"</div>
             </div>
-            <div class="jev-scores-grid">
-              <div class="score-card"><span class="score-label">Piety Rubric</span><span class="score-number">${Math.floor(jev.scores.piety * 100)}%</span></div>
-              <div class="score-card"><span class="score-label">Heroism</span><span class="score-number">${Math.floor(jev.scores.heroism * 100)}%</span></div>
-              <div class="score-card"><span class="score-label">Leadership</span><span class="score-number">${Math.floor(jev.scores.leadership * 100)}%</span></div>
+            <div class="laya-scores-grid">
+              <div class="score-card"><span class="score-label">Piety</span><span class="score-number">${Math.floor(laya.scores.piety * 100)}%</span></div>
+              <div class="score-card"><span class="score-label">Heroism</span><span class="score-number">${Math.floor(laya.scores.heroism * 100)}%</span></div>
+              <div class="score-card"><span class="score-label">Leadership</span><span class="score-number">${Math.floor(laya.scores.leadership * 100)}%</span></div>
             </div>
-            <div class="jev-noul-box">
-              <div class="noul-header">Deterministic Noul (Boolean Judgments):</div>
-              <div class="noul-tags">
-                <span class="noul-tag ${jev.noul.willDefyMortalKing ? 'active' : ''}">Defy Mortal King: ${jev.noul.willDefyMortalKing ? 'YES' : 'NO'}</span>
-                <span class="noul-tag ${jev.noul.readyForSelfSacrifice ? 'active' : ''}">Self-Sacrifice: ${jev.noul.readyForSelfSacrifice ? 'YES' : 'NO'}</span>
-                <span class="noul-tag ${jev.noul.hasReceivedDivineVision ? 'active' : ''}">Divine Vision: ${jev.noul.hasReceivedDivineVision ? 'YES' : 'NO'}</span>
+            <div class="laya-judgment-box">
+              <div class="judgment-header">Judgments:</div>
+              <div class="judgment-tags">
+                <span class="judgment-tag ${laya.judgments.willDefyMortalKing ? 'active' : ''}">Defy Mortal King: ${laya.judgments.willDefyMortalKing ? 'YES' : 'NO'}</span>
+                <span class="judgment-tag ${laya.judgments.readyForSelfSacrifice ? 'active' : ''}">Self-Sacrifice: ${laya.judgments.readyForSelfSacrifice ? 'YES' : 'NO'}</span>
+                <span class="judgment-tag ${laya.judgments.hasReceivedDivineVision ? 'active' : ''}">Divine Vision: ${laya.judgments.hasReceivedDivineVision ? 'YES' : 'NO'}</span>
               </div>
             </div>
           </div>
@@ -340,7 +341,7 @@ export class InspectorPanel {
         </div>
 
         <div class="ai-badge-row">
-          <span class="ai-badge ${isConsumed ? 'badge-danger' : (isRogue ? 'badge-warning' : 'badge-jev')}">
+          <span class="ai-badge ${isConsumed ? 'badge-danger' : (isRogue ? 'badge-warning' : 'badge-laya')}">
             ${isConsumed ? '💀 ' + planet.consumedBy : (isRogue ? '⚠️ Rogue Planet (Drifting Into Void)' : '✅ Stable Keplerian Orbit')}
           </span>
         </div>

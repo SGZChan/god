@@ -1,4 +1,4 @@
-import { jevEngine } from '../ai/jevEngine.js';
+import { layaEngine } from '../ai/layaEngine.js';
 import { random } from '../simulation/random.js';
 import { Genome, derive, traitDistance } from './genome.js';
 import { MATE_THRESHOLD } from './species.js';
@@ -39,7 +39,7 @@ export class Entity {
     this.epithet = config.epithet || (this.isSpecialIndividual ? 'The Chosen One' : '');
     this.gender = config.gender || (this.sex === 'F' ? 'Female' : 'Male');
 
-    this.aiSystem = config.aiSystem || (this.isSpecialIndividual ? 'JEV' : 'MINECRAFT');
+    this.aiSystem = config.aiSystem || (this.isSpecialIndividual ? 'LAYA' : 'MINECRAFT');
 
     // Used by the champion avatar preview in the workshop
     this.appearance = config.appearance || {
@@ -98,7 +98,7 @@ export class Entity {
     this.target = null;
     this.path = [];
     this.actionCooldown = random() * 2;
-    this.lastJevDecision = null;
+    this.lastLayaDecision = null;
     this.civilization = null;
 
     // Society (see civilization/jobs.js, clans.js, families.js). All plain JSON so it saves.
@@ -290,7 +290,7 @@ export class Entity {
     // AI Decision Cycle
     this.actionCooldown -= sim;
     if (this.actionCooldown <= 0) {
-      this.actionCooldown = this.aiSystem === 'JEV' ? 2.2 : 1.5;
+      this.actionCooldown = this.aiSystem === 'LAYA' ? 2.2 : 1.5;
       this.decideAction(worldContext);
     }
 
@@ -317,8 +317,8 @@ export class Entity {
   }
 
   decideAction(worldContext) {
-    if (this.aiSystem === 'JEV') {
-      this.executeJevAI(worldContext);
+    if (this.aiSystem === 'LAYA') {
+      this.executeLayaAI(worldContext);
     } else {
       this.executeNeedsAI(worldContext);
     }
@@ -617,10 +617,10 @@ export class Entity {
     return false;
   }
 
-  // --- JEV SYSTEM 1 AI WITH ATHEISM & FAITH (champions) ---
-  executeJevAI(worldContext) {
-    const decision = jevEngine.evaluate(this, worldContext);
-    this.lastJevDecision = decision;
+  // --- LAYA AI WITH ATHEISM & FAITH (champions) ---
+  executeLayaAI(worldContext) {
+    const decision = layaEngine.evaluate(this, worldContext);
+    this.lastLayaDecision = decision;
 
     const terrain = worldContext.terrain;
     const tile = terrain.getTile(Math.floor(this.x), Math.floor(this.y));

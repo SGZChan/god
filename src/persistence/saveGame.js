@@ -17,7 +17,7 @@ import { ensureEffects } from '../god/effects.js';
 
 export const SAVE_VERSION = 3; // 3: finite planet-sized map + resource deposits (2: infinite chunked world, 1: fixed grid)
 
-const ENTITY_SKIP = new Set(['species', 'civilization', 'target', 'path', 'lastJevDecision', 'genome', 'traits', 'stats', 'pregnancy']);
+const ENTITY_SKIP = new Set(['species', 'civilization', 'target', 'path', 'lastLayaDecision', 'genome', 'traits', 'stats', 'pregnancy']);
 const CIV_SKIP = new Set(['diplomacy', 'warTarget', 'era', 'government', 'territory']);
 
 export class SaveError extends Error {}
@@ -163,6 +163,7 @@ export function restoreSim(data, rngSeedLabel = 'restore') {
     const { speciesId, civId, genome, pregnancy, ...fields } = d;
     const entity = new Entity({ species: speciesById.get(speciesId) });
     Object.assign(entity, fields);
+    if (entity.aiSystem === 'JEV') entity.aiSystem = 'LAYA'; // saves from before the Laya AI rename
     entity.setGenome(Genome.fromJSON(genome));
     entity.pregnancy = pregnancy
       ? { fatherId: pregnancy.fatherId, timeLeft: pregnancy.timeLeft, embryos: pregnancy.embryos.map(g => Genome.fromJSON(g)) }

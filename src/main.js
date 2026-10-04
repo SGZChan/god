@@ -7,7 +7,6 @@ import { DivinePowersManager } from './god/divinePowers.js';
 import { PowerPalette, bindGodMenu, loadGodSettings } from './ui/powerPalette.js';
 import { InspectorPanel } from './ui/inspector.js';
 import { CreationWorkshop } from './workshop/creator.js';
-import { PlanetCreator } from './workshop/planetCreator.js';
 import { catchUpEngine } from './simulation/catchUpEngine.js';
 import { NotificationManager } from './ui/notificationManager.js';
 import { OverviewPanel, summarizeWorld } from './ui/overviewPanel.js';
@@ -63,6 +62,8 @@ class GameApp {
     this.yearDisplay = document.getElementById('year-display');
     this.lastHudRefresh = 0;
     this.lastChunkPrune = 0;
+    this.lastInspectorRender = 0;
+    document.body.dataset.view = this.currentView; // CSS shows each view's own controls (style.css "View chrome")
 
     // Quick-action card & Power banner
     this.planetFocusCard = document.getElementById('planet-action-card');
@@ -70,9 +71,6 @@ class GameApp {
     this.focusPlanetStatus = document.getElementById('focus-planet-status');
     this.btnFocusDescend = document.getElementById('btn-focus-descend');
     this.btnFocusWorkshop = document.getElementById('btn-focus-workshop');
-    this.powerHintBanner = document.getElementById('power-hint-banner');
-    this.powerHintIcon = document.getElementById('power-hint-icon');
-    this.powerHintText = document.getElementById('power-hint-text');
     this.surfaceNavControls = document.getElementById('surface-nav-controls');
 
     // Notifications Manager (Throttling, Deduplication & Max limits)
@@ -110,6 +108,8 @@ class GameApp {
     this.minimap = new Minimap(document.getElementById('minimap-panel'));
     this.lensPanel = new ResourceLensPanel(document.getElementById('lens-panel'));
     this.initNavigation();
+    this.initPanelsToggle();
+    this.initModals();
 
     // Audio init on first user click
     window.addEventListener('click', () => {
@@ -332,7 +332,7 @@ class GameApp {
 
     this.btnFocusWorkshop.addEventListener('click', () => {
       sounds.playUIClick();
-      document.getElementById('btn-open-workshop').click();
+      this.workshop.open();
     });
 
     // Copy Seed to Clipboard
@@ -455,25 +455,23 @@ class GameApp {
     if (navRight) navRight.addEventListener('click', () => { if (this.activeSim) this.activeSim.renderer.panBy(-140, 0); });
     if (navCenter) navCenter.addEventListener('click', () => { if (this.activeSim) this.activeSim.renderer.centerCamera(); });
 
-    // Cosmic Event: Launch Rogue Asteroid
-    document.getElementById('btn-launch-asteroid').addEventListener('click', () => {
+    // Cosmic events: in the power bar on the surface, on the planet card in the system view
+    const launchAsteroid = () => {
       sounds.playLightning();
       this.solarSystem.launchCosmicAsteroid(this.activeSim ? this.activeSim.planet : null);
       this.notifications.push(`☄️ Rogue asteroid launched on collision trajectory!`);
-      if (this.currentView === 'SURFACE') {
-        this.switchView('SYSTEM');
-      }
-    });
-
-    // Cosmic Event: Spawn Black Hole Singularity
-    document.getElementById('btn-spawn-blackhole').addEventListener('click', () => {
+      if (this.currentView === 'SURFACE') this.switchView('SYSTEM');
+    };
+    const spawnBlackHole = () => {
       sounds.playMeteorImpact();
       this.solarSystem.createSingularity(160);
       this.notifications.push(`🕳️ Black Hole spawned! Gravitational forces are active.`);
-      if (this.currentView === 'SURFACE') {
-        this.switchView('SYSTEM');
-      }
-    });
+      if (this.currentView === 'SURFACE') this.switchView('SYSTEM');
+    };
+    document.getElementById('btn-launch-asteroid').addEventListener('click', launchAsteroid);
+    document.getElementById('btn-spawn-blackhole').addEventListener('click', spawnBlackHole);
+    document.getElementById('btn-focus-asteroid').addEventListener('click', launchAsteroid);
+    document.getElementById('btn-focus-blackhole').addEventListener('click', spawnBlackHole);
 
     window.onPlanetSelected = (planet) => {
       this.setActivePlanet(planet.id);
@@ -876,6 +874,7 @@ class GameApp {
   switchView(targetView) {
     sounds.playUIClick();
     this.currentView = targetView;
+    document.body.dataset.view = targetView;
     const solar = this.solarSystem;
     const origin = new THREE.Vector3(0, 0, 0);
 
@@ -890,7 +889,6 @@ class GameApp {
       this.solarContainer.classList.remove('hidden');
       this.surfaceContainer.classList.add('hidden');
       if (this.surfaceNavControls) this.surfaceNavControls.classList.add('hidden');
-      this.powerHintBanner.style.display = 'none';
       // Close inspector when leaving planet surface
       if (this.inspector) this.inspector.clear();
     }
@@ -926,7 +924,6 @@ class GameApp {
       this.solarContainer.classList.add('hidden');
       this.surfaceContainer.classList.remove('hidden');
       if (this.surfaceNavControls) this.surfaceNavControls.classList.remove('hidden');
-      this.powerHintBanner.style.display = 'flex';
 
       if (this.activeSim) {
         this.activeSim.renderer.initCanvasSize();
@@ -945,161 +942,83 @@ class GameApp {
 
   initWorkshop() {
     const modal = document.getElementById('workshop-modal');
-    const btnOpen = document.getElementById('btn-open-workshop');
-    const btnClose = document.getElementById('btn-close-workshop');
-    const btnCancel = document.getElementById('btn-cancel-workshop');
-    const btnSpawn = document.getElementById('btn-spawn-creation');
-    const previewCanvas = document.getElementById('avatar-preview-canvas');
-
-    this.workshop = new CreationWorkshop(this.activeSim.ecosystem, (spawnData) => {
-      modal.classList.add('hidden');
-      if (this.currentView !== 'SURFACE') {
-        this.switchView('SURFACE');
+    this.workshop = new CreationWorkshop({
+      root: modal,
+      getSim: () => this.activeSim,
+      getSystemName: () => this.galaxy.getActiveSystem().name,
+      onSpawnReady: (spawnData) => {
+        modal.classList.add('hidden');
+        if (this.currentView !== 'SURFACE') {
+          this.switchView('SURFACE');
+        }
+        this.activeSim.divine.armSpawn(spawnData);
+        this.activeSim.renderer.currentPower = this.activeSim.divine.activePower;
+        this.palette.setActive(this.activeSim.divine.activePower);
+        this.surfaceCanvas.style.cursor = 'crosshair';
+        this.notifications.push(`✨ Click anywhere on ${this.activeSim.planet.name} to place your creation!`, 'info', true);
+      },
+      onPlanetReady: (pConfig) => {
+        const sysData = this.galaxy.getActiveSystem();
+        sysData.planets.push(pConfig); // keeps the planet when you leave and re-enter the system
+        this.customPlanets.push({ systemId: sysData.id, config: pConfig });
+        const newPlanet = this.solarSystem.addPlanet(pConfig);
+        this.updatePlanetSelectOptions();
+        this.setActivePlanet(newPlanet.id);
+        this.switchView('SYSTEM');
+        this.notifications.push(`🪐 New planet "${newPlanet.name}" placed in orbit!`);
       }
-      this.activeSim.divine.armSpawn(spawnData);
-      this.activeSim.renderer.currentPower = this.activeSim.divine.activePower;
-      this.palette.setActive(this.activeSim.divine.activePower);
-      this.surfaceCanvas.style.cursor = 'crosshair';
-      this.notifications.push(`✨ Click anywhere on ${this.activeSim.planet.name} to place your creation!`);
-    });
-    this.workshop.mount(previewCanvas);
-
-    this.planetCreator = new PlanetCreator((pConfig) => {
-      modal.classList.add('hidden');
-      const sysData = this.galaxy.getActiveSystem();
-      sysData.planets.push(pConfig); // keeps the planet when you leave and re-enter the system
-      this.customPlanets.push({ systemId: sysData.id, config: pConfig });
-      const newPlanet = this.solarSystem.addPlanet(pConfig);
-      this.updatePlanetSelectOptions();
-      this.setActivePlanet(newPlanet.id);
-      this.switchView('SYSTEM');
-      this.notifications.push(`🪐 New planet "${newPlanet.name}" placed in orbit!`);
     });
 
-    btnOpen.addEventListener('click', () => {
+    document.getElementById('btn-open-workshop').addEventListener('click', () => {
       sounds.playUIClick();
-      this.workshop.ecosystem = this.activeSim.ecosystem;
-      modal.classList.remove('hidden');
-      this.workshop.updatePreview();
+      this.workshop.open();
     });
+  }
 
-    btnClose.addEventListener('click', () => modal.classList.add('hidden'));
-    btnCancel.addEventListener('click', () => modal.classList.add('hidden'));
-
-    // Tabs
-    const tabChampBtn = document.getElementById('tab-champion-btn');
-    const tabSpecBtn = document.getElementById('tab-species-btn');
-    const tabPlanetBtn = document.getElementById('tab-planet-btn');
-    const tabChampContent = document.getElementById('tab-champion-content');
-    const tabSpecContent = document.getElementById('tab-species-content');
-    const tabPlanetContent = document.getElementById('tab-planet-content');
-    const previewCol = document.getElementById('workshop-preview-col');
-
-    const selectTab = (activeBtn, activeContent, showAvatar) => {
-      [tabChampBtn, tabSpecBtn, tabPlanetBtn].forEach(b => b.classList.remove('active'));
-      [tabChampContent, tabSpecContent, tabPlanetContent].forEach(c => c.classList.add('hidden'));
-      activeBtn.classList.add('active');
-      activeContent.classList.remove('hidden');
-      previewCol.style.display = showAvatar ? 'flex' : 'none';
+  // Surface view starts uncluttered: the overview, planet map, Resources lens and pan pad are hidden until
+  // the player opens them (panels button or H). The choice is remembered.
+  initPanelsToggle() {
+    const button = document.getElementById('btn-toggle-panels');
+    this.panelsUnread = button.querySelector('.unread-dot');
+    let shown = false;
+    try { shown = localStorage.getItem('genesis-cosmos-panels') === 'shown'; } catch { /* storage blocked */ }
+    const apply = (on) => {
+      this.panelsShown = on;
+      document.body.classList.toggle('panels-hidden', !on);
+      button.setAttribute('aria-pressed', String(on));
+      button.title = `${on ? 'Hide' : 'Show'} panels: world overview, planet map, resources (H)`;
+      if (on) this.panelsUnread.hidden = true;
+      try { localStorage.setItem('genesis-cosmos-panels', on ? 'shown' : 'hidden'); } catch { /* storage blocked */ }
     };
-
-    tabChampBtn.addEventListener('click', () => {
-      selectTab(tabChampBtn, tabChampContent, true);
-      this.workshop.activeTab = 'champion';
+    apply(shown);
+    button.addEventListener('click', () => {
+      sounds.playUIClick();
+      apply(!this.panelsShown);
     });
-
-    tabSpecBtn.addEventListener('click', () => {
-      selectTab(tabSpecBtn, tabSpecContent, false);
-      this.workshop.activeTab = 'species';
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'h' && e.key !== 'H')) return;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+      apply(!this.panelsShown);
     });
+  }
 
-    tabPlanetBtn.addEventListener('click', () => {
-      selectTab(tabPlanetBtn, tabPlanetContent, false);
-      this.workshop.activeTab = 'planet';
+  // Every window closes with Esc or a click on the dimmed backdrop (the saved-universe question needs an answer).
+  initModals() {
+    const closable = () => [...document.querySelectorAll('.modal-overlay:not(.hidden)')].filter(m => m.id !== 'continue-modal');
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const open = closable();
+      if (open.length) open[open.length - 1].classList.add('hidden');
     });
-
-    // Inputs binding for champion
-    const bindInput = (id, obj, prop) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('input', (e) => {
-          obj[prop] = e.target.value;
-          this.workshop.updatePreview();
-          document.getElementById('preview-name-display').innerText = this.workshop.championConfig.name;
-          document.getElementById('preview-epithet-display').innerText = this.workshop.championConfig.epithet;
-        });
-      }
-    };
-    bindInput('champ-name', this.workshop.championConfig, 'name');
-    bindInput('champ-epithet', this.workshop.championConfig, 'epithet');
-    bindInput('champ-gender', this.workshop.championConfig, 'gender');
-    bindInput('champ-attire', this.workshop.championConfig.appearance, 'attire');
-    bindInput('champ-hair-style', this.workshop.championConfig.appearance, 'hairStyle');
-    bindInput('champ-hair-color', this.workshop.championConfig.appearance, 'hairColor');
-    bindInput('champ-skin-color', this.workshop.championConfig.appearance, 'skinColor');
-    bindInput('champ-aura-color', this.workshop.championConfig.appearance, 'auraColor');
-
-    // Planet creator inputs
-    const pNameInput = document.getElementById('planet-name-input');
-    const pTypeInput = document.getElementById('planet-type-input');
-    const pRadiusInput = document.getElementById('planet-radius-input');
-    const pDistInput = document.getElementById('planet-dist-input');
-    const pAtmoInput = document.getElementById('planet-atmo-input');
-    const pRingsInput = document.getElementById('planet-rings-input');
-    const pPopInput = document.getElementById('planet-pop-input');
-    const pColorInput = document.getElementById('planet-color-input');
-
-    pNameInput.addEventListener('input', e => this.planetCreator.config.name = e.target.value);
-    pTypeInput.addEventListener('change', e => this.planetCreator.config.type = e.target.value);
-    pRadiusInput.addEventListener('input', e => this.planetCreator.config.radius = parseFloat(e.target.value));
-    pDistInput.addEventListener('input', e => this.planetCreator.config.distance = parseFloat(e.target.value));
-    pAtmoInput.addEventListener('change', e => this.planetCreator.config.hasAtmosphere = e.target.value === 'true');
-    pRingsInput.addEventListener('change', e => this.planetCreator.config.hasRings = e.target.value === 'true');
-    pPopInput.addEventListener('change', e => this.planetCreator.config.isPopulated = e.target.value === 'true');
-    pColorInput.addEventListener('input', e => this.planetCreator.config.color = e.target.value);
-
-    // AI selection
-    const aiRadios = document.querySelectorAll('input[name="champ-ai"]');
-    aiRadios.forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        this.workshop.championConfig.aiSystem = e.target.value;
+    for (const modal of document.querySelectorAll('.modal-overlay')) {
+      if (modal.id === 'continue-modal') continue;
+      let downOnBackdrop = false;
+      modal.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === modal; });
+      modal.addEventListener('click', (e) => {
+        if (downOnBackdrop && e.target === modal) modal.classList.add('hidden');
       });
-    });
-
-    // Big 5 Sliders
-    const bindSlider = (id, obj, prop) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('input', (e) => {
-          obj[prop] = parseFloat(e.target.value);
-        });
-      }
-    };
-    bindSlider('trait-openness', this.workshop.championConfig.personality, 'openness');
-    bindSlider('trait-conscientiousness', this.workshop.championConfig.personality, 'conscientiousness');
-    bindSlider('trait-extraversion', this.workshop.championConfig.personality, 'extraversion');
-    bindSlider('trait-agreeableness', this.workshop.championConfig.personality, 'agreeableness');
-    bindSlider('trait-piety', this.workshop.championConfig.personality, 'piety');
-
-    // Presets
-    const presetBtns = document.querySelectorAll('.preset-btn');
-    presetBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.workshop.applyPreset(btn.dataset.preset);
-        document.getElementById('champ-name').value = this.workshop.championConfig.name;
-        document.getElementById('champ-epithet').value = this.workshop.championConfig.epithet;
-        document.getElementById('preview-name-display').innerText = this.workshop.championConfig.name;
-        document.getElementById('preview-epithet-display').innerText = this.workshop.championConfig.epithet;
-      });
-    });
-
-    btnSpawn.addEventListener('click', () => {
-      if (this.workshop.activeTab === 'planet') {
-        this.planetCreator.create();
-      } else {
-        this.workshop.prepareSpawn(this.workshop.activeTab);
-      }
-    });
+    }
   }
 
   tick(currentTime) {
@@ -1172,14 +1091,16 @@ class GameApp {
       const ran = runSimulationSteps(this.activeSim, steps, { budgetMs: 12 });
       this.activeSim.simSeconds += ran * SIM_STEP;
 
-      // Throttled notification feed
+      // World news goes to the overview's event log, not to pop-ups; only replies to the player's own
+      // actions are toasted. Unread news lights a dot on the panels button.
       while (ecosystem.notifications.length > 0) {
         const notif = ecosystem.notifications.pop();
-        this.notifications.push(notif.text, notif.minor ? 'minor' : 'info');
+        if (notif.player) this.notifications.push(notif.text, 'info');
         if (!notif.minor) {
           const log = this.activeSim.eventLog;
           log.unshift(notif.text);
           if (log.length > 30) log.length = 30;
+          if (!notif.player && !this.panelsShown) this.panelsUnread.hidden = false;
         }
       }
 
@@ -1210,7 +1131,8 @@ class GameApp {
       this.inspector.sim = this.activeSim; // family and settlement lookups
       if (this.currentView !== 'SURFACE') {
         this.inspector.clear();
-      } else {
+      } else if (currentTime - this.lastInspectorRender > 200) {
+        this.lastInspectorRender = currentTime;
         this.inspector.render();
       }
     }

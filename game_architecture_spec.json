@@ -4,7 +4,7 @@
     "name": "Genesis & Cosmos — Multi-Scale God Simulator",
     "version": "2.0.0",
     "genre": "Cosmic Sandbox / Planetary Life & Civilization Simulation",
-    "summary": "A 3-tier multi-scale god game spanning galactic star fields, orbital Keplerian solar systems, and a 180x110 procedural planetary surface with Minecraft-style architectural rendering, simulated biomes, genetics, A* pathfinding, JEV System 1 AI, warfare, diplomacy, and divine terraforming powers.",
+    "summary": "A 3-tier multi-scale god game spanning galactic star fields, orbital Keplerian solar systems, and a 180x110 procedural planetary surface with Minecraft-style architectural rendering, simulated biomes, genetics, A* pathfinding, Laya AI (champions), warfare, diplomacy, and divine terraforming powers.",
     "techStack": {
       "bundler": "Vite 8.3.2",
       "graphics3D": "Three.js 0.186.1 (WebGL)",
@@ -211,16 +211,16 @@
           "waterNonAquatic": 3.5
         }
       },
-      "jevEngine": {
-        "file": "src/ai/jevEngine.js",
-        "name": "JEV System 1 AI Engine",
+      "layaEngine": {
+        "file": "src/ai/layaEngine.js",
+        "name": "Laya AI Engine",
         "description": "Deterministic structured cognitive evaluation matrix for Champions and Leaders.",
         "matrixScores": {
           "piety": "Calculated from personality piety, proximity to temples, and divine miracles witnessed.",
           "heroism": "Calculated from warfare talent, low neuroticism, and presence of enemies.",
           "leadership": "Calculated from statesmanship, conscientiousness, and population density."
         },
-        "noulJudgments": {
+        "judgments": {
           "willDefyMortalKing": "Boolean: true if Piety > 0.7 and sovereign government is corrupt or atheist.",
           "readyForSelfSacrifice": "Boolean: true if Heroism > 0.75 and nation is under attack.",
           "hasReceivedDivineVision": "Boolean: true if player used Blessing or Inspiration nearby."
@@ -274,7 +274,7 @@
       "description": "Contextual right-drawer UI updating in real-time.",
       "modes": {
         "wildlife": "Displays animal species, wild instinct, diet (herbivore/predator), speed, lifespan, and vitals.",
-        "human": "Displays identity, civilization, faith status, civic role, Big Five personality, proficiencies, and JEV matrix.",
+        "human": "Displays identity, civilization, faith status, civic role, Big Five personality, proficiencies, and Laya AI decision.",
         "deceased": "Displays red memorial banner with cause of death and total years lived.",
         "tile": "Displays biome type, elevation, temperature, moisture, flora, natural resources, and structure HP."
       },
