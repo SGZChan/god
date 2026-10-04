@@ -122,7 +122,7 @@ export class Ecosystem {
     for (let attempt = 0; attempt < 30; attempt++) {
       const x = Math.floor(cx + (random() - 0.5) * 2 * spread);
       const y = Math.floor(cy + (random() - 0.5) * 2 * spread);
-      if (this.terrain.isBuildable(x, y)) return { x, y };
+      if (this.terrain.isBuildable(x, y) && !this.terrain.isSolid(x, y)) return { x, y };
     }
     return null;
   }

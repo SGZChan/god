@@ -61,6 +61,8 @@ export class Node {
 // Slightly favouring nodes close to the goal makes the search head straight for it on open ground
 // (far fewer nodes expanded) while paths stay as short as the terrain allows.
 const H_WEIGHT = 1.08;
+// Walking speed multiplier on roads (cost is its inverse); see world/buildings.js ROAD_SPEED
+const ROAD_COST = { dirt: 0.82, gravel: 0.74, cobble: 0.67 };
 
 const NEIGHBORS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
@@ -80,6 +82,10 @@ export class AStarPathfinder {
     const open = new MinHeap();
     const nodes = new Map();   // every node generated so far
     const closed = new Set();
+
+    // A creature standing inside a building (spawned or caught by construction) may walk out through its walls
+    const startStruct = this.terrain.inBounds(sx, sy) ? this.terrain.getTile(sx, sy).structure : null;
+    const startBuilding = startStruct && startStruct.solid ? startStruct.buildingId : undefined;
 
     const startNode = new Node(sx, sy, 0);
     startNode.h = this.heuristic(sx, sy, gx, gy);
@@ -112,8 +118,13 @@ export class AStarPathfinder {
         // Lava / extreme hazard avoidance
         if (tile.biome.id === 'VOLCANIC' && tile.elevation > 0.8) continue;
 
-        // Terrain cost (water slow down, mountains higher cost)
-        const moveCost = tile.biome.movementCost || 1.0;
+        // Completed buildings block the way except through their door (and the goal tile itself)
+        const st = tile.structure;
+        if (st && st.solid && !(nx === gx && ny === gy) && st.buildingId !== startBuilding) continue;
+
+        // Terrain cost (water slow down, mountains higher cost); roads are quick
+        let moveCost = tile.biome.movementCost || 1.0;
+        if (tile.road) moveCost *= ROAD_COST[tile.road] || 1;
         const tentativeG = current.g + moveCost;
 
         let node = nodes.get(nKey);

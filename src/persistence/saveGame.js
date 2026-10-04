@@ -45,6 +45,8 @@ function serializeTerrain(terrain) {
     timeAge: terrain.timeAge,
     corrosionTimer: terrain.corrosionTimer,
     // [[x, y, changedFields]] sorted so equal worlds save identically
+    buildings: terrain.exportBuildings(),
+    nextBuildingId: terrain.nextBuildingId,
     deltas: terrain.exportDeltas().sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]))
   };
 }
@@ -56,6 +58,7 @@ function restoreTerrain(terrain, data) {
   terrain.corrosionTimer = data.corrosionTimer;
   terrain.particles = [];
   terrain.importDeltas(data.deltas);
+  terrain.importBuildings(data.buildings || [], data.nextBuildingId);
 }
 
 // ---------- civilizations ----------

@@ -610,8 +610,9 @@ export class Entity {
 
     // Handle Atheist rebellion vs Devout building
     if (this.belief.status === 'ATHEIST_HERETIC' && random() < 0.3) {
-      if (tile && tile.structure && tile.structure.type === 'temple') {
-        tile.structure = { type: 'ruins', name: 'Desecrated Temple', icon: '⚡', health: 20 };
+      if (tile && tile.structure && (tile.structure.type === 'temple' || tile.structure.type === 'shrine')) {
+        if (tile.structure.buildingId !== undefined) terrain.removeBuilding(tile.structure.buildingId, { ruins: true, name: 'Desecrated Temple' });
+        else tile.structure = { type: 'ruins', name: 'Desecrated Temple', icon: '⚡', health: 20 };
         terrain.spawnParticles(this.x, this.y, 20, '#ef4444', 1.4);
       }
       return;
@@ -619,15 +620,22 @@ export class Entity {
 
     switch (decision.action) {
       case 'ErectHolySanctuary':
-        if (tile && terrain.isBuildable(Math.floor(this.x), Math.floor(this.y)) && (!tile.structure || tile.structure.type === 'ruins')) {
-          tile.structure = {
-            type: 'temple',
-            name: `${this.name}'s Holy Temple`,
-            icon: '🏛️',
-            level: 3,
-            builder: this.name
-          };
-          terrain.spawnParticles(this.x, this.y, 25, '#ffd700', 1.2);
+        // Inspired believers raise a shrine (a real multi-tile building) beside where they stand
+        if (tile && terrain.isBuildable(Math.floor(this.x), Math.floor(this.y)) && !terrain.getBuildingAt(this.x, this.y)) {
+          const sx = Math.floor(this.x);
+          const sy = Math.floor(this.y);
+          let crowded = false;
+          for (const nb of terrain.buildingsInRect(sx - 6, sy - 6, sx + 6, sy + 6)) if (nb.type === 'shrine' || nb.type === 'temple') crowded = true;
+          for (const [ox, oy] of [[1, -1], [-2, -1], [1, 1], [-2, 1]]) {
+            if (crowded) break;
+            const b = terrain.placeBuilding('shrine', sx + ox, sy + oy, { civId: this.civilization ? this.civilization.id : null });
+            if (b) {
+              b.name = `${this.name}'s Holy Shrine`;
+              terrain.syncBuildingTiles(b);
+              terrain.spawnParticles(this.x, this.y, 25, '#ffd700', 1.2);
+              break;
+            }
+          }
         }
         break;
 
@@ -666,6 +674,7 @@ export class Entity {
 
     const curTile = terrain.getTile(Math.floor(this.x), Math.floor(this.y));
     let terrainCost = curTile.biome.movementCost || 1.0;
+    if (curTile.road) terrainCost *= curTile.road === 'cobble' ? 0.67 : (curTile.road === 'gravel' ? 0.74 : 0.82);
 
     // Extreme slowdown in water
     if (curTile.biome.isWater) terrainCost *= 3.5;
@@ -677,8 +686,16 @@ export class Entity {
     const moveDist = (baseSpeed / terrainCost) * sim;
 
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
-    this.x += (dx / dist) * Math.min(dist, moveDist);
-    this.y += (dy / dist) * Math.min(dist, moveDist);
+    const nx = this.x + (dx / dist) * Math.min(dist, moveDist);
+    const ny = this.y + (dy / dist) * Math.min(dist, moveDist);
+    // Walls block walking: a step into a solid building tile (not through a door) is refused and the path dropped
+    const toStruct = terrain.getTile(Math.floor(nx), Math.floor(ny)).structure;
+    if (toStruct && toStruct.solid && !(curTile.structure && curTile.structure.buildingId === toStruct.buildingId)) {
+      this.path = [];
+      return;
+    }
+    this.x = nx;
+    this.y = ny;
     // The planet has edges: never walk off the map
     this.x = Math.max(0.01, Math.min(terrain.width - 0.01, this.x));
     this.y = Math.max(0.01, Math.min(terrain.height - 0.01, this.y));

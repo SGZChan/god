@@ -42,6 +42,8 @@ export function isShielded(fx, x, y) {
   return false;
 }
 
+const FLAMMABLE = new Set(['house', 'farm', 'tent', 'hut', 'wooden_house', 'longhouse', 'hall', 'granary', 'lumber_camp', 'pen', 'market_stall', 'dock', 'windmill', 'palisade', 'palisade_gate', 'workshop', 'tavern']);
+
 export function hurt(fx, ent, amount, cause) {
   if (!ent.alive || amount <= 0) return;
   if ((ent.status && ent.status.shield > 0) || isShielded(fx, ent.x, ent.y)) return;
@@ -52,7 +54,7 @@ export function hurt(fx, ent, amount, cause) {
 export function ruinTile(fx, tile, name) {
   if (!tile || !tile.structure || tile.structure.type === 'ruins') return false;
   if (isShielded(fx, tile.x + 0.5, tile.y + 0.5)) return false;
-  tile.structure = { type: 'ruins', name, icon: '🏚️', health: 0, ruinAge: 0 };
+  fx.terrain.wreckStructure(tile, name, '🏚️');
   return true;
 }
 
@@ -60,6 +62,10 @@ export function damageStructure(fx, tile, amount, ruinName) {
   const s = tile && tile.structure;
   if (!s || s.type === 'ruins') return false;
   if (isShielded(fx, tile.x + 0.5, tile.y + 0.5)) return false;
+  if (s.buildingId !== undefined) {
+    if (fx.terrain.damageBuilding(s.buildingId, amount)) return true;
+    return false;
+  }
   s.health = (typeof s.health === 'number' ? s.health : 100) - amount;
   if (s.health <= 0) return ruinTile(fx, tile, ruinName);
   return false;
@@ -75,7 +81,7 @@ function flammability(tile) {
   if (id === 'GLACIAL_ICE' || id === 'VOLCANIC' || id === 'DESERT' || tile.moisture > 0.92) return 0;
   let f = (tile.flora / 100) * (1.15 - tile.moisture * 0.5);
   const s = tile.structure;
-  if (s && (s.type === 'house' || s.type === 'farm')) f = Math.max(f, 0.8);
+  if (s && FLAMMABLE.has(s.type)) f = Math.max(f, 0.8);
   return f;
 }
 
@@ -131,7 +137,7 @@ export function impact(fx, x, y, radius, damage) {
       tile.elevation = Math.max(0.2, tile.elevation - 0.06);
       tile.biome = BIOMES.VOLCANIC;
       tile.flora = 0;
-      if (tile.structure && !isShielded(fx, tile.x + 0.5, tile.y + 0.5)) tile.structure = null;
+      if (tile.structure && !isShielded(fx, tile.x + 0.5, tile.y + 0.5)) fx.terrain.clearStructure(tile);
     } else {
       tile.flora = Math.max(0, tile.flora - 50);
       ruinTile(fx, tile, 'Blasted Ruins');
@@ -324,7 +330,7 @@ export const CASTS = {
       const tile = t.getTile(tx, ty);
       if (!tile) return;
       tile.elevation = Math.min(tile.elevation, 0.465);
-      if (tile.structure) tile.structure = null;
+      if (tile.structure) fx.terrain.clearStructure(tile);
       tile.flora = 0;
       tile.biome = BIOMES.SHALLOWS;
     };
@@ -424,7 +430,7 @@ export const CASTS = {
       if (tile.biome.isWater) return;
       tile.flora = 100;
       tile.moisture = Math.min(1, tile.moisture + 0.04);
-      if (tile.structure && tile.structure.type === 'farm') tile.structure.health = Math.min(150, (tile.structure.health || 70) + 40);
+      if (tile.structure && tile.structure.type === 'farm' && tile.structure.buildingId !== undefined && tile.structure.anchor) fx.terrain.repairBuilding(tile.structure.buildingId, 40);
     });
     for (const civ of civsIn(fx, x, y, r)) civ.food = Math.min(FOOD_CAP, civ.food + 140);
     for (const e of livingNear(fx, x, y, r)) e.hunger = Math.max(0, e.hunger - 45);
@@ -831,7 +837,7 @@ export const HANDLERS = {
         if (c[2] <= 0) {
           tile.flora = 0;
           const s = tile.structure;
-          if (s && (s.type === 'house' || s.type === 'farm')) ruinTile(fx, tile, 'Burnt Ruins');
+          if (s && FLAMMABLE.has(s.type)) ruinTile(fx, tile, 'Burnt Ruins');
           else if (s) damageStructure(fx, tile, 35, 'Burnt Ruins');
           continue;
         }

@@ -27,17 +27,41 @@
 //   terrain.regrow(dt, speedMultiplier)           -> advances regrowth of harvested renewables (update() calls it)
 //   terrain.inBounds(x, y)                        -> is (x, y) on the map?
 // Resource types: RESOURCES / RESOURCE_TYPES / TIER_NAMES from world/resources.js.
+//
+// ---------- BUILDING API (catalogue: world/buildings.js, sprites: art/buildingSprites.js) ----------
+// A building is { id, type, x, y, w, h, progress 0..1, health, damage 0..1, civId, clanId, style, delivered {} }
+// covering a w x h footprint whose top-left tile is (x, y). Every covered tile gets
+// tile.structure = { type, buildingId, ox, oy, anchor, name, icon, health, solid } (ox/oy: offset inside the
+// footprint, anchor: the top-left tile), so code that only reads structure.type/name/icon/health keeps working.
+// Old one-tile structures (type 'ruins' without buildingId) still exist for god powers' legacy ruins.
+//
+//   terrain.canPlaceBuilding(type, x, y)        -> boolean: footprint on buildable, flat land, free of buildings
+//                                                  (ruins may be built over) and of mineral deposits (trees are cleared)
+//   terrain.placeBuilding(type, x, y, { civId, clanId, progress = 1, style }) -> building | null
+//   terrain.getBuildingAt(x, y) / getBuilding(id) -> building | null (live object; do not mutate)
+//   terrain.advanceConstruction(id, work)       -> true once complete (progress += work / def.work)
+//   terrain.deliverMaterial(id, resource, n)    -> adds to building.delivered (hauling), see missingMaterials()
+//   terrain.damageBuilding(id, amount)          -> true when destroyed (becomes ruins); repairBuilding(id, amount)
+//   terrain.removeBuilding(id, { ruins = true }) -> a ruins building on the same footprint, or nothing
+//   terrain.setRoad(x, y, kind)                 -> kind 'dirt' | 'gravel' | 'cobble' | null (tile.road); roads speed walking
+//   terrain.isSolid(x, y)                       -> true when a completed building blocks the tile (doors and open buildings do not)
+//   terrain.buildingsInRect(x0, y0, x1, y1)     -> buildings anchored in the tile rectangle (rendering, queries)
+//   terrain.buildings                           -> Map id -> building (every building on the planet, loaded or not)
+// Everything persists: tile.structure/tile.road are tile deltas, the registry is saved by persistence/saveGame.js.
 import { classifyBiome, BIOMES } from './biomes.js';
 import { TerrainGenerator, FlatGenerator, planetSize, DEFAULT_WIDTH, FLAT_WIDTH, FLAT_HEIGHT } from '../world/generator.js';
 import { RESOURCES, ResourceField } from '../world/resources.js';
 import { random } from '../simulation/random.js';
+import { BUILDING_TYPES, ROAD_KINDS } from '../world/buildings.js';
 
 export const CHUNK_SIZE = 32;
 const SHIFT = 5;
 const MASK = CHUNK_SIZE - 1;
 const chunkKey = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
 
-const DELTA_FIELDS = ['elevation', 'temperature', 'moisture', 'flora', 'structure', 'civId', 'deposit'];
+const DELTA_FIELDS = ['elevation', 'temperature', 'moisture', 'flora', 'structure', 'civId', 'deposit', 'road'];
+const CLEARABLE = new Set(['wood', 'fibre', 'berries']); // vegetation a building may replace
+const MAX_SLOPE = 0.08;                                  // largest elevation spread under one footprint
 
 const round2 = v => Math.round(v * 100) / 100;
 const sameDeposit = (a, b) => (!a && !b) || Boolean(a && b && a.type === b.type && a.amount === b.amount && a.max === b.max);
@@ -58,6 +82,10 @@ export class PlanetTerrain {
     this.height = Math.round(height || Math.floor(this.width / 2));
     this.generator = flat ? new FlatGenerator(this.width, this.height) : new TerrainGenerator(this.seed, type, this.width, this.height);
     this.regrowing = new Set();      // loaded tiles whose renewable deposit is below its max
+
+    this.buildings = new Map();      // id -> building (see BUILDING API)
+    this.nextBuildingId = 1;
+    this._buildingBuckets = new Map(); // chunk key -> Set of building ids anchored in that chunk
 
     this.chunks = new Map();         // key -> { cx, cy, tiles }
     this.chunkList = [];             // loaded chunks, for random sampling
@@ -118,6 +146,7 @@ export class PlanetTerrain {
           biome: g.biome,
           flora: g.flora,
           structure: null,
+          road: null,
           civId: null,
           deposit: g.deposit
         };
@@ -157,6 +186,7 @@ export class PlanetTerrain {
     if (!sameDeposit(tile.deposit, base.deposit)) mark('deposit', tile.deposit ? { ...tile.deposit } : null);
     if (tile.biome !== base.biome) mark('biome', tile.biome.id);
     if (tile.structure) mark('structure', tile.structure);
+    if (tile.road) mark('road', tile.road);
     if (tile.civId) mark('civId', tile.civId);
     return fields;
   }
@@ -232,6 +262,9 @@ export class PlanetTerrain {
     this.chunkList = [];
     this.evictedDeltas.clear();
     this.regrowing.clear();
+    this.buildings.clear();
+    this._buildingBuckets.clear();
+    this.nextBuildingId = 1;
     this._home = null;
   }
 
@@ -404,6 +437,318 @@ export class PlanetTerrain {
     }
   }
 
+  // ---------- buildings and roads ----------
+
+  // A fitting look for a new building from the local climate: desert sandstone, snow-roofed in the cold, stone in later eras.
+  styleFor(type, x, y) {
+    const def = BUILDING_TYPES[type];
+    const tile = this.getTile(x, y);
+    const id = tile.biome.id;
+    if (id === 'DESERT') return { pal: 'sandstone', snow: false };
+    const cold = tile.temperature < 0.3 || id === 'TAIGA' || id === 'TUNDRA';
+    const stone = def && (def.tier >= 2 || def.category === 'defense' || def.category === 'religious');
+    return { pal: stone ? 'stone' : 'timber', snow: cold };
+  }
+
+  // Can `type` stand with its top-left tile on (x, y)?
+  canPlaceBuilding(type, x, y) {
+    const def = BUILDING_TYPES[type];
+    if (!def || type === 'ruins') return false;
+    return this.footprintFree(def, Math.floor(x), Math.floor(y), def.w, def.h);
+  }
+
+  footprintFree(def, x, y, w, h) {
+    let minE = Infinity;
+    let maxE = -Infinity;
+    let water = 0;
+    let land = 0;
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const tx = x + dx;
+        const ty = y + dy;
+        if (!this.inBounds(tx, ty)) return false;
+        const tile = this.getTile(tx, ty);
+        if (def.shore) {
+          if (tile.biome.id === 'SHALLOWS') water++;
+          else if (this.isBuildable(tx, ty)) land++;
+          else return false;
+        } else if (!this.isBuildable(tx, ty)) {
+          return false;
+        }
+        if (tile.structure && tile.structure.type !== 'ruins') return false;
+        const d = tile.deposit;
+        if (d && d.amount > 0 && !CLEARABLE.has(d.type) && def.category !== 'extraction') return false;
+        if (tile.elevation < minE) minE = tile.elevation;
+        if (tile.elevation > maxE) maxE = tile.elevation;
+      }
+    }
+    if (def.shore && (water === 0 || land === 0)) return false;
+    return maxE - minE <= MAX_SLOPE;
+  }
+
+  getBuilding(id) {
+    return this.buildings.get(id) || null;
+  }
+
+  getBuildingAt(x, y) {
+    const s = this.getTile(x, y).structure;
+    return s && s.buildingId !== undefined ? this.buildings.get(s.buildingId) || null : null;
+  }
+
+  // Writes the tiles of a building (structure records, solid flags) from its current state.
+  syncBuildingTiles(b) {
+    const def = BUILDING_TYPES[b.type];
+    const solid = Boolean(def.solid) && b.progress >= 1;
+    for (let oy = 0; oy < b.h; oy++) {
+      for (let ox = 0; ox < b.w; ox++) {
+        const tile = this.getTile(b.x + ox, b.y + oy);
+        const isDoor = def.door && def.door.x === ox && def.door.y === oy;
+        tile.structure = {
+          type: b.type,
+          buildingId: b.id,
+          ox,
+          oy,
+          anchor: ox === 0 && oy === 0,
+          name: b.name || def.name,
+          icon: def.icon,
+          health: Math.round(b.health),
+          solid: solid && !isDoor
+        };
+        if (b.originalTech !== undefined) tile.structure.originalTech = b.originalTech;
+      }
+    }
+  }
+
+  _bucketKey(b) {
+    return chunkKey(b.x >> SHIFT, b.y >> SHIFT);
+  }
+
+  _register(b) {
+    this.buildings.set(b.id, b);
+    const key = this._bucketKey(b);
+    if (!this._buildingBuckets.has(key)) this._buildingBuckets.set(key, new Set());
+    this._buildingBuckets.get(key).add(b.id);
+  }
+
+  _unregister(b) {
+    this.buildings.delete(b.id);
+    const set = this._buildingBuckets.get(this._bucketKey(b));
+    if (set) set.delete(b.id);
+  }
+
+  // Places a building (a construction site when progress < 1). Returns it, or null when it does not fit.
+  placeBuilding(type, x, y, { civId = null, clanId = null, progress = 1, style = null } = {}) {
+    const def = BUILDING_TYPES[type];
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (!def || !this.canPlaceBuilding(type, x, y)) return null;
+    // ruins underneath are cleared, vegetation is felled, roads are paved over
+    const seen = new Set();
+    for (let dy = 0; dy < def.h; dy++) {
+      for (let dx = 0; dx < def.w; dx++) {
+        const tile = this.getTile(x + dx, y + dy);
+        if (tile.structure && tile.structure.buildingId !== undefined) {
+          if (!seen.has(tile.structure.buildingId)) {
+            seen.add(tile.structure.buildingId);
+            this.removeBuilding(tile.structure.buildingId, { ruins: false });
+          }
+        } else if (tile.structure) {
+          tile.structure = null; // an old one-tile ruin
+        }
+        if (tile.deposit && CLEARABLE.has(tile.deposit.type)) tile.deposit = null;
+        if (def.solid) tile.road = null;
+      }
+    }
+    const b = {
+      id: this.nextBuildingId++,
+      type,
+      x,
+      y,
+      w: def.w,
+      h: def.h,
+      progress: Math.max(0, Math.min(1, progress)),
+      health: 0,
+      damage: 0,
+      civId,
+      clanId,
+      style: style || this.styleFor(type, x, y),
+      delivered: {}
+    };
+    b.health = def.health * (b.progress >= 1 ? 1 : 0.4);
+    this._register(b);
+    this.syncBuildingTiles(b);
+    return b;
+  }
+
+  // Adds `work` units of effort; returns true when the building is (now) complete.
+  advanceConstruction(id, work) {
+    const b = this.buildings.get(id);
+    if (!b || b.type === 'ruins') return false;
+    if (b.progress >= 1) return true;
+    const def = BUILDING_TYPES[b.type];
+    b.progress = Math.min(1, b.progress + Math.max(0, work) / def.work);
+    if (b.progress >= 1) {
+      b.health = def.health;
+      b.damage = 0;
+      this.syncBuildingTiles(b);
+      return true;
+    }
+    return false;
+  }
+
+  deliverMaterial(id, resource, amount) {
+    const b = this.buildings.get(id);
+    if (!b || !(amount > 0)) return 0;
+    b.delivered[resource] = (b.delivered[resource] || 0) + amount;
+    return amount;
+  }
+
+  // Returns true when the damage destroyed the building (it is now ruins).
+  damageBuilding(id, amount) {
+    const b = this.buildings.get(id);
+    if (!b || b.type === 'ruins' || !(amount > 0)) return false;
+    const def = BUILDING_TYPES[b.type];
+    b.health -= amount;
+    if (b.health <= 0) {
+      this.removeBuilding(id, { ruins: true });
+      return true;
+    }
+    b.damage = Math.max(0, Math.min(1, 1 - b.health / def.health));
+    this.syncBuildingTiles(b);
+    return false;
+  }
+
+  repairBuilding(id, amount) {
+    const b = this.buildings.get(id);
+    if (!b || b.type === 'ruins' || b.progress < 1) return;
+    const def = BUILDING_TYPES[b.type];
+    b.health = Math.min(def.health, b.health + amount);
+    b.damage = Math.max(0, Math.min(1, 1 - b.health / def.health));
+    this.syncBuildingTiles(b);
+  }
+
+  // Takes a building off the map: it leaves ruins on its footprint (ruins: true) or nothing. Returns the ruins building.
+  removeBuilding(id, { ruins = true, name = null, originalTech } = {}) {
+    const b = this.buildings.get(id);
+    if (!b) return null;
+    if (b.type === 'ruins' && ruins) return b;
+    const def = BUILDING_TYPES[b.type];
+    this._unregister(b);
+    for (let oy = 0; oy < b.h; oy++) {
+      for (let ox = 0; ox < b.w; ox++) {
+        const tile = this.getTile(b.x + ox, b.y + oy);
+        if (tile.structure && tile.structure.buildingId === id) tile.structure = null;
+      }
+    }
+    if (!ruins) return null;
+    const r = {
+      id: this.nextBuildingId++,
+      type: 'ruins',
+      original: b.type,
+      x: b.x,
+      y: b.y,
+      w: b.w,
+      h: b.h,
+      progress: 1,
+      health: 0,
+      damage: 1,
+      civId: null,
+      clanId: b.clanId,
+      style: b.style,
+      delivered: {},
+      ruinAge: 0,
+      name: name || `Ruins of ${def.name}`
+    };
+    if (originalTech !== undefined) r.originalTech = originalTech;
+    this._register(r);
+    this.syncBuildingTiles(r);
+    return r;
+  }
+
+  // A tile blocked for walking by a completed building (O(1): the flag lives on the tile).
+  isSolid(x, y) {
+    const s = this.getTile(x, y).structure;
+    return Boolean(s && s.solid);
+  }
+
+  // Buildings anchored near the tile rectangle [x0, x1] x [y0, y1] (inclusive), for rendering and queries.
+  buildingsInRect(x0, y0, x1, y1, out = []) {
+    out.length = 0;
+    if (this.buildings.size === 0) return out;
+    const cx0 = Math.max(0, (Math.floor(x0) >> SHIFT) - 1);
+    const cx1 = Math.min((this.width - 1) >> SHIFT, (Math.floor(x1) >> SHIFT) + 1);
+    const cy0 = Math.max(0, (Math.floor(y0) >> SHIFT) - 1);
+    const cy1 = Math.min((this.height - 1) >> SHIFT, (Math.floor(y1) >> SHIFT) + 1);
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const set = this._buildingBuckets.get(chunkKey(cx, cy));
+        if (!set) continue;
+        for (const id of set) {
+          const b = this.buildings.get(id);
+          if (b.x + b.w > x0 && b.x <= x1 && b.y + b.h + 3 > y0 && b.y - 6 <= y1) out.push(b);
+        }
+      }
+    }
+    return out;
+  }
+
+  buildingsOfCiv(civId) {
+    const out = [];
+    for (const b of this.buildings.values()) if (b.civId === civId) out.push(b);
+    return out;
+  }
+
+  // Paves (or, with kind null, clears) a road on one tile of buildable land; not under a solid building.
+  setRoad(x, y, kind = 'dirt') {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (!this.inBounds(x, y)) return false;
+    const tile = this.getTile(x, y);
+    if (kind === null) {
+      tile.road = null;
+      return true;
+    }
+    if (!ROAD_KINDS.includes(kind) || !this.isBuildable(x, y) || (tile.structure && tile.structure.solid)) return false;
+    tile.road = kind;
+    return true;
+  }
+
+  getRoad(x, y) {
+    return this.inBounds(Math.floor(x), Math.floor(y)) ? this.getTile(x, y).road || null : null;
+  }
+
+  exportBuildings() {
+    return [...this.buildings.values()].sort((a, b) => a.id - b.id).map(b => ({ ...b, style: { ...b.style }, delivered: { ...b.delivered } }));
+  }
+
+  // Replaces the registry from a save. The tiles come back with the tile deltas, so only the registry is rebuilt.
+  importBuildings(list, nextId) {
+    this.buildings.clear();
+    this._buildingBuckets.clear();
+    let max = 0;
+    for (const raw of list || []) {
+      this._register({ ...raw, style: { ...raw.style }, delivered: { ...raw.delivered } });
+      if (raw.id > max) max = raw.id;
+    }
+    this.nextBuildingId = Math.max(nextId || 1, max + 1);
+  }
+
+  // Ruins a tile's structure (god powers): a whole building collapses, an old one-tile structure is replaced.
+  wreckStructure(tile, name, icon, health = 0) {
+    const s = tile.structure;
+    if (!s || s.type === 'ruins') return;
+    if (s.buildingId !== undefined) this.removeBuilding(s.buildingId, { ruins: true, name });
+    else tile.structure = { type: 'ruins', name, icon, health };
+  }
+
+  // Wipes a tile's structure without ruins (singularity, meteor crater).
+  clearStructure(tile) {
+    const s = tile.structure;
+    if (!s) return;
+    if (s.buildingId !== undefined) this.removeBuilding(s.buildingId, { ruins: false });
+    else tile.structure = null;
+  }
+
   // ---------- simulation ----------
 
   update(dt, speedMultiplier) {
@@ -425,8 +770,18 @@ export class PlanetTerrain {
     this.corrosionTimer += dt * Math.max(1, speedMultiplier) * 0.004;
     if (this.corrosionTimer >= 1.0) {
       this.corrosionTimer = 0;
+      // buildings: finished ones wear down (sturdier ones slower), ruins crumble away
+      for (const b of [...this.buildings.values()]) {
+        if (random() > 0.05) continue;
+        if (b.type === 'ruins') {
+          b.ruinAge = (b.ruinAge || 0) + 1;
+          if (b.ruinAge > 30) this.removeBuilding(b.id, { ruins: false });
+        } else if (b.progress >= 1) {
+          this.damageBuilding(b.id, (1 + random() * 2) * BUILDING_TYPES[b.type].health / 100);
+        }
+      }
       this.forEachLoadedTile(tile => {
-        if (!tile.structure || random() > 0.05) return;
+        if (!tile.structure || tile.structure.buildingId !== undefined || random() > 0.05) return;
         if (tile.structure.type === 'ruins') {
           tile.structure.ruinAge = (tile.structure.ruinAge || 0) + 1;
           if (tile.structure.ruinAge > 30) tile.structure = null;
@@ -469,7 +824,7 @@ export class PlanetTerrain {
 
       // Violently crush structures at the epicenter
       if (tile.structure && dist < radius * 0.75) {
-        tile.structure = { type: 'ruins', name: 'Crushed Ruins', icon: '🪨', health: 0 };
+        this.wreckStructure(tile, 'Crushed Ruins', '🪨');
       }
     });
 
@@ -486,7 +841,7 @@ export class PlanetTerrain {
 
       // Sink buildings into water
       if (tile.structure) {
-        tile.structure = { type: 'ruins', name: 'Sunken Ruins', icon: '🌊', health: 0 };
+        this.wreckStructure(tile, 'Sunken Ruins', '🌊');
       }
     });
 
@@ -500,7 +855,7 @@ export class PlanetTerrain {
       tile.moisture = 1.0;
       tile.flora = Math.max(0, tile.flora - 60);
       if (tile.structure && random() < 0.8) {
-        tile.structure = { type: 'ruins', name: 'Flooded Ruins', icon: '🌊', health: 0 };
+        this.wreckStructure(tile, 'Flooded Ruins', '🌊');
       }
     });
     this.harmEntitiesInRadius(cx, cy, radius, 90, 'Drowned in Tsunami Deluge');
@@ -513,7 +868,7 @@ export class PlanetTerrain {
       tile.biome = BIOMES.VOLCANIC;
       tile.flora = 0;
       if (tile.structure) {
-        tile.structure = { type: 'ruins', name: 'Incinerated Ruins', icon: '🔥', health: 0 };
+        this.wreckStructure(tile, 'Incinerated Ruins', '🔥');
       }
     });
     this.harmEntitiesInRadius(cx, cy, radius, 150, 'Incinerated by Molten Magma');
@@ -525,7 +880,7 @@ export class PlanetTerrain {
       tile.elevation = 0.05;
       tile.biome = BIOMES.DEEP_OCEAN;
       tile.flora = 0;
-      tile.structure = null; // completely vaporized
+      this.clearStructure(tile); // completely vaporized
     });
     this.harmEntitiesInRadius(cx, cy, radius, 999, 'Spaghettified by Surface Singularity');
     this.spawnParticles(cx, cy, 90, '#8b5cf6', 4.0);
@@ -551,11 +906,11 @@ export class PlanetTerrain {
         tile.elevation = 0.2;
         tile.biome = BIOMES.VOLCANIC;
         tile.flora = 0;
-        tile.structure = null;
+        this.clearStructure(tile);
       } else {
         tile.elevation = Math.min(0.95, tile.elevation + 0.15);
         tile.flora = Math.max(0, tile.flora - 50);
-        if (tile.structure) tile.structure = { type: 'ruins', name: 'Blasted Ruins', icon: '🪨' };
+        if (tile.structure) this.wreckStructure(tile, 'Blasted Ruins', '🪨');
       }
     });
     this.harmEntitiesInRadius(cx, cy, 7, 250, 'Meteor Cataclysm');
@@ -566,7 +921,7 @@ export class PlanetTerrain {
     const tile = this.getTile(cx, cy);
     if (tile) {
       if (tile.structure && random() < 0.6) {
-        tile.structure = { type: 'ruins', name: 'Scorched Ruins', icon: '⚡', health: 40 };
+        this.wreckStructure(tile, 'Scorched Ruins', '⚡', 40);
       }
       tile.moisture = Math.min(1.0, tile.moisture + 0.2);
     }
