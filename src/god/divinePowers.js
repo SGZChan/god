@@ -38,7 +38,11 @@ export class DivinePowersManager {
     this.activePower = {
       id: 'SPAWN_ENTITY',
       name: `Spawn ${spawnData.type === 'champion' ? spawnData.config.name : spawnData.species.name}`,
-      icon: '✨',
+      icon: 'BLESSING',
+      category: 'tools',
+      description: 'Click anywhere on the surface to place your creation.',
+      cost: 0,
+      radius: 0,
       cursor: 'crosshair',
       isDraggable: false
     };

@@ -1,6 +1,7 @@
 // 2D High-Performance Surface Canvas Renderer with Minecraft-Style Top-Down Structures, Smooth Pan/Zoom & Drag Brush
 import { CHUNK_SIZE } from './terrain.js';
 import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
+import { drawGroundFx, drawSkyFx, drawStatusFx, drawPowerCursor } from '../art/effects.js';
 
 export class SurfaceRenderer {
   constructor(canvas, terrain, ecosystem, society) {
@@ -136,6 +137,8 @@ export class SurfaceRenderer {
 
     this.listen(window, 'mousemove', (e) => {
       if (!this.enabled) return;
+      const hoverRect = this.canvas.getBoundingClientRect();
+      this.hover = this.screenToTile(e.clientX - hoverRect.left, e.clientY - hoverRect.top); // brush preview
       this.dragDistance = Math.hypot(e.clientX - this.mouseDownPos.x, e.clientY - this.mouseDownPos.y);
       if (this.isPanning) {
         this.camera.x = e.clientX - this.panStart.x;
@@ -359,11 +362,25 @@ export class SurfaceRenderer {
     const h = this.canvas.height;
     ctx.clearRect(0, 0, w, h);
 
+    // God-power effects: earthquakes shake the view
+    const effects = this.terrain.effects;
+    let shakeX = 0;
+    let shakeY = 0;
+    if (effects) {
+      effects.updateVisuals(dt);
+      const shake = effects.shakeAmount((w / 2 - this.camera.x) / (this.tileSize * this.camera.zoom), (h / 2 - this.camera.y) / (this.tileSize * this.camera.zoom));
+      if (shake > 0) {
+        shakeX = (Math.random() - 0.5) * shake * 2;
+        shakeY = (Math.random() - 0.5) * shake * 2;
+      }
+    }
+
     ctx.save();
-    ctx.translate(this.camera.x, this.camera.y);
+    ctx.translate(this.camera.x + shakeX, this.camera.y + shakeY);
     ctx.scale(this.camera.zoom, this.camera.zoom);
 
     const ts = this.tileSize;
+    const fxView = { x0: -this.camera.x / this.camera.zoom, y0: -this.camera.y / this.camera.zoom, x1: (w - this.camera.x) / this.camera.zoom, y1: (h - this.camera.y) / this.camera.zoom };
 
     // Viewport Culling Bounds
     const minTileX = Math.floor(-this.camera.x / (ts * this.camera.zoom));
@@ -395,6 +412,8 @@ export class SurfaceRenderer {
     } else {
       this.drawTiles(ctx, minTileX, maxTileX, minTileY, maxTileY, true, civStyles);
     }
+
+    if (effects) drawGroundFx(ctx, effects, ts, this.waterAnimTime, fxView);
 
     // 3. Draw Living & Recently Fallen Entities
     for (const ent of this.ecosystem.entities) {
@@ -490,6 +509,11 @@ export class SurfaceRenderer {
       }
     }
 
+    if (effects) {
+      drawStatusFx(ctx, this.ecosystem.entities, ts, this.waterAnimTime, fxView);
+      drawSkyFx(ctx, effects, ts, this.waterAnimTime, fxView);
+    }
+
     // 4. Draw Divine Impact Particles
     for (const p of this.terrain.particles) {
       ctx.fillStyle = p.color;
@@ -499,6 +523,10 @@ export class SurfaceRenderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1.0;
+
+    if (this.currentPower && this.currentPower.radius && this.hover && this.enabled) {
+      drawPowerCursor(ctx, this.hover, this.currentPower, ts, this.waterAnimTime);
+    }
 
     ctx.restore();
   }

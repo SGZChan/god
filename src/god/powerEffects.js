@@ -531,7 +531,8 @@ export const CASTS = {
     const tile = fx.terrain.getTile(x, y);
     if (tile.biome.isWater) return 'Water does not burn.';
     // light the ground even where nothing grows, so the player always sees something
-    fx.spawn('wildfire', x, y, { radius: 2, duration: 260, cells: [[Math.floor(x), Math.floor(y), 7]], source: 'god' });
+    const cells = [[x, y, 8], [x + 1, y, 6], [x - 1, y, 6], [x, y + 1, 6], [x, y - 1, 6]];
+    fx.spawn('wildfire', x, y, { radius: 2, duration: 260, cells, source: 'god' });
     return true;
   },
   BLIZZARD(fx, x, y, o) {
@@ -1114,7 +1115,16 @@ export function tickMonster(fx, ent, dt) {
   ent.breathCd = (ent.breathCd === undefined ? 3 : ent.breathCd) - dt;
   if (ent.breathCd > 0) return;
   const target = nearestLiving(fx, ent.x, ent.y, 7, o => o !== ent && !o.isMonster);
-  if (!target) { ent.breathCd = 1; return; }
+  if (!target) {
+    // nothing in range: stalk the nearest living thing, so a dragon is a real threat even when it is not hungry
+    ent.breathCd = 1;
+    const prey = nearestLiving(fx, ent.x, ent.y, 45, o => o !== ent && !o.isMonster);
+    if (prey && ent.path.length === 0) {
+      ent.requestPath(prey.x, prey.y, fx.ecosystem.pathfinder);
+      ent.actionCooldown = Math.max(ent.actionCooldown, 3); // keep walking instead of re-deciding
+    }
+    return;
+  }
   ent.breathCd = 5 + random() * 2;
   fx.addVisual('firebreath', ent.x, ent.y, { tx: target.x, ty: target.y, life: 1.2 });
   const tx = Math.floor(target.x);
