@@ -122,7 +122,7 @@ export class Entity {
 
   // Body size on screen: babies are small and grow up
   get visualScale() {
-    return this.stats.sizeScale * (0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears));
+    return this.stats.sizeScale * (this.sizeMod || 1) * (0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears));
   }
 
   get maxAge() {
@@ -134,7 +134,7 @@ export class Entity {
     this.genome = genome;
     this.traits = genome.phenotype();
     this.stats = derive(this.traits);
-    this.maxHealth = 60 + this.stats.sizeScale * 40;
+    this.maxHealth = (60 + this.stats.sizeScale * 40) * (this.isMonster ? 4 : 1) * (this.sizeMod && !this.isMonster ? this.sizeMod : 1);
     this.health = Math.min(this.health, this.maxHealth);
   }
 
@@ -325,7 +325,7 @@ export class Entity {
     if (this.traits.carnivory < 0.3) return false;
     // People inside a civilization are protected by their settlements; only a starving predator will
     // attack a lone sapient who belongs to no nation
-    if (prey.isSapient && (prey.civilization || this.hunger < 92)) return false;
+    if (prey.isSapient && !this.isMonster && (prey.civilization || this.hunger < 92)) return false;
     return prey.stats.sizeScale <= this.stats.sizeScale * 1.5;
   }
 
@@ -697,9 +697,14 @@ export class Entity {
   }
 
   die(cause = 'Unknown') {
+    // A divine shield (see god/powerEffects.js) keeps its bearer alive, except from old age
+    if (this.status && this.status.shield > 0 && cause !== 'Old Age') {
+      this.health = Math.max(this.health, 5);
+      return;
+    }
     this.alive = false;
     this.causeOfDeath = cause;
-    this.decayTimer = 6.0; // Persists for 6 seconds as a grave marker
+    this.decayTimer = this.isSapient ? 20 : 12; // the body lingers as a grave marker (and can be resurrected)
     this.pregnancy = null;
   }
 }

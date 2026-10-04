@@ -56,6 +56,8 @@ export class Ecosystem {
     this.births = 0;
     this.deaths = 0;
     this.timeYears = 0;
+    this.worldEvents = [];   // god powers and natural disasters, see god/events.js
+    this.worldEventSeq = 0;
     this.censusTimer = 0;
     this.grid = new SpatialGrid(8);
     this.society = null; // set by SocietyManager so new humans can be assigned a civilization
