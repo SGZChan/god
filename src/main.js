@@ -113,6 +113,7 @@ class GameApp {
     this.initNavigation();
     this.initPanelsToggle();
     this.initModals();
+    this.initSkip();
 
     // Audio init on first user click
     window.addEventListener('click', () => {
@@ -1133,16 +1134,113 @@ class GameApp {
     });
   }
 
+  // ---------- skipping forward in time ----------
+
+  initSkip() {
+    const button = document.getElementById('btn-skip');
+    const panel = document.getElementById('skip-panel');
+    const setOpen = (open) => {
+      panel.classList.toggle('hidden', !open);
+      button.setAttribute('aria-expanded', String(open));
+    };
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sounds.playUIClick();
+      setOpen(panel.classList.contains('hidden'));
+    });
+    document.addEventListener('click', (e) => {
+      if (!panel.classList.contains('hidden') && !panel.contains(e.target)) setOpen(false);
+    });
+    for (const choice of panel.querySelectorAll('.skip-choice')) {
+      choice.addEventListener('click', () => { setOpen(false); this.skipYears(Number(choice.dataset.years)); });
+    }
+    document.getElementById('skip-custom-go').addEventListener('click', () => {
+      const years = Math.round(Number(document.getElementById('skip-years-input').value));
+      setOpen(false);
+      if (years > 0) this.skipYears(Math.min(2000, years));
+    });
+    document.getElementById('btn-skip-cancel').addEventListener('click', () => { if (this.skipping) this.skipping.cancel = true; });
+  }
+
+  // Runs the active planet's full simulation forward by `years` (one year = 4 simulated seconds), in chunks so the
+  // page stays responsive and shows progress. Ships launched meanwhile fly as usual. Returns the years skipped.
+  async skipYears(years) {
+    if (this.skipping || !this.activeSim || this.activeSim.planet.isConsumed) return 0;
+    const sim = this.activeSim;
+    const modal = document.getElementById('skip-modal');
+    const status = document.getElementById('skip-status');
+    const fill = document.getElementById('skip-fill');
+    const job = { cancel: false };
+    this.skipping = job;
+    const savedSpeed = this.timeSpeed;
+    this.timeSpeed = 0; // the normal loop must not run the planet at the same time
+    modal.classList.remove('hidden');
+
+    const civsBefore = new Map(sim.society.civilizations.filter(c => c.isAlive).map(c => [c.id, { era: c.era.name, settlements: (c.settlements || []).length }]));
+    const peopleBefore = sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length;
+    const totalSteps = Math.round((years * 4) / SIM_STEP);
+    const startYear = Math.floor(sim.simSeconds * 0.25);
+    let done = 0;
+    let sincePrune = 0;
+    while (done < totalSteps && !job.cancel) {
+      const t0 = performance.now();
+      setActiveRng(sim.rng);
+      while (done < totalSteps && performance.now() - t0 < 45) {
+        const n = runSimulationSteps(sim, Math.min(20, totalSteps - done));
+        done += n;
+        sincePrune += n;
+        sim.simSeconds += n * SIM_STEP;
+        sim.terrain.update(n * SIM_STEP, 1);
+        this.cosmicTimeAge += n * SIM_STEP * 0.25 * 0.001; // years -> cosmic age (1 = 1000 years)
+      }
+      // world news goes to the event log; ships launched by spacefaring peoples take off
+      while (sim.ecosystem.notifications.length) {
+        const n = sim.ecosystem.notifications.pop();
+        if (!n.minor) this.logTo(sim, n.text);
+      }
+      this.tickVoyages();
+      if (sincePrune > 2000) { sincePrune = 0; this.pruneActiveTerrain(); }
+      const year = Math.floor(sim.simSeconds * 0.25);
+      status.textContent = `Year ${year.toLocaleString()} — ${Math.floor((done / totalSteps) * 100)}% of ${years} years`;
+      fill.style.width = `${(done / totalSteps) * 100}%`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    sim.lastActiveCosmicAge = this.cosmicTimeAge;
+    modal.classList.add('hidden');
+    this.timeSpeed = savedSpeed;
+    this.stepper.reset();
+    this.skipping = null;
+
+    // what changed
+    const skipped = Math.floor(sim.simSeconds * 0.25) - startYear;
+    const notes = [];
+    for (const civ of sim.society.civilizations) {
+      const before = civsBefore.get(civ.id);
+      if (!before) { if (civ.isAlive) notes.push(`${civ.name} arose`); continue; }
+      if (!civ.isAlive) { notes.push(`${civ.name} fell`); continue; }
+      if (civ.era.name !== before.era) notes.push(`${civ.name} entered the ${civ.era.name}`);
+      const grown = (civ.settlements || []).length - before.settlements;
+      if (grown > 0) notes.push(`${civ.name} founded ${grown} settlement${grown > 1 ? 's' : ''}`);
+    }
+    const peopleNow = sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length;
+    const summary = `⏩ ${skipped} years passed on ${sim.planet.name}: ${peopleBefore} → ${peopleNow} people${notes.length ? '. ' + notes.slice(0, 4).join('; ') : ''}.`;
+    this.logTo(sim, summary);
+    this.notifications.push(summary, 'info', true);
+    this.updateFocusCard();
+    return skipped;
+  }
+
   // Every window closes with Esc or a click on the dimmed backdrop (the saved-universe question needs an answer).
   initModals() {
-    const closable = () => [...document.querySelectorAll('.modal-overlay:not(.hidden)')].filter(m => m.id !== 'continue-modal');
+    const NEEDS_ANSWER = new Set(['continue-modal', 'skip-modal']); // these close through their own buttons
+    const closable = () => [...document.querySelectorAll('.modal-overlay:not(.hidden)')].filter(m => !NEEDS_ANSWER.has(m.id));
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const open = closable();
       if (open.length) open[open.length - 1].classList.add('hidden');
     });
     for (const modal of document.querySelectorAll('.modal-overlay')) {
-      if (modal.id === 'continue-modal') continue;
+      if (NEEDS_ANSWER.has(modal.id)) continue;
       let downOnBackdrop = false;
       modal.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === modal; });
       modal.addEventListener('click', (e) => {

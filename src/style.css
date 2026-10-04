@@ -2657,3 +2657,16 @@ body.panels-hidden #surface-nav-controls {
 .faith-name { font-weight: 700; color: #fff; }
 .faith-count { color: var(--text-muted); white-space: nowrap; }
 .faith-gods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
+/* Skip forward years (main.js skipYears) */
+.skip-btn { display: inline-flex; align-items: center; gap: 4px; }
+.skip-panel { right: 0; left: auto; min-width: 230px; }
+.skip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.skip-custom { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.78rem; color: var(--text-secondary); }
+.skip-custom input { width: 70px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border-glass); color: #fff; border-radius: 6px; padding: 4px 6px; }
+.skip-custom .menu-item { width: auto; padding: 4px 10px; }
+.skip-note { margin-top: 6px; font-size: 0.7rem; color: var(--text-muted); line-height: 1.35; }
+.skip-status { font-size: 0.9rem; color: var(--text-primary); }
+.skip-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.skip-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-gold)); transition: width 0.15s linear; }
+body:not([data-view="SURFACE"]) .skip-btn { opacity: 0.85; }

@@ -146,6 +146,23 @@
           <button class="time-btn seg-btn" data-speed="100" title="Dynasty speed"><svg class="icon" aria-hidden="true"><use href="#i-ff3"/></svg><span>100×</span></button>
           <button class="time-btn seg-btn" data-speed="10000" title="Maximum speed (creatures and civilizations are limited to about 180×)"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span>Max</span></button>
         </div>
+        <!-- Skip forward a number of years on this planet (main.js skipYears) -->
+        <div class="menu-wrap">
+          <button id="btn-skip" class="seg-btn skip-btn" title="Skip forward years on this planet" aria-haspopup="true" aria-expanded="false" aria-controls="skip-panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-ff3"/></svg><span>Skip</span>
+          </button>
+          <div id="skip-panel" class="menu-panel skip-panel hidden" role="menu" aria-label="Skip forward">
+            <div class="menu-label">Skip forward on this planet</div>
+            <div class="skip-grid">
+              <button class="menu-item skip-choice" data-years="10" role="menuitem">10 years</button>
+              <button class="menu-item skip-choice" data-years="50" role="menuitem">50 years</button>
+              <button class="menu-item skip-choice" data-years="100" role="menuitem">100 years</button>
+              <button class="menu-item skip-choice" data-years="250" role="menuitem">250 years</button>
+            </div>
+            <label class="skip-custom"><span>Other</span><input id="skip-years-input" type="number" min="1" max="2000" value="25"><button id="skip-custom-go" class="menu-item">Go</button></label>
+            <p class="skip-note">Every year is fully simulated: people are born, build, explore and change ages.</p>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -280,6 +297,18 @@
           <button id="btn-cancel-new-universe" class="btn-secondary">Cancel</button>
           <button id="btn-confirm-new-universe" class="btn-primary">🌌 Ignite New Universe</button>
         </div>
+      </div>
+    </div>
+
+    <!-- TIME SKIP PROGRESS -->
+    <div id="skip-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="skip-title">
+      <div class="modal-content" style="max-width: 440px;">
+        <div class="modal-header"><h2 id="skip-title">⏩ Skipping forward</h2></div>
+        <div class="modal-body" style="flex-direction: column; gap: 12px; padding: 20px 24px;">
+          <div id="skip-status" class="skip-status">Year 0</div>
+          <div class="skip-bar"><div id="skip-fill" class="skip-fill"></div></div>
+        </div>
+        <div class="modal-footer"><button id="btn-skip-cancel" class="btn-secondary">Stop here</button></div>
       </div>
     </div>
 
