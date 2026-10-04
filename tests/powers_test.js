@@ -180,12 +180,14 @@ section('Blessings');
   const ore = cast(w, 'REVEAL_ORE', 0, 0);
   assert(ore.ok, 'revelation of ore works without a resource system (feature detected)');
   w = world();
-  let revealed = 0;
-  w.terrain.getDeposit = () => ({ type: 'iron' });
-  const origGetDeposit = w.terrain.getDeposit;
-  w.terrain.getDeposit = (x, y) => { const d = origGetDeposit(x, y); d.seen = true; revealed++; return d; };
+  w.terrain.peekDeposit = (x, y) => ((x + y) % 4 === 0 ? { type: 'iron', amount: 50 } : null);
+  const oreCast = cast(w, 'REVEAL_ORE', 0, 0);
+  const civ = w.society.civilizations[0];
+  assert(oreCast.ok && civ.knownDeposits && civ.knownDeposits.length > 10 && civ.knownDeposits.every(k => k.type === 'iron'),
+    'revelation of ore teaches the nearby nation where the deposits are');
+  const known = civ.knownDeposits.length;
   cast(w, 'REVEAL_ORE', 0, 0);
-  assert(revealed > 20, 'revelation of ore uses terrain.getDeposit when it exists');
+  assert(civ.knownDeposits.length === known, 'it does not record the same deposit twice');
 }
 
 section('Nature');

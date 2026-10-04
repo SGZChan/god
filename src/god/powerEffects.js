@@ -462,23 +462,24 @@ export const CASTS = {
   REVEAL_ORE(fx, x, y) {
     const t = fx.terrain;
     const r = R('REVEAL_ORE');
-    let found = 0;
-    if (typeof t.revealDeposits === 'function') {
-      found = t.revealDeposits(x, y, r) || 0;
-    } else {
-      t.applyRadialEffect(Math.floor(x), Math.floor(y), r, tile => {
-        if (typeof t.getDeposit === 'function') {
-          const d = t.getDeposit(tile.x, tile.y);
-          if (d && typeof d === 'object') { d.revealed = true; found++; }
-        } else if (tile.resource) {
-          tile.resourceRevealed = true;
-          found++;
-        }
-      });
-    }
-    // Even with no deposits to find, nearby people learn to read the ground
     const civ = civNear(fx, x, y);
-    if (civ) civ.techPoints += 40 + found * 5;
+    const found = [];
+    // Look at every deposit within the radius (peekDeposit never generates chunks)
+    const rr = Math.ceil(r);
+    for (let dy = -rr; dy <= rr; dy++) {
+      for (let dx = -rr; dx <= rr; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const d = t.peekDeposit ? t.peekDeposit(Math.floor(x) + dx, Math.floor(y) + dy) : null;
+        if (d) found.push({ type: d.type, x: Math.floor(x) + dx, y: Math.floor(y) + dy });
+      }
+    }
+    // The nation now KNOWS where these are (the society system reads civ.knownDeposits)
+    if (civ) {
+      civ.knownDeposits = civ.knownDeposits || [];
+      const seen = new Set(civ.knownDeposits.map(k => k.x + ',' + k.y));
+      for (const f of found) if (!seen.has(f.x + ',' + f.y)) civ.knownDeposits.push(f);
+      civ.techPoints += 40 + found.length * 2;
+    }
     fx.addVisual('glint', x + 0.5, y + 0.5, { radius: r, life: 4 });
     return true;
   },
