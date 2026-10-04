@@ -890,7 +890,7 @@ body, html {
 .planet-tools {
   position: absolute;
   left: 14px;
-  bottom: 104px; /* above the bottom power toolbar, which is centred and wide */
+  bottom: 176px; /* above the power palette (a tall, centred, wide panel) */
   width: 272px;
   display: flex;
   flex-direction: column;
@@ -1114,7 +1114,7 @@ body, html {
 /* narrow screens: the power toolbar wraps to two rows, so lift the tools above it */
 @media (max-width: 1150px) {
   .planet-tools {
-    bottom: 156px;
+    bottom: 232px;
   }
 }
 /* === end planet tools === */

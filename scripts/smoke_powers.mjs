@@ -144,9 +144,22 @@ for (const id of ids) {
     const fx = sim.terrain.effects;
     const power = document.querySelector(`.pp-cell[data-power="${powerId}"]`);
     power.click();
-    const dx = powerId === 'MONSTER' ? 4 : 0;
+    // an earlier power may have flooded the home tile: cast on the nearest dry land instead
+    const baseX = Math.floor(home.x) + (powerId === 'MONSTER' ? 4 : 0);
+    const baseY = Math.floor(home.y);
+    let cx = baseX;
+    let cy = baseY;
+    search: for (let r = 0; r <= 30; r++) {
+      for (let oy = -r; oy <= r; oy++) {
+        for (let ox = -r; ox <= r; ox++) {
+          if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue;
+          const t = sim.terrain.getTile(baseX + ox, baseY + oy);
+          if (!t.biome.isWater && !t.structure) { cx = baseX + ox; cy = baseY + oy; break search; }
+        }
+      }
+    }
     divine.lastPaintedTile = { x: -999, y: -999 };
-    divine.applyAt(Math.floor(home.x) + dx, Math.floor(home.y), false);
+    divine.applyAt(cx, cy, false);
     return { ok: sim.ecosystem.worldEvents.length === before + 1, message: divine.lastMessage, effects: fx.list.length, visuals: fx.visuals.length };
   }, id, info.home);
   castResults.push([id, r]);
@@ -181,7 +194,7 @@ const roundTrip = await page.evaluate(async () => {
   divine.applyAt(Math.floor(civ.capitalX) + 3, Math.floor(civ.capitalY), false);
   const before = sim.terrain.effects.list.length;
   g.saveGame({ announce: false });
-  const text = localStorage.getItem('genesis-cosmos-save-v2');
+  const text = localStorage.getItem('genesis-cosmos-save-v3');
   return { before, saved: Boolean(text), hasEffects: text && text.includes('"effects"') && text.includes('tornado') };
 });
 check(roundTrip.before === 1 && roundTrip.saved && roundTrip.hasEffects, 'the save contains the active tornado');
