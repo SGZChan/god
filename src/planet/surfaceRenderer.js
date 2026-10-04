@@ -397,10 +397,13 @@ export class SurfaceRenderer {
           if (civStyle) {
             ctx.fillStyle = civStyle.fill;
             ctx.fillRect(px, py, ts, ts);
-            // Border outline
-            ctx.strokeStyle = civStyle.stroke;
-            ctx.lineWidth = 1;
-            ctx.strokeRect(px + 0.5, py + 0.5, ts - 1, ts - 1);
+            // Border line only where the territory ends (a grid of boxes hid the town and the grass)
+            ctx.fillStyle = civStyle.stroke;
+            const t = this.terrain;
+            if (x === 0 || t.getTile(x - 1, y).civId !== tile.civId) ctx.fillRect(px, py, 1.5, ts);
+            if (x >= t.width - 1 || t.getTile(x + 1, y).civId !== tile.civId) ctx.fillRect(px + ts - 1.5, py, 1.5, ts);
+            if (y === 0 || t.getTile(x, y - 1).civId !== tile.civId) ctx.fillRect(px, py, ts, 1.5);
+            if (y >= t.height - 1 || t.getTile(x, y + 1).civId !== tile.civId) ctx.fillRect(px, py + ts - 1.5, ts, 1.5);
           }
         }
 
@@ -552,7 +555,7 @@ export class SurfaceRenderer {
     // One lookup per civ per frame (was a find() and two string concats for every owned tile)
     const civStyles = new Map();
     for (const civ of this.society.civilizations) {
-      civStyles.set(civ.id, { fill: civ.color + '38', stroke: civ.color + 'aa' });
+      civStyles.set(civ.id, { fill: civ.color + '22', stroke: civ.color + 'cc' });
     }
 
     // 1. Terrain. Zoomed out, cached chunk images are blitted (re-issuing every tile fill each frame

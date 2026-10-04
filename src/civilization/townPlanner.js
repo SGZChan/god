@@ -271,19 +271,26 @@ function pick(list) {
 // The hall stands north of the main street, its door on the street; the capital moves to that street tile.
 export function initTown(civ, terrain) {
   const town = ensureTown(civ);
-  const type = eraTier(civ) >= 3 ? 'keep' : 'hall';
-  const def = BUILDING_TYPES[type];
+  let type = eraTier(civ) >= 3 ? 'keep' : 'hall';
+  let def = BUILDING_TYPES[type];
   const tryAt = (cx, cy) => {
     const x = cx - (def.door ? def.door.x : 0);
     const y = cy - def.h;
     return terrain.canPlaceBuilding(type, x, y) ? { x, y } : null;
   };
-  let spot = tryAt(civ.capitalX, civ.capitalY);
-  for (let r = 1; r <= 8 && !spot; r++) {
-    for (let a = 0; a < 12 && !spot; a++) {
-      const ang = (a / 12) * Math.PI * 2;
-      spot = tryAt(Math.round(civ.capitalX + Math.cos(ang) * r), Math.round(civ.capitalY + Math.sin(ang) * r));
+  let spot = null;
+  // the hall first; on cramped or rugged ground a smaller keep-less hall, then a hut
+  for (const candidate of [type, 'hall', 'longhouse', 'hut']) {
+    type = candidate;
+    def = BUILDING_TYPES[type];
+    spot = tryAt(civ.capitalX, civ.capitalY);
+    for (let r = 1; r <= 12 && !spot; r++) {
+      for (let a = 0; a < 16 && !spot; a++) {
+        const ang = (a / 16) * Math.PI * 2;
+        spot = tryAt(Math.round(civ.capitalX + Math.cos(ang) * r), Math.round(civ.capitalY + Math.sin(ang) * r));
+      }
     }
+    if (spot) break;
   }
   if (!spot) { town.ready = false; return null; }
   const hall = placeAt(terrain, civ, type, spot.x, spot.y, true);

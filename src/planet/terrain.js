@@ -477,7 +477,7 @@ export class PlanetTerrain {
         }
         if (tile.structure && tile.structure.type !== 'ruins') return false;
         const d = tile.deposit;
-        if (d && d.amount > 0 && !CLEARABLE.has(d.type) && def.category !== 'extraction') return false;
+        if (d && d.amount > 0 && RESOURCES[d.type] && RESOURCES[d.type].tier >= 1 && def.category !== 'extraction') return false; // metals, coal, gems, oil: never buried
         if (tile.elevation < minE) minE = tile.elevation;
         if (tile.elevation > maxE) maxE = tile.elevation;
       }
@@ -509,7 +509,7 @@ export class PlanetTerrain {
           ox,
           oy,
           anchor: ox === 0 && oy === 0,
-          name: b.name || def.name,
+          name: (b.name || def.name) + (b.progress < 1 && b.type !== 'ruins' ? ' (under construction)' : ''),
           icon: def.icon,
           health: Math.round(b.health),
           solid: solid && !isDoor
