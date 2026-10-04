@@ -1,6 +1,6 @@
 # Genesis & Cosmos — Life-Simulation Roadmap
 
-Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world, now a finite planet: 1b), 2 (genetic life + sprites). Next: 3 (society AI).** Each sub-project below gets its own
+Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world, now a finite planet: 1b), 2 (genetic life + sprites), 3 (society: clans, jobs, economy, construction by builders, exploration). Next: 4 (beliefs and religions).** Each sub-project below gets its own
 spec → plan → build → browser-verification cycle (see `docs/superpowers/`). Earlier work (Phases 1-3) is described in
 `docs/superpowers/specs/2026-10-04-simulation-persistence-ui-design.md`.
 
@@ -44,7 +44,7 @@ Dependencies: 3 needs 1 and 2; 4 needs 3; 5 needs 3; 6 needs 3 and 4. Sub-projec
 2. **DONE - Genetic life**: genome, mating-only reproduction, recombination and mutation, automatic species clusters, and
    a procedural **sprite kit** (body/head/limbs/ears/tail/pattern/colour drawn by code into cached sprites) so every
    species is a gene-driven combination of parts. No random spawning.
-3. **Society and behaviour AI**: needs plus personality (utility) with planning, jobs (farmer, builder, hunter, gatherer,
+3. **DONE - Society and behaviour AI** (2026-10-05, see "Society" below): needs plus personality (utility) with planning, jobs (farmer, builder, hunter, gatherer,
    guard, priest, scholar...), pair bonds and families, children who grow up, clans (kin groups that split when large),
    camps that grow into towns, **construction by builders in stages**, desire-path roads, farms near water.
 4. **Beliefs and religions**: deity invention, rituals, shrines/temples built by priests, spread, schism and conflict;
@@ -108,3 +108,37 @@ depth-sorted with creatures. A house is ~60 px tall next to a 20 px creature. To
   `art/roadTiles.js`. Dev sheets: `dev/buildings.html` (`SHEET=buildings node scripts/spritesheet.mjs <url> out.png`) and the browser-free
   `node scripts/buildingsheet.mjs out.png [pal] [progress] [damage] [snow] [scale] [types]`. Browser check: `scripts/smoke_buildings.mjs`.
 - Rules of thumb: metals, coal, gems, oil and uranium deposits are never built over (mines and quarries may); stone/flint scatter and trees may be.
+
+
+## Society (sub-project 3: DONE 2026-10-05)
+
+Sapients now live in a society. A civilization is a **network of settlements** (the capital plus hamlets that clans found), each with a
+stockpile, houses, fields and a town plan. People have **jobs** assigned by what their settlement lacks, **carry goods** from the world
+into stockpiles into buildings, and **build every building themselves**. Nothing is placed for free (the old interim planner now only
+chooses sites).
+
+**Data model** (all plain JSON, saved with the civ/entity/building; helpers in `src/civilization/`)
+- `civ.settlements[]` = `{ id, civId, name, x, y, capital, stock:{item:n}, town:{cx,y0,rx,ready,cooldown}, roadQueue:[{x,y,kind}], population, adults, homeless, jobs:{}, demand:{}, need:{}, shortage:{}, blocked:{} }` (settlements.js). `civ.town` is a getter for `settlements[0].town`.
+- `civ.clans[]` = `{ id, name, color, banner:{shape,glyph}, leaderId, civId, settlementId, memberIds[], parentClanId, founded, beliefs:{} }` (clans.js). `beliefs` is an empty placeholder for the religion system; nothing in society reads or writes it. `ecosystem.worldEvents` is not touched.
+- `civ.knownDeposits[]` = `{type,x,y}` (same format the Revelation of Ore power writes), `civ.discovered[]`, `civ.explored[]` (indices of explored 16x16-tile cells), `civ.output{}` (cumulative production, gates eras), `civ.clock`, `civ.eraFloor`.
+- `entity`: `clanId, settlementId, mateId, homeId (building id), guardianId, job, task{kind,...}, inventory{item:n}, activity`.
+- `building`: `settlementId, residents[]` (housing), `growth` (fields and pens 0..1), `fails/blockedUntil` (unreachable sites).
+- `civ.food` is the aggregate of the stockpiles' food x 4 (`economy.syncFood` reconciles powers that write it; a famine deeper than the stores becomes food debt). `civ.prosperity` follows food per citizen. `civ.citizens/soldiers/techPoints/era/territory/piety` keep working. MAX_CITIZENS is only the fallback for civs without settlements; the real cap is housing (`settlements.popCap`: 8 + 1.5 x housing capacity + planned houses).
+
+**Modules**
+- `economy.js` items (the 19 resources + grain, meat, tools, pottery, bricks, cloth, bronze, iron_bar), recipes (`RECIPES`), stock/inventory helpers, food bookkeeping.
+- `settlements.js` settlement creation/queries (`depotOf`, `buildingsOf`, `housingCapacity`, `popCap`, `foodCapOf`, `findHamletSite`). The depot is the finished hall/keep (or granary) front tile, else the settlement centre. There is no separate storehouse building type: the stockpile is a property of the settlement.
+- `townPlanner.js` WHERE and WHAT to build: `initTown` (hall site + starter huts + a field; founders carry a starter kit), `foundHamlet`, `planSettlement`/`growTown`/`tickTown` (enqueue construction sites, never build; `{instant:true}` is for tests and dev tools only). Wishes follow housing, food, tier, discoveries and the next era's required buildings (buildings of the next era may be raised one era early). Plots are checked for foot reachability (rivers cut plots off). Streets are queued in `roadQueue` and paved tile by tile by builders; between settlements a road is planned with A*.
+- `jobs.js` labour market (`assignJobs`: demand by settlement needs, aptitude from proficiencies, personality, genes, age), the work of each job as a multi-step task (gather -> carry -> drop, farm/pen cycles with seasons, hunt, build = fetch -> haul -> deliverMaterial -> advanceConstruction -> pave roads, craft = fetch -> make at a station -> store, scout, scholar, trader caravans, leader; `priest` is a placeholder never assigned). `sapientOptions` feeds the utility AI in `life/entity.js`.
+- `families.js` pair bonds, households and homes (a couple + children per house, inheritance by the surviving household, evictions of the youngest when a house is overfull), orphan adoption, children fed from the stores, household conceptions.
+- `clans.js` clans, leaders, splitting at `CLAN_SPLIT_SIZE` (14): a splinter of whole households carries supplies to a new hamlet and forms a daughter clan.
+- `exploration.js` explored cells, discovery of ores by scouts, `nearestKnown`, notifications ("Valoria discovered copper").
+- `techTree.js` `ERA_REQUIREMENTS`/`eraFor`/`missingForEra`: an era needs research points AND discovered ores, finished key buildings and produced goods (bronze needs copper+tin, a kiln, a smithy and bronze made; iron needs iron+coal, a market and iron bars; ...). `ERAS`, `getEraForPoints` are unchanged. Reborn civs keep `eraFloor`.
+- `society.js` `SocietyManager.tickCiv` (1 Hz economy tick), `tickFamilies` (every 3 s), desire paths (`footstep`: 26 footsteps wear a tile into a dirt road), `splitClans`, `sendSettlers`.
+- Art: `art/creatureSprite.js` `getCreatureCanvas(traits, frame, {clanColor, tool})` draws a clan headband and sash plus a hand tool (hoe, axe, pick, hammer, mallet, spear, staff, crook, rod, basket, sack, scroll), cached by (traits, frame, clan colour, tool); the renderer also draws a coloured bundle on the back of anyone carrying goods. UI: overview shows settlements, clans, jobs, stockpile, discovered resources, explored %, the next era's needs and the season; the inspector has a Society section (job, doing, clan, settlement, home, mate, parents, children, load).
+
+**Other behaviour changes**: sapients walk on land only (A* `landOnly`); a roof reduces thermal stress (homeless feel the full cold); citizens eat from the settlement stores and graze wild plants only when starving; guards execute heretics only in theocracies (criminals as before); pair bonds are exclusive; `MAX_ENTITIES` 900 with a separate `MAX_ANIMALS` 560 so a society and nature do not crowd each other out; ruins are only reborn by nomads or the last survivors of a dying nation; smithy moved to the Bronze Age (no iron in its cost).
+
+**Verification**: tests/society_test.js (122 checks), the whole suite is green; scripts/smoke_society.mjs (browser), scripts/soak_society.mjs (headless soak, numbers below); `node scripts/run_tests.mjs` runs every test file even after a failure.
+
+**Known gaps / hooks**: no walls or palisades yet (the old ring planner is gone; walls were "later"); trade only moves goods between a civ's own settlements (a `trader` task could target a friendly civ's depot: the hook is `stepTrader`); no storehouse building type (stock is per settlement); the offscreen catch-up engine does not simulate the economy (eras advance there only if requirements are already met); settlers and scouts cannot cross rivers or seas (no bridges/boats); religion is untouched (`clan.beliefs`, the `priest` job and shrines/temples are for the next agent); the planner never builds shrines, temples, cathedrals or graveyards.

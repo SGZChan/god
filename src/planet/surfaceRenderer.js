@@ -512,6 +512,14 @@ export class SurfaceRenderer {
       ctx.arc((civ.capitalX + 0.5) * ts, (civ.capitalY + 0.5) * ts, 4.5 / zoom, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      // the hamlets of its clans
+      for (const st of civ.settlements || []) {
+        if (st.capital) continue;
+        ctx.beginPath();
+        ctx.arc((st.x + 0.5) * ts, (st.y + 0.5) * ts, 3 / zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   }
 

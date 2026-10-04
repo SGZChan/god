@@ -233,7 +233,7 @@ function wantedJobs(c, st, members, adults) {
   add('scholar', N >= 9 ? Math.ceil(N * 0.08) : 0);
   add('herder', Math.min(penSlots, Math.ceil(N * 0.08)));
   add('fisher', st.fishNear === false ? 0 : (countBuilt(terrain, st, 'dock') > 0 ? Math.ceil(N * 0.1) : (N >= 10 ? 1 : 0)));
-  add('trader', settlementsOf(civ).length >= 2 && N >= 10 ? Math.ceil(N / 25) : 0);
+  add('trader', settlementsOf(civ).length >= 2 && N >= 8 ? 1 + Math.floor(N / 20) : 0);
   return want;
 }
 
@@ -342,6 +342,14 @@ export function tickSettlement(c, st, members, dt) {
   short.ore = ['copper', 'tin', 'iron', 'coal'].some(r => isDiscovered(civ, r) && (short[r] || (st.stock[r] || 0) < 6) && countBuilt(terrain, st, 'smithy') > 0);
   short.food = eco.foodUnits(st.stock) < foodTargetOf(members.length, foodCapOf(terrain, st));
   st.shortage = short;
+  // the inputs its workshops can use right now (caravans bring what is missing)
+  const wants = {};
+  for (const rec of eco.RECIPES) {
+    if (rec.at && countBuilt(terrain, st, rec.at) === 0) continue;
+    if (rec.needs && !rec.needs.every(n => isDiscovered(civ, n))) continue;
+    for (const [k, n] of Object.entries(rec.in)) wants[k] = Math.max(wants[k] || 0, n * 3);
+  }
+  st.wants = wants;
   // how badly each raw material is needed (0 = plenty, 1 = none): stock against a working level plus what sites are missing
   const level = (res, base) => {
     const target = base + (missing[res] || 0);
@@ -908,6 +916,12 @@ function stepLeader(ent, c) {
   return true;
 }
 
+// What a settlement wants to keep in store of an item: a basic level, or more when its workshops need it as an input.
+const KEEP = { grain: 12, meat: 4, wood: 20, stone: 14, fibre: 10, clay: 8 };
+function levelOf(st, item) {
+  return Math.max(KEEP[item] || 3, (st.wants && st.wants[item]) || 0);
+}
+
 // Caravans: carry the biggest surplus to the settlement that lacks it most.
 function stepTrader(ent, c) {
   const t = taskOf(ent, 'trade');
@@ -915,7 +929,6 @@ function stepTrader(ent, c) {
   const stores = settlementsOf(civ);
   if (stores.length < 2) { ent.task = null; return false; }
   const ITEMS = ['wood', 'stone', 'fibre', 'clay', 'grain', 'meat', 'tools', 'bronze', 'iron_bar', 'iron', 'copper', 'tin', 'coal', 'pottery', 'cloth', 'bricks'];
-  const keep = { grain: 12, meat: 4, wood: 20, stone: 14, fibre: 10, clay: 8 };
   if (!t.phase) {
     let best = null;
     let bestScore = 0;
@@ -923,9 +936,10 @@ function stepTrader(ent, c) {
       for (const b of stores) {
         if (a === b) continue;
         for (const item of ITEMS) {
-          const surplus = (a.stock[item] || 0) - (keep[item] || 3) * 1.6;
-          const lack = (keep[item] || 3) - (b.stock[item] || 0);
-          const score = Math.min(surplus, lack);
+          const surplus = (a.stock[item] || 0) - levelOf(a, item) * 1.4;
+          const lack = levelOf(b, item) - (b.stock[item] || 0);
+          // what the crafts of the destination need (ores for the smithy...) is carried first
+          const score = Math.min(surplus, lack) * ((b.wants && b.wants[item]) ? 3 : 1);
           if (score > bestScore) { bestScore = score; best = { from: a.id, to: b.id, item }; }
         }
       }
@@ -941,7 +955,7 @@ function stepTrader(ent, c) {
     say(ent, `Loading ${eco.itemName(t.item).toLowerCase()} for ${to.name}`);
     if (!walkTo(ent, c, dep.x, dep.y, 2)) return true;
     const room = eco.carryCapacity(ent);
-    eco.add(ent.inventory, t.item, eco.take(from.stock, t.item, Math.min(room, Math.max(0, (from.stock[t.item] || 0) - (keep[t.item] || 3)))));
+    eco.add(ent.inventory, t.item, eco.take(from.stock, t.item, Math.min(room, Math.max(0, (from.stock[t.item] || 0) - levelOf(from, t.item)))));
     t.phase = eco.total(ent.inventory) > 0 ? 'travel' : 'done';
     return true;
   }

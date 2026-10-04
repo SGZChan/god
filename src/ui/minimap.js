@@ -131,6 +131,15 @@ export class Minimap {
         ctx.fillRect(Math.floor(t.x * kx), Math.floor(t.y * ky), 1, 1);
       }
     }
+    // hamlets founded by clans: small dots
+    for (const civ of society.civilizations) {
+      if (!civ.isAlive) continue;
+      ctx.fillStyle = civ.color;
+      for (const st of civ.settlements || []) {
+        if (st.capital) continue;
+        ctx.fillRect(Math.floor(st.x * kx) - 1, Math.floor(st.y * ky) - 1, 3, 3);
+      }
+    }
     for (const civ of society.civilizations) {
       if (!civ.isAlive) continue;
       ctx.beginPath();
