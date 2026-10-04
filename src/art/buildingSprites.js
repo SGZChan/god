@@ -44,7 +44,7 @@ function foundation(c, stage, body) {
   const { P } = c;
   const x0 = c.x0;
   const x1 = c.x1 - 1;
-  const top = c.fy1 - Math.min(c.fy1 - c.fy0 - 2, 16 + c.def.h * 3);
+  const top = c.fy1 - Math.min(c.fy1 - c.fy0 - 2, 8 + c.def.h * 2);
   const y1 = c.fy1 - 1;
   // packed earth with a stone footing that fills in
   for (let y = top; y <= y1; y++) for (let x = x0; x <= x1; x++) {

@@ -1,6 +1,7 @@
 import { ERAS, getEraForPoints } from './techTree.js';
 import { scaleChance } from '../simulation/fixedStep.js';
 import { random } from '../simulation/random.js';
+import { initTown, tickTown } from './townPlanner.js';
 
 export const INITIAL_CITIZENS = 6;
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
@@ -103,6 +104,8 @@ export class Civilization {
     if (random() < scaleChance(0.2, dt)) {
       this.expandTerritory(terrain);
     }
+    // The interim town planner builds the civ's sites and lays out new ones (see civilization/townPlanner.js)
+    tickTown(this, terrain, simDt);
 
     // Diplomacy & War checks with neighbor civilizations
     if (random() < scaleChance(0.08, dt)) {
@@ -205,40 +208,22 @@ export class Civilization {
       this.territory.push({ x: tx, y: ty });
     }
 
-    // Borders may cover any land, but buildings only go on buildable ground
-    if (!terrain.isBuildable(tx, ty)) return;
-
-    // Diverse structural building, renewal, and demolition of aging structures
-    const hasStructure = Boolean(tile.structure);
-    const isRuins = hasStructure && tile.structure.type === 'ruins';
-    const isWorn = hasStructure && typeof tile.structure.health === 'number' && tile.structure.health < 40;
-    const isRenewable = hasStructure && tile.structure.type !== 'capital';
-    const shouldRenew = isRuins || isWorn || (isRenewable && random() < 0.12);
-
-    if (!hasStructure || shouldRenew) {
-      if (hasStructure && !isRuins) {
-        terrain.spawnParticles(tx, ty, 10, '#94a3b8', 0.8);
-      }
-      const eraPrefix = (this.era && this.era.name) ? this.era.name : '';
-      const roll = random();
-      if (roll < 0.35) {
-        tile.structure = { type: 'farm', icon: '🌾', name: `${eraPrefix} Farmlands`, health: 70 };
-      } else if (roll < 0.65) {
-        tile.structure = { type: 'house', icon: '🏠', name: `${eraPrefix} Habitation Complex`, health: 100 };
-      } else if (roll < 0.82) {
-        tile.structure = { type: 'tower', icon: '🛡️', name: `${eraPrefix} Watchtower & Fort`, health: 180 };
-      } else {
-        tile.structure = { type: 'temple', icon: '🏛️', name: `${this.name} ${eraPrefix} Sanctuary`, health: 220 };
-      }
-    }
+    // Borders may cover any land. Buildings are laid out by the town planner (townPlanner.js), not one per tile;
+    // a civ without a town yet (a loaded old save, a test world) gets its hall now.
+    if (!this.town) initTown(this, terrain);
   }
 
   collapse(terrain, reason, ecosystem) {
     this.isAlive = false;
     if (this.warTarget) this.endWar(ecosystem, `${this.name} collapsed`, this.warTarget);
+    // every building of the civ falls into ruins that later nomads may find
+    for (const b of terrain.buildingsOfCiv(this.id)) {
+      terrain.removeBuilding(b.id, { ruins: true, name: `Ancient Ruins of ${this.name}`, originalTech: this.techPoints });
+      this.ruinsLeft++;
+    }
     for (const t of this.territory) {
       const tile = terrain.getTile(t.x, t.y);
-      if (tile && tile.structure) {
+      if (tile && tile.structure && tile.structure.buildingId === undefined) {
         tile.structure = {
           type: 'ruins',
           icon: '🏺',
@@ -304,7 +289,7 @@ export class SocietyManager {
             government: cData.gov,
             population: 45
           });
-          tile.structure = { type: 'capital', icon: cData.symbol, name: `${cData.name} Capital Keep`, health: 300 };
+          initTown(civ, this.terrain); // the hall, a street and a few huts; the capital moves to the hall's door
           civ.expandTerritory(this.terrain);
           this.civilizations.push(civ);
           this.spawnCitizens(civ, INITIAL_CITIZENS);
@@ -414,8 +399,8 @@ export class SocietyManager {
       this.civilizations.push(newCiv);
       nearbyHuman.civilization = newCiv;
 
-      tile.structure = { type: 'capital', icon: '🏛️', name: `${newCiv.name} Citadel`, health: 250 };
       tile.civId = newCiv.id;
+      initTown(newCiv, this.terrain); // a hall rises over the ruins
 
       this.ecosystem.notifications.unshift({
         text: `✨ Rebirth of Civilization: Nomads discovered ancient ruins and founded "${newCiv.name}"!`,

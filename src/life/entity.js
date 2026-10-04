@@ -626,7 +626,7 @@ export class Entity {
           const sy = Math.floor(this.y);
           let crowded = false;
           for (const nb of terrain.buildingsInRect(sx - 6, sy - 6, sx + 6, sy + 6)) if (nb.type === 'shrine' || nb.type === 'temple') crowded = true;
-          for (const [ox, oy] of [[1, -1], [-2, -1], [1, 1], [-2, 1]]) {
+          for (const [ox, oy] of [[0, -1], [-1, -1], [0, 0], [-1, 0]]) {
             if (crowded) break;
             const b = terrain.placeBuilding('shrine', sx + ox, sy + oy, { civId: this.civilization ? this.civilization.id : null });
             if (b) {

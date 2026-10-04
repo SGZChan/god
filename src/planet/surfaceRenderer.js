@@ -3,6 +3,7 @@ import { CHUNK_SIZE } from './terrain.js';
 import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
 import { getResourceIcon, getTreeSprite, getStumpSprite } from '../art/resourceIcons.js';
 import { getOverview, LodBlocks } from '../world/overview.js';
+import { BuildingRenderer } from '../art/buildingRenderer.js';
 
 export const MIN_ZOOM = 0.04; // zoomed all the way out you see a continent (a few thousand tiles across)
 export const MAX_ZOOM = 6.0;
@@ -46,6 +47,7 @@ export class SurfaceRenderer {
     this.layerPool = [];          // spare canvases for new chunk layers
     this.showResources = false;   // the Resources lens (key R): deposit markers on every tile
     this.onLensChange = null;
+    this.buildingRenderer = new BuildingRenderer(terrain, society); // big sprites + roads, see art/buildingRenderer.js
     this.lod = new LodBlocks(terrain); // low-resolution blocks for far zoom (no chunks are generated for them)
 
     this.initCanvasSize();
@@ -402,7 +404,9 @@ export class SurfaceRenderer {
           }
         }
 
-        if (tile.structure || tile.deposit) standing.push(tile);
+        if (tile.road) this.buildingRenderer.drawRoad(ctx, tile, px, py, ts);
+
+        if ((tile.structure && tile.structure.buildingId === undefined) || tile.deposit) standing.push(tile);
       }
     }
 
@@ -411,7 +415,7 @@ export class SurfaceRenderer {
       const px = tile.x * ts;
       const py = tile.y * ts;
       // 2. Render Minecraft-Style Top-Down Detailed Buildings
-      if (tile.structure) {
+      if (tile.structure && tile.structure.buildingId === undefined) {
         this.renderStructure(ctx, tile.structure, px, py, ts, isZoomedIn);
         continue;
       }
@@ -574,7 +578,15 @@ export class SurfaceRenderer {
 
     // 3. Draw Living & Recently Fallen Entities
     const dots = pxPerTile < 1.5; // far away a creature is just a dot
-    for (const ent of this.ecosystem.entities) {
+    // Buildings and creatures share one depth order: a creature behind a building is hidden by it
+    const br = this.buildingRenderer;
+    if (!farView) br.begin(ctx, { minX: minTileX, maxX: maxTileX, minY: minTileY, maxY: maxTileY }, ts, this.camera.zoom, this.waterAnimTime);
+    const ents = this._sortedEnts || (this._sortedEnts = []);
+    ents.length = 0;
+    for (const e of this.ecosystem.entities) ents.push(e);
+    if (!dots) ents.sort((p, q) => p.y - q.y);
+    for (const ent of ents) {
+      if (!farView && !dots) br.drawUpTo(ent.y);
       const px = ent.x * ts;
       const py = ent.y * ts;
 
@@ -675,6 +687,8 @@ export class SurfaceRenderer {
         ctx.shadowBlur = 0;
       }
     }
+
+    if (!farView) br.flush();
 
     if (effects) {
       drawStatusFx(ctx, this.ecosystem.entities, ts, this.waterAnimTime, fxView);

@@ -430,7 +430,10 @@ export const CASTS = {
       if (tile.biome.isWater) return;
       tile.flora = 100;
       tile.moisture = Math.min(1, tile.moisture + 0.04);
-      if (tile.structure && tile.structure.type === 'farm' && tile.structure.buildingId !== undefined && tile.structure.anchor) fx.terrain.repairBuilding(tile.structure.buildingId, 40);
+      if (tile.structure && tile.structure.type === 'farm') {
+        if (tile.structure.buildingId === undefined) tile.structure.health = Math.min(150, (tile.structure.health || 70) + 40);
+        else if (tile.structure.anchor) fx.terrain.repairBuilding(tile.structure.buildingId, 40);
+      }
     });
     for (const civ of civsIn(fx, x, y, r)) civ.food = Math.min(FOOD_CAP, civ.food + 140);
     for (const e of livingNear(fx, x, y, r)) e.hunger = Math.max(0, e.hunger - 45);
