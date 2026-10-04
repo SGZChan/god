@@ -214,7 +214,7 @@
       "layaEngine": {
         "file": "src/ai/layaEngine.js",
         "name": "Laya AI Engine",
-        "description": "Deterministic structured cognitive evaluation matrix for Champions and Leaders.",
+        "description": "Champion mind adapted from the Laya AI command center (github.com/aayushch/laya): ingest -> rules -> router -> persona workers -> stager -> emit -> executor -> learn -> omni, producing Action Cards the player approves or dismisses.",
         "matrixScores": {
           "piety": "Calculated from personality piety, proximity to temples, and divine miracles witnessed.",
           "heroism": "Calculated from warfare talent, low neuroticism, and presence of enemies.",

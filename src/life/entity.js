@@ -80,7 +80,7 @@ export class Entity {
     };
 
     // Vitals
-    this.maxHealth = 60 + this.stats.sizeScale * 40;
+    this.maxHealth = (60 + this.stats.sizeScale * 40) * (this.isSpecialIndividual ? 3 : 1); // champions are divinely hardy
     this.health = this.maxHealth;
     this.energy = 100;
     this.hunger = config.hunger !== undefined ? config.hunger : random() * 25;
@@ -578,8 +578,9 @@ export class Entity {
     // 1. WARFARE: If Soldier and nation is at War, engage enemy soldiers!
     if (this.role === 'SOLDIER' && this.civilization && this.civilization.warTarget) {
       const enemyCivId = this.civilization.warTarget.id;
+      // Champions are sacred to every side: soldiers fight each other's people, never the god's chosen
       const enemy = this.findNearestEntity(worldContext.entities, e =>
-        e.alive && e.civilization && e.civilization.id === enemyCivId
+        e.alive && !e.isSpecialIndividual && e.civilization && e.civilization.id === enemyCivId
       );
 
       if (enemy) {
@@ -617,13 +618,26 @@ export class Entity {
     return false;
   }
 
-  // --- LAYA AI WITH ATHEISM & FAITH (champions) ---
+  // --- LAYA AI (champions): carries out the Action Card the Laya pipeline picked (src/ai/layaEngine.js) ---
   executeLayaAI(worldContext) {
     const decision = layaEngine.evaluate(this, worldContext);
     this.lastLayaDecision = decision;
 
     const terrain = worldContext.terrain;
     const tile = terrain.getTile(Math.floor(this.x), Math.floor(this.y));
+    const state = this.laya || null;
+    const stats = state ? state.stats : {};
+    const civ = this.civilization;
+    const nearbyPeople = (radius) => (worldContext.grid ? worldContext.grid.within(this.x, this.y, radius) : worldContext.entities)
+      .filter(e => e.alive && e !== this && e.isSapient && (!civ || e.civilization === civ) && Math.hypot(e.x - this.x, e.y - this.y) <= radius);
+    if (state && decision.title) {
+      state.recent.unshift(decision.title);
+      if (state.recent.length > 6) state.recent.length = 6;
+      stats.acts = (stats.acts || 0) + 1;
+    }
+    // Walk towards the place the card is about
+    const card = decision.card;
+    if (card && Math.hypot(card.x - this.x, card.y - this.y) > 2) this.requestPath(card.x, card.y, worldContext.pathfinder);
 
     // Handle Atheist rebellion vs Devout building
     if (this.belief.status === 'ATHEIST_HERETIC' && random() < 0.3) {
@@ -645,11 +659,12 @@ export class Entity {
           for (const nb of terrain.buildingsInRect(sx - 6, sy - 6, sx + 6, sy + 6)) if (nb.type === 'shrine' || nb.type === 'temple') crowded = true;
           for (const [ox, oy] of [[0, -1], [-1, -1], [0, 0], [-1, 0]]) {
             if (crowded) break;
-            const b = terrain.placeBuilding('shrine', sx + ox, sy + oy, { civId: this.civilization ? this.civilization.id : null });
+            const b = terrain.placeBuilding('shrine', sx + ox, sy + oy, { civId: civ ? civ.id : null });
             if (b) {
               b.name = `${this.name}'s Holy Shrine`;
               terrain.syncBuildingTiles(b);
               terrain.spawnParticles(this.x, this.y, 25, '#ffd700', 1.2);
+              stats.shrines = (stats.shrines || 0) + 1;
               break;
             }
           }
@@ -659,7 +674,79 @@ export class Entity {
       case 'CommuneWithGod':
         terrain.spawnParticles(this.x, this.y, 16, '#00ffff', 1.5);
         this.energy = 100;
-        this.health = Math.min(this.maxHealth, this.health + 20);
+        this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.25);
+        break;
+
+      case 'RepelThreat': {
+        const foe = card && card.targetId && worldContext.ecosystem ? worldContext.ecosystem.byId.get(card.targetId) : null;
+        if (foe && foe.alive) {
+          if (Math.hypot(foe.x - this.x, foe.y - this.y) <= 2.5) {
+            foe.health -= 25 + this.proficiencies.warfare / 4;
+            terrain.spawnParticles(foe.x, foe.y, 14, '#f97316', 1.2);
+            if (foe.health <= 0) {
+              foe.die(`Slain by the champion ${this.name}`);
+              stats.threats = (stats.threats || 0) + 1;
+            }
+          } else {
+            this.requestPath(foe.x, foe.y, worldContext.pathfinder);
+          }
+        }
+        break;
+      }
+
+      case 'ProclaimDivineProphecy': {
+        terrain.spawnParticles(this.x, this.y, 18, '#fde68a', 1.6);
+        for (const e of nearbyPeople(6)) {
+          const before = e.belief.status;
+          e.personality.piety = Math.min(1, e.personality.piety + 0.05 * (0.5 + this.personality.extraversion));
+          e.belief = e.determineBelief();
+          if (before !== 'DEVOUT_BELIEVER' && e.belief.status === 'DEVOUT_BELIEVER') stats.converts = (stats.converts || 0) + 1;
+        }
+        if (civ) civ.piety = Math.min(100, civ.piety + 1);
+        break;
+      }
+
+      case 'TendThePeople': {
+        let helped = 0;
+        for (const e of nearbyPeople(5)) {
+          if (e.hunger <= 40 && e.health >= e.maxHealth * 0.8) continue;
+          e.health = Math.min(e.maxHealth, e.health + 15);
+          e.hunger = Math.max(0, e.hunger - 15);
+          helped++;
+        }
+        if (helped) terrain.spawnParticles(this.x, this.y, 12, '#86efac', 1.2);
+        stats.healed = (stats.healed || 0) + helped;
+        break;
+      }
+
+      case 'SeekPeace':
+        if (civ && civ.warTarget) {
+          // A skilled envoy may end the war; otherwise the talks at least calm the people
+          if (civ.warTimer > 30 && random() < this.proficiencies.statesmanship / 250) {
+            civ.endWar(worldContext.ecosystem, `${this.name}, ${this.epithet}, brokered peace`, null);
+            stats.peace = (stats.peace || 0) + 1;
+          } else {
+            civ.unrest = Math.max(0, civ.unrest - 0.05);
+          }
+        }
+        break;
+
+      case 'Eat':
+        // From the people's stores when there is a civilization, otherwise whatever the land offers
+        if (civ && civ.food >= 2) civ.food -= 2;
+        this.hunger = Math.max(0, this.hunger - 60);
+        break;
+
+      case 'GatherProvisions':
+        if (civ) {
+          const gathered = 4 + this.proficiencies.farming / 12;
+          civ.food += gathered; // economy.syncFood moves this into the capital's stockpile
+          stats.food = (stats.food || 0) + gathered;
+        }
+        break;
+
+      case 'PonderCosmicMysteries':
+        if (civ) civ.techPoints += 0.5 + this.proficiencies.science / 100;
         break;
 
       default: {

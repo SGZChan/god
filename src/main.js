@@ -435,11 +435,19 @@ class GameApp {
     bindGodMenu();
 
     // Camera follow entity callback from inspector
+    // The follow button toggles: follow this creature, or let the camera go again
+    this.inspector.getFollowing = () => (this.activeSim ? this.activeSim.renderer.followingEntity : null);
     this.inspector.onFollowEntity = (ent) => {
-      if (this.activeSim) {
-        this.activeSim.renderer.followEntity(ent);
-        this.notifications.push(`🎯 Camera locked onto ${ent.name}!`);
+      if (!this.activeSim) return;
+      const renderer = this.activeSim.renderer;
+      if (renderer.followingEntity === ent) {
+        renderer.followEntity(null);
+        this.notifications.push(`Camera released.`, 'info', true);
+      } else {
+        renderer.followEntity(ent);
+        this.notifications.push(`🎯 Following ${ent.name}. Drag the map or press W/A/S/D to stop.`, 'info', true);
       }
+      this.inspector.render();
     };
 
     // Surface Navigation D-Pad Controls

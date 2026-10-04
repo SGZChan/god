@@ -7,6 +7,7 @@ import { getSettlement } from '../civilization/settlements.js';
 import { getClan } from '../civilization/clans.js';
 import { familyOf } from '../civilization/families.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
+import { PERSONAS, approveCard, dismissCard, omni, layaState } from '../ai/layaEngine.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -35,6 +36,13 @@ export class InspectorPanel {
         this.clear();
       } else if (e.target.closest('#btn-follow-entity')) {
         if (this.targetType === 'entity' && this.currentTarget && this.onFollowEntity) this.onFollowEntity(this.currentTarget);
+      } else if (e.target.closest('[data-laya-act]')) {
+        // The god's verdict on a champion's Action Card (Laya's approve / dismiss)
+        const btn = e.target.closest('[data-laya-act]');
+        if (this.targetType !== 'entity' || !this.currentTarget) return;
+        if (btn.dataset.layaAct === 'approve') approveCard(this.currentTarget, btn.dataset.card);
+        else dismissCard(this.currentTarget, btn.dataset.card);
+        this.render();
       }
     });
     document.addEventListener('keydown', (e) => {
@@ -101,6 +109,49 @@ export class InspectorPanel {
 
   }
 
+  // Laya AI panel: Omni summary, open Action Cards (approve / dismiss), learned persona trust, ratings
+  layaHTML(ent, laya) {
+    const state = layaState(ent);
+    const o = omni(ent);
+    const pri = ['P0 urgent', 'P1 high', 'P2', 'P3 low'];
+    const cards = state.cards.map(c => `
+      <div class="laya-card${c.approved ? ' approved' : ''}">
+        <div class="laya-card-head">
+          <span class="laya-persona">${PERSONAS[c.persona].icon} ${PERSONAS[c.persona].name}</span>
+          <span class="laya-pri p${c.priority}">${pri[c.priority]}</span>
+        </div>
+        <div class="laya-card-title">${esc(c.title)}</div>
+        <div class="laya-card-reason">${esc(c.reason)}</div>
+        <div class="laya-card-actions">
+          ${c.approved ? '<span class="laya-approved">✓ Approved — acting next</span>' : `<button class="laya-btn approve" data-laya-act="approve" data-card="${esc(c.id)}">✓ Approve</button>`}
+          <button class="laya-btn dismiss" data-laya-act="dismiss" data-card="${esc(c.id)}">✕ Dismiss</button>
+        </div>
+      </div>`).join('');
+    const trust = Object.entries(PERSONAS).map(([id, info]) => `
+      <div class="trait-row" title="${info.name} (Laya's ${info.from} persona)"><span>${info.icon} ${info.name}:</span><div class="trait-bar"><div style="width: ${Math.min(100, (state.weights[id] || 1) / 2 * 100)}%"></div></div></div>`).join('');
+    return `
+          <div class="laya-section">
+            <div class="section-title">✦ Laya AI</div>
+            <div class="laya-omni">
+              <div><span class="laya-omni-label">Attention</span>${esc(o.attention)}</div>
+              <div><span class="laya-omni-label">Recent</span>${o.recent.length ? o.recent.map(esc).join(' → ') : '—'}</div>
+              <div><span class="laya-omni-label">Milestones</span>${esc(o.milestones)}</div>
+            </div>
+            ${laya ? `<div class="laya-choice-box"><div class="choice-title">Now: <span class="highlight">${esc(laya.title || laya.action)}</span></div><div class="choice-reason">"${esc(laya.reason)}"</div></div>` : ''}
+            <div class="judgment-header">Action Cards — approve to make it act sooner, dismiss to teach it</div>
+            ${cards || '<div class="laya-empty">No open cards.</div>'}
+            <div class="judgment-header" style="margin-top: 8px;">Learned trust per persona</div>
+            ${trust}
+            ${laya && laya.scores ? `
+            <div class="laya-scores-grid" style="margin-top: 8px;">
+              <div class="score-card"><span class="score-label">Piety</span><span class="score-number">${Math.floor(laya.scores.piety * 100)}%</span></div>
+              <div class="score-card"><span class="score-label">Heroism</span><span class="score-number">${Math.floor(laya.scores.heroism * 100)}%</span></div>
+              <div class="score-card"><span class="score-label">Leadership</span><span class="score-number">${Math.floor(laya.scores.leadership * 100)}%</span></div>
+            </div>` : ''}
+          </div>
+`;
+  }
+
   renderEntity(ent) {
     const isAnimal = !ent.isSapient;
     const isLaya = ent.aiSystem === 'LAYA';
@@ -108,6 +159,7 @@ export class InspectorPanel {
     const laya = ent.lastLayaDecision;
     const belief = ent.belief || { label: 'Secular Skeptic', symbol: '⚖️', status: 'SECULAR_SKEPTIC', desc: 'Focuses on mortal crafts.' };
     const maxAge = Math.round(ent.maxAge);
+    const healthPct = Math.max(0, Math.min(100, Math.floor(ent.health / (ent.maxHealth || 100) * 100)));
     const agePercent = Math.min(100, (ent.age / ent.maxAge) * 100);
     const ageBarColor = agePercent > 80 ? '#ef4444' : agePercent > 60 ? '#f59e0b' : '#22c55e';
 
@@ -153,13 +205,17 @@ export class InspectorPanel {
           </div>
         `}
 
+        ${isLaya ? `
+          ${this.layaHTML(ent, laya)}
+        ` : ''}
+
         ${this.societyHTML(ent)}
 
         <!-- Follow Camera Action -->
         ${ent.alive ? `
         <div style="margin-bottom: 10px;">
           <button id="btn-follow-entity" class="btn-focus-primary" style="width: 100%; padding: 7px 12px; font-size: 0.78rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            🎯 Track &amp; Follow Creature Camera
+            ${this.getFollowing && this.getFollowing() === ent ? '⏹ Stop following' : '🎯 Track &amp; Follow Creature Camera'}
           </button>
         </div>` : ''}
 
@@ -176,8 +232,8 @@ export class InspectorPanel {
         <div class="vitals-row">
           <div class="vital-item">
             <span class="vital-label">Health</span>
-            <div class="bar-container"><div class="bar-fill health-bar" style="width: ${Math.max(0, ent.health)}%"></div></div>
-            <span class="vital-val">${Math.floor(ent.health)}%</span>
+            <div class="bar-container"><div class="bar-fill health-bar" style="width: ${healthPct}%"></div></div>
+            <span class="vital-val">${healthPct}%</span>
           </div>
           <div class="vital-item">
             <span class="vital-label">Energy</span>
@@ -217,29 +273,6 @@ export class InspectorPanel {
             .map(([label, gene]) => `<div class="trait-row"><span>${label}:</span><div class="trait-bar"><div style="width: ${ent.traits[gene] * 100}%"></div></div></div>`).join('')}
         </div>
 
-        ${isLaya && laya ? `
-          <!-- LAYA AI: intent, ratings and judgments of the last decision -->
-          <div class="laya-section">
-            <div class="section-title">✦ Laya AI Decision</div>
-            <div class="laya-choice-box">
-              <div class="choice-title">Intent: <span class="highlight">${laya.action}</span></div>
-              <div class="choice-reason">"${laya.reason}"</div>
-            </div>
-            <div class="laya-scores-grid">
-              <div class="score-card"><span class="score-label">Piety</span><span class="score-number">${Math.floor(laya.scores.piety * 100)}%</span></div>
-              <div class="score-card"><span class="score-label">Heroism</span><span class="score-number">${Math.floor(laya.scores.heroism * 100)}%</span></div>
-              <div class="score-card"><span class="score-label">Leadership</span><span class="score-number">${Math.floor(laya.scores.leadership * 100)}%</span></div>
-            </div>
-            <div class="laya-judgment-box">
-              <div class="judgment-header">Judgments:</div>
-              <div class="judgment-tags">
-                <span class="judgment-tag ${laya.judgments.willDefyMortalKing ? 'active' : ''}">Defy Mortal King: ${laya.judgments.willDefyMortalKing ? 'YES' : 'NO'}</span>
-                <span class="judgment-tag ${laya.judgments.readyForSelfSacrifice ? 'active' : ''}">Self-Sacrifice: ${laya.judgments.readyForSelfSacrifice ? 'YES' : 'NO'}</span>
-                <span class="judgment-tag ${laya.judgments.hasReceivedDivineVision ? 'active' : ''}">Divine Vision: ${laya.judgments.hasReceivedDivineVision ? 'YES' : 'NO'}</span>
-              </div>
-            </div>
-          </div>
-        ` : ''}
 
         ${!isAnimal && p ? `
           <div class="personality-section">

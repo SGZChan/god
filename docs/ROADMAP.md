@@ -148,3 +148,9 @@ chooses sites).
   only flashes when the power changes, and every window closes with Esc or a backdrop click. The inspector no longer loses
   clicks on its close button while it redraws. Workshop rebuilt (src/workshop/creator.js): sprite previews, talents,
   founders count, gene-driven look; champions use Laya AI (src/ai/layaEngine.js, formerly JEV; old saves are migrated).
+- Laya AI (2026-10-04): champions run a deterministic port of the Laya pipeline (github.com/aayushch/laya, Apache-2.0):
+  world events and conditions near the champion become routed Action Cards (personas Builder/Herald/Warden/Envoy/Elder/
+  Keeper = Laya's Engineer/Comms/Ops/Sales/HR/Finance), the player approves or dismisses them in the inspector, persona
+  trust learns from those choices, and an Omni summary shows Attention/Recent/Milestones. Champions are sacred to soldiers,
+  have triple health, eat and pray when needed. Tests: tests/laya_test.js. Follow button toggles and no longer leaks
+  clicks to the map.

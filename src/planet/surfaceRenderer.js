@@ -164,6 +164,7 @@ export class SurfaceRenderer {
       if (!this.enabled) return;
       this.mouseDownPos = { x: e.clientX, y: e.clientY };
       this.dragDistance = 0;
+      this.pressedOnMap = true;
 
       const isPaintPower = this.currentPower && 
         this.currentPower.isDraggable && 
@@ -204,6 +205,10 @@ export class SurfaceRenderer {
     this.listen(window, 'mouseup', (e) => {
       if (!this.enabled) return;
       const dragDist = this.dragDistance;
+      // mouseup is heard on the whole window: a press that began on a panel or button (the inspector's
+      // Follow button, the power bar...) must not also click the map tile underneath it
+      const pressedOnMap = this.pressedOnMap;
+      this.pressedOnMap = false;
       this.isPanning = false;
       this.isPainting = false;
 
@@ -213,7 +218,7 @@ export class SurfaceRenderer {
       }
 
       // If user performed a click (drag distance < 10px) with Left Mouse Button
-      if (e.button === 0 && dragDist < 10 && this.onTileClicked) {
+      if (e.button === 0 && pressedOnMap && dragDist < 10 && this.onTileClicked) {
         this.onTileClicked(e.clientX, e.clientY);
       }
     });
@@ -252,7 +257,8 @@ export class SurfaceRenderer {
     }
 
     // Smooth camera entity tracking
-    if (this.followingEntity && this.followingEntity.alive) {
+    if (this.followingEntity && !this.followingEntity.alive) this.followingEntity = null;
+    if (this.followingEntity) {
       const targetScreenX = (this.canvas.width / 2) - (this.followingEntity.x * this.tileSize * this.camera.zoom);
       const targetScreenY = (this.canvas.height / 2) - (this.followingEntity.y * this.tileSize * this.camera.zoom);
       this.camera.x += (targetScreenX - this.camera.x) * Math.min(1.0, 9 * dt);

@@ -2590,3 +2590,56 @@ body.panels-hidden #surface-nav-controls {
 /* Same height on every tab, so switching tabs does not make the window jump */
 .modal-content.workshop { height: min(800px, 92vh); }
 .modal-content.workshop .ws-body { flex: 1; }
+
+/* Laya AI: Omni summary and Action Cards in the inspector */
+.laya-omni {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.laya-omni-label {
+  display: inline-block;
+  width: 72px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.laya-card {
+  margin-bottom: 6px;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+}
+
+.laya-card.approved { border-color: rgba(34, 197, 94, 0.55); }
+.laya-card-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; color: var(--text-muted); }
+.laya-persona { font-weight: 700; }
+.laya-pri { padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
+.laya-pri.p0 { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+.laya-pri.p1 { background: rgba(245, 158, 11, 0.22); color: #fcd34d; }
+.laya-card-title { margin-top: 3px; font-size: 0.8rem; font-weight: 600; color: #fff; }
+.laya-card-reason { font-size: 0.72rem; color: var(--text-secondary); }
+.laya-card-actions { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+
+.laya-btn {
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-glass);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.laya-btn.approve { border-color: rgba(34, 197, 94, 0.5); color: #86efac; }
+.laya-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.laya-approved { font-size: 0.72rem; color: #86efac; }
+.laya-empty { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 6px; }
