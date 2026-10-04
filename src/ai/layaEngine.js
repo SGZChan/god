@@ -236,6 +236,42 @@ export function approveCard(entity, cardId) {
   return true;
 }
 
+// Decrees: orders the god gives directly. Each becomes an approved Action Card, so it is carried out next.
+export const DECREES = {
+  shrine: { persona: 'builder', action: 'ErectHolySanctuary', title: 'Raise a shrine (decree)' },
+  preach: { persona: 'herald', action: 'ProclaimDivineProphecy', title: 'Preach to the people (decree)' },
+  tend: { persona: 'elder', action: 'TendThePeople', title: 'Tend the hungry and hurt (decree)' },
+  peace: { persona: 'envoy', action: 'SeekPeace', title: 'Seek peace (decree)' },
+  gather: { persona: 'keeper', action: 'GatherProvisions', title: 'Gather provisions (decree)' },
+  pray: { persona: 'herald', action: 'CommuneWithGod', title: 'Commune with me (decree)' }
+};
+
+export function issueDecree(entity, decreeId) {
+  const decree = DECREES[decreeId];
+  if (!decree) return null;
+  const state = layaState(entity);
+  const card = {
+    id: `d${state.seq}_${decreeId}_${state.cards.length}`,
+    key: `decree:${decreeId}:${state.seq}`,
+    persona: decree.persona,
+    priority: 0,
+    action: decree.action,
+    title: decree.title,
+    reason: 'Ordered by the Creator',
+    x: entity.x,
+    y: entity.y,
+    targetId: null,
+    createdAt: state.seq,
+    approved: true,
+    score: 99
+  };
+  state.cards = state.cards.filter(c => !c.key.startsWith(`decree:${decreeId}:`));
+  state.cards.unshift(card);
+  if (state.cards.length > MAX_OPEN_CARDS) state.cards.length = MAX_OPEN_CARDS;
+  state.stats.decrees = (state.stats.decrees || 0) + 1;
+  return card;
+}
+
 export function dismissCard(entity, cardId) {
   const state = layaState(entity);
   const i = state.cards.findIndex(c => c.id === cardId);

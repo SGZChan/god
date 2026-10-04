@@ -2643,3 +2643,4 @@ body.panels-hidden #surface-nav-controls {
 .laya-btn:hover { background: rgba(255, 255, 255, 0.14); }
 .laya-approved { font-size: 0.72rem; color: #86efac; }
 .laya-empty { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 6px; }
+.laya-decrees { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }

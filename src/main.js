@@ -516,6 +516,17 @@ class GameApp {
     if (this.currentView === 'SURFACE' && !this.overview.isCollapsed) {
       this.overview.render(summarizeWorld(sim), sim.eventLog.slice(0, 6));
     }
+    this.fitOverview();
+  }
+
+  // The overview (top left) ends above the planet tools (bottom left), whatever their current height
+  fitOverview() {
+    const panel = document.getElementById('overview-panel');
+    const tools = document.getElementById('planet-tools');
+    if (this.currentView !== 'SURFACE' || !this.panelsShown || !panel || !tools) return;
+    const toolsTop = tools.getBoundingClientRect().top;
+    const room = Math.floor(toolsTop - panel.getBoundingClientRect().top - 10);
+    if (room > 0 && toolsTop > 0) panel.style.maxHeight = `${Math.max(44, room)}px`;
   }
 
   initOverview() {

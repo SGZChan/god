@@ -7,7 +7,7 @@ import { getSettlement } from '../civilization/settlements.js';
 import { getClan } from '../civilization/clans.js';
 import { familyOf } from '../civilization/families.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
-import { PERSONAS, approveCard, dismissCard, omni, layaState } from '../ai/layaEngine.js';
+import { PERSONAS, DECREES, approveCard, dismissCard, issueDecree, omni, layaState } from '../ai/layaEngine.js';
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -36,6 +36,9 @@ export class InspectorPanel {
         this.clear();
       } else if (e.target.closest('#btn-follow-entity')) {
         if (this.targetType === 'entity' && this.currentTarget && this.onFollowEntity) this.onFollowEntity(this.currentTarget);
+      } else if (e.target.closest('[data-decree]')) {
+        if (this.targetType === 'entity' && this.currentTarget) issueDecree(this.currentTarget, e.target.closest('[data-decree]').dataset.decree);
+        this.render();
       } else if (e.target.closest('[data-laya-act]')) {
         // The god's verdict on a champion's Action Card (Laya's approve / dismiss)
         const btn = e.target.closest('[data-laya-act]');
@@ -138,6 +141,10 @@ export class InspectorPanel {
               <div><span class="laya-omni-label">Milestones</span>${esc(o.milestones)}</div>
             </div>
             ${laya ? `<div class="laya-choice-box"><div class="choice-title">Now: <span class="highlight">${esc(laya.title || laya.action)}</span></div><div class="choice-reason">"${esc(laya.reason)}"</div></div>` : ''}
+            <div class="judgment-header">Decree — order the champion directly</div>
+            <div class="laya-decrees">
+              ${Object.entries(DECREES).map(([id, d]) => `<button class="laya-btn" data-decree="${id}" title="${esc(d.title)}">${PERSONAS[d.persona].icon} ${esc(d.title.replace(' (decree)', ''))}</button>`).join('')}
+            </div>
             <div class="judgment-header">Action Cards — approve to make it act sooner, dismiss to teach it</div>
             ${cards || '<div class="laya-empty">No open cards.</div>'}
             <div class="judgment-header" style="margin-top: 8px;">Learned trust per persona</div>

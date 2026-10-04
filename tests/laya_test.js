@@ -1,6 +1,6 @@
 // Laya AI (src/ai/layaEngine.js): the champion's ingest -> route -> stage -> emit -> execute -> learn pipeline.
 import { assert, section, summary, addCiv, addHuman, emptyWorld } from './helpers.js';
-import { layaEngine, layaState, ingest, route, approveCard, dismissCard, omni, MAX_OPEN_CARDS, AUTONOMY_DELAY } from '../src/ai/layaEngine.js';
+import { layaEngine, layaState, ingest, route, approveCard, dismissCard, issueDecree, omni, MAX_OPEN_CARDS, AUTONOMY_DELAY } from '../src/ai/layaEngine.js';
 import { pushWorldEvent } from '../src/god/events.js';
 import { serializeGame, restoreSim } from '../src/persistence/saveGame.js';
 
@@ -109,6 +109,15 @@ section('Self-care: a hungry champion eats, a wounded one prays');
   const before = champ.health;
   champ.executeLayaAI(ctx());
   assert(champ.health > before, 'the wounded champion prayed and recovered');
+}
+
+section('Decrees: a direct order is carried out next');
+{
+  const { champ, ctx } = champion();
+  layaEngine.evaluate(champ, ctx());
+  issueDecree(champ, 'gather');
+  const d = layaEngine.evaluate(champ, ctx());
+  assert(d.action === 'GatherProvisions', `the decree is the next act (${d.action})`);
 }
 
 section('Save and load keep the Laya state');
