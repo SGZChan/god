@@ -231,7 +231,8 @@ function wantedJobs(c, st, members, adults) {
   add('hauler', sites.length >= 2 && N >= 8 ? Math.floor(N / 8) : 0);
   const stations = countBuilt(terrain, st, 'workshop') + countBuilt(terrain, st, 'kiln') + countBuilt(terrain, st, 'smithy');
   add('crafter', Math.min(stations + 1, Math.ceil(N * 0.14)));
-  add('scout', N >= 6 ? Math.min(3, Math.ceil(N / 14)) : 0);
+  // peoples want to know their world: scouts from the start, more as they grow (expansion.js uses what they find)
+  add('scout', N >= 4 ? Math.min(5, 1 + Math.ceil(N / 10)) : 0);
   add('scholar', N >= 9 ? Math.ceil(N * 0.08) : 0);
   add('herder', Math.min(penSlots, Math.ceil(N * 0.08)));
   add('fisher', st.fishNear === false ? 0 : (countBuilt(terrain, st, 'dock') > 0 ? Math.ceil(N * 0.1) : (N >= 10 ? 1 : 0)));

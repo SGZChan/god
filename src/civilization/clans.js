@@ -10,7 +10,7 @@
 import { random } from '../simulation/random.js';
 import { makeName } from '../life/names.js';
 
-export const CLAN_SPLIT_SIZE = 14;
+export const CLAN_SPLIT_SIZE = 10;
 export const CLAN_COLORS = ['#e11d48', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#6366f1', '#a855f7', '#ec4899', '#84cc16', '#f43f5e', '#0ea5e9'];
 
 function nextSeq(civ, key) {

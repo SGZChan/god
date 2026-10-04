@@ -258,7 +258,10 @@ class GameApp {
       if (other.society.civilizations.some(c => c.isAlive && c.colonyOf === ship.civ.name)) settledBy.add(id);
     }
     const candidates = this.allPlanets().filter(p => p.id !== origin && !settledBy.has(p.id) && !(p.config.isConsumed));
-    const score = p => (p.systemId === here ? 0 : 100) + (p.config.hasAtmosphere ? 0 : 10) + (p.config.isPopulated ? 3 : 0) + Math.random();
+    // worlds whose kind usually holds what the people lack come first (a ship that came for uranium seeks volcanic rock)
+    const LIKELY = { uranium: ['volcanic', 'alien'], oil: ['desert', 'terrestrial'], iron: ['volcanic', 'desert'], coal: ['terrestrial', 'ice'], gold: ['volcanic', 'desert'], copper: ['volcanic', 'desert'], tin: ['ice', 'volcanic'] };
+    const fits = p => ship.purpose && (LIKELY[ship.purpose] || []).includes(p.config.type);
+    const score = p => (p.systemId === here ? 0 : 100) + (p.config.hasAtmosphere ? 0 : 10) + (p.config.isPopulated ? 3 : 0) - (fits(p) ? 8 : 0) + Math.random();
     candidates.sort((a, b) => score(a) - score(b));
     const target = candidates[0];
     if (!target) return;
@@ -274,7 +277,7 @@ class GameApp {
       arriveAge: this.cosmicTimeAge + (sameSystem ? 0.008 : 0.05) // about 8 or 50 years
     };
     this.voyages.push(voyage);
-    this.logTo(sim, `🚀 The ship of ${ship.civ.name} heads for ${target.name}${sameSystem ? '' : ' in another star system'}.`);
+    this.logTo(sim, `🚀 The ship of ${ship.civ.name} heads for ${target.name}${sameSystem ? '' : ' in another star system'}${ship.purpose ? ` in search of ${ship.purpose}` : ''}.`);
   }
 
   // A ship arrives: found the colony now, or when the target planet's simulation is next created

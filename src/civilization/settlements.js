@@ -168,6 +168,8 @@ export function findHamletSite(terrain, civ, from, allCivs, isExplored, comforta
       if (t.deposit && t.deposit.type === 'wood') trees++;
     }
     score += (water ? 2 : 0) + Math.min(3, trees * 0.6);
+    // near deposits the people know they need (stone, clay, ores), see expansion.js wantedResources
+    if (civ.wanted) for (const k of civ.knownDeposits || []) if (civ.wanted.has(k.type) && Math.hypot(k.x - land.x, k.y - land.y) < 14) score += 3;
     cands.push({ x: land.x, y: land.y, score });
   }
   // the best few must be reachable on foot from the parent (no rivers or seas in between)

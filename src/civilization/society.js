@@ -11,6 +11,7 @@ import { revealAround, syncDiscoveries, isExplored, isDiscovered } from './explo
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { tickReligion } from './religion.js';
 import { tickSpaceflight } from './spaceflight.js';
+import { tickExpansion, covetedDeposit } from './expansion.js';
 
 export const INITIAL_CITIZENS = 6;
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
@@ -21,7 +22,7 @@ export const FAMINE_DEATH_INTERVAL = 3; // simulated seconds between abstract fa
 export const MIN_WAR_DURATION = 20;     // simulated seconds before a war can end by surrender
 export const MAX_WAR_DURATION = 180;    // simulated seconds before war weariness ends it
 export const TRUCE_DURATION = 120;      // simulated seconds of peace enforced after a war
-export const MAX_SETTLEMENTS = 8;       // per civilization
+export const MAX_SETTLEMENTS = 14;      // per civilization
 export const ROAD_TRAFFIC = 26;         // footsteps on a tile before it is worn into a dirt road
 
 export const GOVERNMENTS = [
@@ -151,6 +152,16 @@ export class Civilization {
         for (const b of other.settlements) dist = Math.min(dist, Math.hypot(a.x - b.x, a.y - b.y));
       }
 
+      // Wars of conquest: a neighbour holds deposits this people needs (expansion.js); the winner annexes them
+      if (dist < 75 && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0 && ecosystem.terrain) {
+        const goal = covetedDeposit(this, other, ecosystem.terrain);
+        if (goal && this.militaryStrength >= other.militaryStrength * 0.7 && random() < 0.35) {
+          this.warGoal = goal;
+          this.declareWar(other, ecosystem, `War for the ${goal.type} of ${other.name}`);
+          continue;
+        }
+      }
+
       // Close neighbors can develop tension or declare war
       if (dist < 45) {
         const curStatus = this.diplomacy.get(other.id) || 'PEACE';
@@ -207,6 +218,10 @@ export class Civilization {
   endWar(ecosystem, reason, winner) {
     const foe = this.warTarget;
     if (!foe) return;
+    // a war of conquest won: the winner takes the land it fought for (expansion.js annexRegion, next tick)
+    if (winner && winner.warGoal) winner.pendingAnnex = { loserId: (winner === this ? foe : this).id, goal: winner.warGoal };
+    this.warGoal = null;
+    foe.warGoal = null;
     for (const [civ, other] of [[this, foe], [foe, this]]) {
       civ.diplomacy.set(other.id, 'PEACE');
       civ.warTarget = null;
@@ -592,13 +607,16 @@ export class SocietyManager {
 
     // spaceflight: colony ships from a spaceport (spaceflight.js); main.js carries them to other planets
     tickSpaceflight(this, civ, dt);
+
+    // expansion: outposts by needed deposits, annexing land won in war (expansion.js)
+    tickExpansion(this, civ, dt);
   }
 
   // A clan that outgrew CLAN_SPLIT_SIZE sends a splinter group to found a new hamlet.
   splitClans(civ) {
     if (civ.settlements.length >= MAX_SETTLEMENTS || !civ.isAlive) return false;
     // do not fragment a small people into ever smaller hamlets: about ten citizens per settlement are needed
-    if (civ.citizens < 12 * civ.settlements.length) return false;
+    if (civ.citizens < 9 * civ.settlements.length) return false;
     for (const clan of civ.clans) {
       if (clan.memberIds.length < CLAN_SPLIT_SIZE || (clan.splitCd || 0) > civ.clock) continue;
       const parent = getSettlement(civ, clan.settlementId) || nearestSettlement(civ, this.terrain.home.x, this.terrain.home.y);

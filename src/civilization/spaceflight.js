@@ -13,6 +13,7 @@ import { ERAS } from './techTree.js';
 import { Civilization, GOVERNMENTS } from './society.js';
 import { initTown } from './townPlanner.js';
 import { getReligion, religionsOf } from './religion.js';
+import { wantedResources } from './expansion.js';
 
 export const LAUNCH_INTERVAL = 90;        // simulated seconds between two ships of one civilization
 export const CREW = 6;
@@ -69,7 +70,11 @@ export function launchShip(society, civ) {
   if (crew.length < 2) return null;
   civ.shipsLaunched = (civ.shipsLaunched || 0) + 1;
   const faith = getReligion(society, civ.faithId);
+  // what the people hope to find out there: a wanted resource they know no deposit of at home, else new land
+  const known = new Set((civ.knownDeposits || []).map(k => k.type));
+  const purpose = [...wantedResources(civ), 'uranium', 'oil', 'gold', 'iron'].find(t => !known.has(t)) || null;
   const ship = {
+    purpose,
     id: `ship_${civ.id}_${civ.shipsLaunched}`,
     civ: {
       name: civ.name,
@@ -91,13 +96,18 @@ export function launchShip(society, civ) {
   }
   if (!society.outbound) society.outbound = [];
   society.outbound.push(ship);
-  eco.notifications.unshift({ text: `🚀 ${civ.name} launched a colony ship with ${crew.length} settlers.`, time: Date.now() });
+  eco.notifications.unshift({ text: `🚀 ${civ.name} launched a colony ship with ${crew.length} settlers${purpose ? ` to find ${purpose}` : ''}.`, time: Date.now() });
   return ship;
 }
 
 // A free site for a colony: buildable land away from every existing capital, near the planet's start area.
-function colonySite(terrain, society) {
-  const home = terrain.home || { x: Math.floor(terrain.width / 2), y: Math.floor(terrain.height / 2) };
+function colonySite(terrain, society, purpose = null) {
+  let home = terrain.home || { x: Math.floor(terrain.width / 2), y: Math.floor(terrain.height / 2) };
+  // land beside the resource the ship came for, when this world has it
+  if (purpose) {
+    const dep = terrain.findNearestDeposit(home.x, home.y, purpose, 250);
+    if (dep) home = { x: dep.x, y: dep.y };
+  }
   const capitals = society.civilizations.filter(c => c.isAlive).map(c => [c.capitalX, c.capitalY]);
   for (let ring = 0; ring < 12; ring++) {
     for (let a = 0; a < 16; a++) {
@@ -119,7 +129,7 @@ function colonySite(terrain, society) {
 // nowhere to land (an ocean world, a dead rock).
 export function foundColony(world, ship) {
   const { terrain, ecosystem, society } = world;
-  const site = colonySite(terrain, society);
+  const site = colonySite(terrain, society, ship.purpose) || colonySite(terrain, society);
   if (!site) {
     ecosystem.notifications.unshift({ text: `💥 A colony ship of ${ship.civ.name} found no land to settle and was lost.`, time: Date.now() });
     return null;
@@ -142,6 +152,7 @@ export function foundColony(world, ship) {
   civ.era = era;
   civ.techPoints = Math.max(civ.techPoints, era.reqPoints);
   civ.colonyOf = ship.civ.name;
+  civ.purpose = ship.purpose || null;
   initTown(civ, terrain, { stock: { ...COLONY_KIT } });
   civ.expandTerritory(terrain);
   society.civilizations.push(civ);
@@ -182,6 +193,11 @@ export function foundColony(world, ship) {
   society.setupFounders(civ, settlers);
   if (faithId) for (const clan of civ.clans || []) clan.beliefs = { ...(clan.beliefs || {}), religionId: faithId };
   ecosystem.registry.refresh(ecosystem.entities, ecosystem.timeYears);
-  ecosystem.notifications.unshift({ text: `🌍 ${settlers.length} colonists from ${ship.civ.name} landed and founded ${civ.name}.`, time: Date.now() });
+  // the deposit they came for is known to them from orbit
+  if (ship.purpose) {
+    const dep = terrain.findNearestDeposit(civ.capitalX, civ.capitalY, ship.purpose, 250);
+    if (dep) (civ.knownDeposits = civ.knownDeposits || []).push({ type: ship.purpose, x: dep.x, y: dep.y });
+  }
+  ecosystem.notifications.unshift({ text: `🌍 ${settlers.length} colonists from ${ship.civ.name} landed and founded ${civ.name}${ship.purpose ? ` for its ${ship.purpose}` : ''}.`, time: Date.now() });
   return civ;
 }

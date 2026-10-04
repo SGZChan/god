@@ -170,3 +170,9 @@ chooses sites).
   into the Spaceflight Age and raises its spaceport.
 - 5: confirmed done (procedural building sprites with construction stages, animated power/disaster effects); the last emoji
   in the world view (tombstones, legacy structure markers, the capital crown) are now drawn shapes.
+- Ages and expansion (2026-10-04): buildings are drawn in the architecture of the age they were built in
+  (art/eraArchitecture.js, 3 variants per age), towns renovate one building at a time and replace outdated homes; new
+  homes Brick Tenement and Habitat Dome. A "Skip" control fully simulates N years with progress. Expansion
+  (civilization/expansion.js): more scouts, clans split sooner (up to 14 settlements), outposts beside needed deposits,
+  wars of conquest for deposits in a neighbour's land with annexation of the region and its town, colony ships seek the
+  resource their people lack and land beside it.
