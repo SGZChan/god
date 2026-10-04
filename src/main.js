@@ -10,6 +10,8 @@ import { PlanetCreator } from './workshop/planetCreator.js';
 import { catchUpEngine } from './simulation/catchUpEngine.js';
 import { NotificationManager } from './ui/notificationManager.js';
 import { OverviewPanel, summarizeWorld } from './ui/overviewPanel.js';
+import { Minimap } from './ui/minimap.js';
+import { ResourceLensPanel } from './ui/resourceLens.js';
 import { sounds } from './audio/soundFX.js';
 import { FixedStepper, runSimulationSteps, SIM_STEP } from './simulation/fixedStep.js';
 import { random, setActiveRng } from './simulation/random.js';
@@ -103,6 +105,9 @@ class GameApp {
     this.initPersistence();
     this.initMenu();
     this.initOverview();
+    // Planet navigation: minimap and the Resources lens (surface view only)
+    this.minimap = new Minimap(document.getElementById('minimap-panel'));
+    this.lensPanel = new ResourceLensPanel(document.getElementById('lens-panel'));
     this.initNavigation();
 
     // Audio init on first user click
@@ -239,6 +244,10 @@ class GameApp {
     sim.everActive = true;
     // Planets share one canvas; only the one being viewed may react to the mouse
     for (const other of this.simulations.values()) other.renderer.setEnabled(other === sim);
+    if (this.minimap) {
+      this.minimap.setSim(sim);
+      this.lensPanel.setRenderer(sim.renderer);
+    }
     this.solarSystem.selectPlanet(sim.planet);
     this.planetSelect.value = planetId;
 
@@ -476,7 +485,8 @@ class GameApp {
     const focus = [{
       x: (renderer.canvas.width / 2 - renderer.camera.x) / ts,
       y: (renderer.canvas.height / 2 - renderer.camera.y) / ts,
-      radius: Math.ceil(Math.max(renderer.canvas.width, renderer.canvas.height) / ts / 32 / 2) + 2
+      // (zoomed far out the view is drawn from low-resolution blocks, not chunks, so keep the radius modest)
+      radius: Math.min(10, Math.ceil(Math.max(renderer.canvas.width, renderer.canvas.height) / ts / 32 / 2) + 2)
     }];
     for (const ent of sim.ecosystem.entities) focus.push({ x: ent.x, y: ent.y, radius: 1 });
     for (const civ of sim.society.civilizations) {
@@ -919,6 +929,10 @@ class GameApp {
     }
 
     if (this.overview) this.overview.setVisible(targetView === 'SURFACE');
+    if (this.minimap) {
+      this.minimap.setVisible(targetView === 'SURFACE');
+      this.lensPanel.setVisible(targetView === 'SURFACE');
+    }
     this.updateBreadcrumb();
     this.updateFocusCard();
   }
@@ -1167,6 +1181,7 @@ class GameApp {
     // 4. Render Surface if active
     if (this.currentView === 'SURFACE' && this.activeSim) {
       this.activeSim.renderer.render(dt);
+      this.minimap.update(dt);
     }
 
     // Chunks far from the camera, creatures and civilizations are evicted (their changes are remembered)

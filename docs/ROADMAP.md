@@ -1,6 +1,6 @@
 # Genesis & Cosmos — Life-Simulation Roadmap
 
-Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world), 2 (genetic life + sprites). Next: 3 (society AI).** Each sub-project below gets its own
+Written 2026-10-04. Status: **order approved 2026-10-04. Done: 0 (quick fixes, space travel), 1 (infinite world, now a finite planet: 1b), 2 (genetic life + sprites). Next: 3 (society AI).** Each sub-project below gets its own
 spec → plan → build → browser-verification cycle (see `docs/superpowers/`). Earlier work (Phases 1-3) is described in
 `docs/superpowers/specs/2026-10-04-simulation-persistence-ui-design.md`.
 
@@ -36,6 +36,11 @@ Dependencies: 3 needs 1 and 2; 4 needs 3; 5 needs 3; 6 needs 3 and 4. Sub-projec
    with galaxy-to-galaxy travel.
 1. **DONE - Infinite world**: chunk streaming, seeded terrain/biomes/rivers/lakes, camera-driven loading, delta saves,
    buildable-terrain map.
+1b. **DONE - Planet-sized world and resources**: the infinite map became a finite planet (width = round(1024 x radius), height =
+   width / 2, no wrap; deep ocean east/west, ice caps at the poles), latitude-driven climate, continents, islands, rivers,
+   a deterministic temperate start area, 19 resources (wood to uranium, tiers 0-4) with a documented terrain API
+   (getDeposit / extract / findNearestDeposit / regrow), a Resources lens (key R), trees, a minimap with lat/lon and a
+   low-resolution far-zoom view.
 2. **DONE - Genetic life**: genome, mating-only reproduction, recombination and mutation, automatic species clusters, and
    a procedural **sprite kit** (body/head/limbs/ears/tail/pattern/colour drawn by code into cached sprites) so every
    species is a gene-driven combination of parts. No random spawning.
@@ -69,3 +74,9 @@ player; both depend on 3.
 - Known: civs still fill every claimed tile with a building (the "chaos town" problem) until sub-project 3.
 - 2: diploid genomes (src/life/genome.js), species as interbreeding clusters (src/life/species.js: new species need a founding group of 4), sexes/mating/pregnancy/birth (nothing spawns after the first generation; founders only), needs-based utility brain (src/life/entity.js), spatial grid, heap A*, off-screen breeding and evolution for the catch-up engine, sprite kit (src/art/*, dev sheet at /dev/sprites.html). Tests: life_test, ecology_test, art_test, pathfinding_test. Soak tool idea: simulate 2400 s and watch populations; findings: speciation works (1-4 new species per 600 years), predators boom and bust and often go extinct, one herbivore tends to dominate (shared 700-creature safety cap), sapients survive thanks to granary eating near the capital and settlement protection.
 - Known gaps for sub-project 3: sapients still graze wild flora and eat from an abstract granary (no farms/jobs), civ buildings fill every claimed tile in a checkerboard, no families/clans/religion yet, creature sprites for sapients have no clothing or clan colours.
+- 1b: finite planet (src/world/generator.js: planetSize, climate, edges, findHome), resources (src/world/resources.js: catalog, ore veins per 64x64 cell,
+  biome rules; API documented at the top of src/planet/terrain.js), save version 3 (key genesis-cosmos-save-v3), overview/LOD blocks
+  (src/world/overview.js), resource icons and trees (src/art/resourceIcons.js), minimap + lens panel (src/ui/minimap.js, resourceLens.js).
+  Tests: tests/planet_test.js, tests/resources_test.js; tools: scripts/mapcheck.mjs (land/biome/resource histogram), scripts/smoke_world.mjs.
+  Known: renewables regrow only while their chunk is loaded; god powers that reshape terrain leave deposits where they were (e.g. a tree on newly flooded
+  tile); the overview/minimap shows generated terrain, not god-power edits; creatures do not use resources yet (sub-project 3 builds on the API).

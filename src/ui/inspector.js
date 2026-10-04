@@ -1,4 +1,12 @@
 import { creatureDataURL } from '../art/creatureSprite.js';
+import { RESOURCES, TIER_NAMES } from '../world/resources.js';
+import { getResourceIcon } from '../art/resourceIcons.js';
+
+const iconUrls = new Map(); // the inspector re-renders every frame, so encode each icon once
+const iconUrl = (type) => {
+  if (!iconUrls.has(type)) iconUrls.set(type, getResourceIcon(type).toDataURL());
+  return iconUrls.get(type);
+};
 // Real-time Inspector Panel for Beings, Tiles, Civilizations, and JEV AI Brains
 
 export class InspectorPanel {
@@ -241,9 +249,33 @@ export class InspectorPanel {
           </div>
         ` : ''}
 
-        ${tile.resource ? `
-          <div class="resource-badge">💎 Resource Deposit: ${tile.resource}</div>
-        ` : ''}
+        ${this.depositHtml(tile.deposit)}
+      </div>
+    `;
+  }
+
+  // The resource deposit on a tile: what it is, how much is left, what tech it needs.
+  depositHtml(deposit) {
+    const info = deposit && RESOURCES[deposit.type];
+    if (!info) return '';
+    const renewable = deposit.max !== undefined;
+    const amount = Math.round(deposit.amount * 10) / 10;
+    const pct = renewable ? Math.round((deposit.amount / deposit.max) * 100) : 100;
+    const stock = renewable
+      ? (deposit.amount <= 0 && deposit.type === 'wood' ? 'Felled: a stump that will regrow' : `${amount} / ${deposit.max} (regrows)`)
+      : `${amount} left (finite)`;
+    return `
+      <div class="deposit-box" style="--deposit-color: ${info.color}">
+        <div class="deposit-head">
+          <img class="deposit-icon" src="${iconUrl(deposit.type)}" alt="">
+          <div>
+            <div class="deposit-name">${info.name}</div>
+            <div class="deposit-meta">${info.category} • ${TIER_NAMES[info.tier]} (tier ${info.tier})</div>
+          </div>
+        </div>
+        <div class="deposit-bar"><span style="width: ${pct}%"></span></div>
+        <div class="deposit-stock">${stock}</div>
+        <div class="deposit-desc">${info.description}</div>
       </div>
     `;
   }

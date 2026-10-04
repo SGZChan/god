@@ -372,6 +372,11 @@ export class PlanetTerrain {
         }
       }
     }
+    // Exact scan of the immediate neighbourhood (the coarse index can miss single scattered tiles)
+    const near = Math.min(12, Math.floor(bestDist));
+    for (let py = y - near; py <= y + near; py++) {
+      for (let px = x - near; px <= x + near; px++) consider(px, py);
+    }
     if (best) {
       // Refine: a sample point is within a few tiles of the true nearest tile
       const bx = best.x;

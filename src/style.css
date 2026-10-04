@@ -886,6 +886,239 @@ body, html {
   border: 1px solid rgba(56, 189, 248, 0.25);
 }
 
+/* === PLANET TOOLS: minimap, Resources lens, deposit info (finite-planet update) === */
+.planet-tools {
+  position: absolute;
+  left: 14px;
+  bottom: 104px; /* above the bottom power toolbar, which is centred and wide */
+  width: 272px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.planet-tools > * {
+  pointer-events: auto;
+}
+
+.lens-panel {
+  position: relative;
+}
+
+.minimap,
+.lens-panel {
+  background: var(--bg-surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.minimap {
+  overflow: hidden;
+}
+
+.minimap-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 700 0.7rem 'Outfit', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.minimap-title {
+  flex: none;
+}
+
+.minimap-readout {
+  flex: 1;
+  text-align: right;
+  font: 500 0.72rem 'Outfit', sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--accent-cyan);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.minimap-head .chevron {
+  transition: transform 0.2s ease;
+}
+
+.minimap-head[aria-expanded="false"] .chevron {
+  transform: rotate(-90deg);
+}
+
+.minimap-body {
+  padding: 0 8px 8px;
+}
+
+#minimap-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  cursor: crosshair;
+  touch-action: none;
+  image-rendering: pixelated;
+}
+
+.lens-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 700 0.7rem 'Outfit', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.lens-btn kbd {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--border-glass);
+  border-radius: 5px;
+  font: 600 0.68rem 'Outfit', sans-serif;
+  color: var(--text-secondary);
+}
+
+.lens-glyph {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-secondary);
+  background: radial-gradient(circle, var(--text-secondary) 28%, transparent 32%);
+}
+
+.lens-btn.active {
+  color: var(--accent-gold);
+}
+
+.lens-btn.active .lens-glyph {
+  border-color: var(--accent-gold);
+  background: radial-gradient(circle, var(--accent-gold) 28%, transparent 32%);
+  box-shadow: 0 0 8px var(--accent-gold-glow);
+}
+
+.lens-legend {
+  /* a popover to the right of the lens button, over the map */
+  position: absolute;
+  left: calc(100% + 8px);
+  bottom: 0;
+  width: 330px;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 8px;
+  padding: 10px 12px;
+  background: rgba(10, 16, 30, 0.93);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.lens-legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.lens-legend img {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+.lens-legend span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deposit-box {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--deposit-color, #38bdf8);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.deposit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deposit-icon {
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+}
+
+.deposit-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--deposit-color, #38bdf8);
+}
+
+.deposit-meta {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.deposit-bar {
+  height: 5px;
+  margin: 7px 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.deposit-bar span {
+  display: block;
+  height: 100%;
+  background: var(--deposit-color, #38bdf8);
+}
+
+.deposit-stock {
+  font-size: 0.74rem;
+  color: var(--text-primary);
+}
+
+.deposit-desc {
+  margin-top: 3px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+/* narrow screens: the power toolbar wraps to two rows, so lift the tools above it */
+@media (max-width: 1150px) {
+  .planet-tools {
+    bottom: 156px;
+  }
+}
+/* === end planet tools === */
+
 /* --- NOTIFICATIONS STREAM --- */
 .notifications-container {
   position: absolute;

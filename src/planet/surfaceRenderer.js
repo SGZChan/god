@@ -1,6 +1,12 @@
 // 2D High-Performance Surface Canvas Renderer with Minecraft-Style Top-Down Structures, Smooth Pan/Zoom & Drag Brush
 import { CHUNK_SIZE } from './terrain.js';
 import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
+import { getResourceIcon, getTreeSprite, getStumpSprite } from '../art/resourceIcons.js';
+import { getOverview, LodBlocks } from '../world/overview.js';
+
+export const MIN_ZOOM = 0.04; // zoomed all the way out you see a continent (a few thousand tiles across)
+export const MAX_ZOOM = 6.0;
+const DETAIL_ZOOM = 0.3;      // below this the cached chunk images give way to cheap low-resolution blocks
 
 export class SurfaceRenderer {
   constructor(canvas, terrain, ecosystem, society) {
@@ -37,6 +43,9 @@ export class SurfaceRenderer {
     this.glyphCache = new Map(); // emoji sprites, see drawGlyph()
     this.chunkLayers = new Map(); // cached chunk images, see updateChunkLayers()
     this.layerPool = [];          // spare canvases for new chunk layers
+    this.showResources = false;   // the Resources lens (key R): deposit markers on every tile
+    this.onLensChange = null;
+    this.lod = new LodBlocks(terrain); // low-resolution blocks for far zoom (no chunks are generated for them)
 
     this.initCanvasSize();
     this.centerCamera();
@@ -54,6 +63,37 @@ export class SurfaceRenderer {
     const home = this.terrain.home;
     this.camera.x = this.canvas.width / 2 - (home.x + 0.5) * this.tileSize * this.camera.zoom;
     this.camera.y = this.canvas.height / 2 - (home.y + 0.5) * this.tileSize * this.camera.zoom;
+  }
+
+  // Tile coordinates at the centre of the screen.
+  centerTile() {
+    const s = this.tileSize * this.camera.zoom;
+    return { x: (this.canvas.width / 2 - this.camera.x) / s, y: (this.canvas.height / 2 - this.camera.y) / s };
+  }
+
+  // Puts tile (tx, ty) in the middle of the screen (minimap clicks, "go to").
+  jumpTo(tx, ty) {
+    this.followingEntity = null;
+    const s = this.tileSize * this.camera.zoom;
+    this.camera.x = this.canvas.width / 2 - tx * s;
+    this.camera.y = this.canvas.height / 2 - ty * s;
+    this.clampCamera();
+  }
+
+  // The planet has edges: the middle of the screen stays on the map.
+  clampCamera() {
+    const s = this.tileSize * this.camera.zoom;
+    const c = this.centerTile();
+    const nx = Math.max(0, Math.min(this.terrain.width, c.x));
+    const ny = Math.max(0, Math.min(this.terrain.height, c.y));
+    if (nx !== c.x) this.camera.x = this.canvas.width / 2 - nx * s;
+    if (ny !== c.y) this.camera.y = this.canvas.height / 2 - ny * s;
+  }
+
+  setResourceLens(on) {
+    this.showResources = Boolean(on);
+    for (const layer of this.chunkLayers.values()) layer.age = Infinity; // redraw with/without markers
+    if (this.onLensChange) this.onLensChange(this.showResources);
   }
 
   followEntity(entity) {
@@ -102,6 +142,10 @@ export class SurfaceRenderer {
 
     this.listen(window, 'keydown', (e) => {
       this.keys[e.key.toLowerCase()] = true;
+      if (this.enabled && e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat
+        && !['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) && !document.querySelector('.modal-overlay:not(.hidden)')) {
+        this.setResourceLens(!this.showResources);
+      }
     });
 
     this.listen(window, 'keyup', (e) => {
@@ -165,7 +209,7 @@ export class SurfaceRenderer {
       }
     });
 
-    // Zoom with Cursor Anchor (Zoom range: 0.25x to 6.0x)
+    // Zoom with Cursor Anchor (Zoom range: MIN_ZOOM to MAX_ZOOM)
     this.listen(this.canvas, 'wheel', (e) => {
       if (!this.enabled) return;
       e.preventDefault();
@@ -173,7 +217,7 @@ export class SurfaceRenderer {
       const mouseX = e.clientX;
       const mouseY = e.clientY;
 
-      const newZoom = Math.max(0.3, Math.min(6.0, this.camera.zoom * zoomFactor));
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, this.camera.zoom * zoomFactor));
 
       this.camera.x = mouseX - (mouseX - this.camera.x) * (newZoom / this.camera.zoom);
       this.camera.y = mouseY - (mouseY - this.camera.y) * (newZoom / this.camera.zoom);
@@ -253,6 +297,10 @@ export class SurfaceRenderer {
     const ts = this.tileSize;
     const pixels = CHUNK_SIZE * ts;
     const visible = [];
+    minCx = Math.max(0, minCx);
+    minCy = Math.max(0, minCy);
+    maxCx = Math.min((this.terrain.width - 1) >> 5, maxCx);
+    maxCy = Math.min((this.terrain.height - 1) >> 5, maxCy);
     for (let cy = minCy; cy <= maxCy; cy++) {
       for (let cx = minCx; cx <= maxCx; cx++) {
         const key = cx + ',' + cy;
@@ -262,6 +310,7 @@ export class SurfaceRenderer {
           canvas.width = pixels;
           canvas.height = pixels;
           layer = { canvas, ctx: canvas.getContext('2d'), age: Infinity, built: false, cx, cy };
+          layer.ctx.imageSmoothingEnabled = false; // icons stay crisp
           this.chunkLayers.set(key, layer);
         }
         layer.age += dt;
@@ -295,9 +344,17 @@ export class SurfaceRenderer {
     return visible;
   }
 
-  // Draws tiles [minTileX, maxTileX) x [minTileY, maxTileY): biome, shading, territory, buildings.
+  // Draws tiles [minTileX, maxTileX) x [minTileY, maxTileY): biome, shading, territory, then (in a second pass,
+  // so canopies and markers are never painted over by the next tile) trees, resource markers and buildings.
   drawTiles(ctx, minTileX, maxTileX, minTileY, maxTileY, isZoomedIn, civStyles) {
     const ts = this.tileSize;
+    minTileX = Math.max(0, minTileX);
+    minTileY = Math.max(0, minTileY);
+    maxTileX = Math.min(this.terrain.width, maxTileX);
+    maxTileY = Math.min(this.terrain.height, maxTileY);
+    const standing = this._standing || (this._standing = []);
+    standing.length = 0;
+
     for (let y = minTileY; y < maxTileY; y++) {
       for (let x = minTileX; x < maxTileX; x++) {
         const tile = this.terrain.getTile(x, y);
@@ -342,22 +399,118 @@ export class SurfaceRenderer {
           }
         }
 
-        // 2. Render Minecraft-Style Top-Down Detailed Buildings
-        if (tile.structure) {
-          this.renderStructure(ctx, tile.structure, px, py, ts, isZoomedIn);
+        if (tile.structure || tile.deposit) standing.push(tile);
+      }
+    }
+
+    const lens = this.showResources;
+    for (const tile of standing) {
+      const px = tile.x * ts;
+      const py = tile.y * ts;
+      // 2. Render Minecraft-Style Top-Down Detailed Buildings
+      if (tile.structure) {
+        this.renderStructure(ctx, tile.structure, px, py, ts, isZoomedIn);
+        continue;
+      }
+      const d = tile.deposit;
+      if (d.type === 'wood') {
+        if (isZoomedIn) {
+          this.drawTree(ctx, tile, d, px, py, ts);
+        } else if (d.amount > 0 && !lens) {
+          // a small crown so forests read as forests from a distance
+          ctx.fillStyle = 'rgba(12, 56, 20, 0.62)';
+          ctx.beginPath();
+          ctx.arc(px + ts * 0.5, py + ts * 0.46, ts * 0.27, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
+      if (lens && !(d.type === 'wood' && isZoomedIn)) {
+        // The Resources lens: a marker per deposit, fading while a renewable has been harvested
+        const icon = getResourceIcon(d.type);
+        const frac = d.max ? Math.max(0.3, d.amount / d.max) : 1;
+        ctx.globalAlpha = frac;
+        ctx.drawImage(icon, px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
+        ctx.globalAlpha = 1;
+      } else if (lens) {
+        const icon = getResourceIcon('wood');
+        ctx.drawImage(icon, px + ts * 0.55, py + ts * 0.02, ts * 0.42, ts * 0.42);
+      }
+    }
+  }
+
+  // A procedural pixel tree standing on the tile (or its stump after felling; saplings are drawn smaller).
+  drawTree(ctx, tile, deposit, px, py, ts) {
+    ctx.imageSmoothingEnabled = false;
+    if (deposit.amount <= 0) {
+      ctx.drawImage(getStumpSprite(), px + ts * 0.5 - ts * 0.65, py + ts * 0.95 - ts * 1.52, ts * 1.3, ts * 1.52);
+      return;
+    }
+    const variant = (Math.imul(tile.x, 73856093) ^ Math.imul(tile.y, 19349663)) >>> 0;
+    const sprite = getTreeSprite(tile.biome.id, variant % 3);
+    const grown = deposit.max ? 0.5 + 0.5 * Math.min(1, deposit.amount / deposit.max) : 1;
+    const w = ts * 1.3 * grown;
+    const h = ts * 1.52 * grown;
+    ctx.drawImage(sprite, px + ts * 0.5 - w / 2, py + ts * 0.95 - h, w, h);
+  }
+
+  // Zoomed far out: low-resolution blocks drawn straight from the generator (no chunks are loaded), over a
+  // whole-planet backdrop that is already there while the blocks are still being built. Then borders and capitals.
+  renderFarTerrain(ctx, minTileX, maxTileX, minTileY, maxTileY, pxPerTile) {
+    const ts = this.tileSize;
+    const terrain = this.terrain;
+    const overview = getOverview(terrain);
+    overview.step(3);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(overview.canvas, 0, 0, terrain.width * ts, terrain.height * ts);
+
+    // one sample per ~3 screen pixels at most
+    const stride = pxPerTile >= 2.5 ? 1 : (pxPerTile >= 1.2 ? 2 : (pxPerTile >= 0.6 ? 4 : 8));
+    const span = LodBlocks.BLOCK * stride; // tiles per block side
+    const bx0 = Math.max(0, Math.floor(minTileX / span));
+    const by0 = Math.max(0, Math.floor(minTileY / span));
+    const bx1 = Math.min(Math.ceil(terrain.width / span) - 1, Math.floor(maxTileX / span));
+    const by1 = Math.min(Math.ceil(terrain.height / span) - 1, Math.floor(maxTileY / span));
+    const centre = this.centerTile();
+    const blocks = [];
+    for (let by = by0; by <= by1; by++) {
+      for (let bx = bx0; bx <= bx1; bx++) blocks.push(this.lod.block(stride, bx, by));
+    }
+    // build the blocks nearest the middle of the screen first
+    blocks.sort((p, q) => Math.hypot((p.bx + 0.5) * span - centre.x, (p.by + 0.5) * span - centre.y)
+      - Math.hypot((q.bx + 0.5) * span - centre.x, (q.by + 0.5) * span - centre.y));
+    this.lod.build(blocks, 6);
+    const size = span * ts;
+    for (const b of blocks) {
+      if (b.row > 0) ctx.drawImage(b.canvas, b.bx * size, b.by * size, size + 0.7, size + 0.7);
+    }
+    ctx.imageSmoothingEnabled = true;
+
+    // civilizations: borders as tinted tiles, capitals as rings
+    const zoom = this.camera.zoom;
+    for (const civ of this.society.civilizations) {
+      if (!civ.isAlive) continue;
+      ctx.fillStyle = civ.color + '88';
+      for (const t of civ.territory) ctx.fillRect(t.x * ts, t.y * ts, ts, ts);
+      ctx.strokeStyle = '#ffffff';
+      ctx.fillStyle = civ.color;
+      ctx.lineWidth = 1.5 / zoom;
+      ctx.beginPath();
+      ctx.arc((civ.capitalX + 0.5) * ts, (civ.capitalY + 0.5) * ts, 4.5 / zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
     }
   }
 
   render(dt) {
     this.updateKeyboardPan(dt);
+    this.clampCamera();
     this.waterAnimTime += dt;
 
     const ctx = this.ctx;
     const w = this.canvas.width;
     const h = this.canvas.height;
-    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#04060c'; // space beyond the edge of the planet
+    ctx.fillRect(0, 0, w, h);
 
     ctx.save();
     ctx.translate(this.camera.x, this.camera.y);
@@ -372,6 +525,8 @@ export class SurfaceRenderer {
     const maxTileY = Math.ceil((h - this.camera.y) / (ts * this.camera.zoom));
 
     const isZoomedIn = this.camera.zoom > 1.6;
+    const pxPerTile = ts * this.camera.zoom;
+    const farView = this.camera.zoom < DETAIL_ZOOM;
 
     // One lookup per civ per frame (was a find() and two string concats for every owned tile)
     const civStyles = new Map();
@@ -382,7 +537,9 @@ export class SurfaceRenderer {
     // 1. Terrain. Zoomed out, cached chunk images are blitted (re-issuing every tile fill each frame
     //    was the main cost). Zoomed in, only the few visible tiles are drawn directly so the
     //    detailed buildings stay crisp.
-    if (!isZoomedIn) {
+    if (farView) {
+      this.renderFarTerrain(ctx, minTileX, maxTileX, minTileY, maxTileY, pxPerTile);
+    } else if (!isZoomedIn) {
       const pixels = CHUNK_SIZE * ts;
       const layers = this.updateChunkLayers(
         minTileX >> 5, (maxTileX - 1) >> 5, minTileY >> 5, (maxTileY - 1) >> 5, dt, civStyles
@@ -397,6 +554,7 @@ export class SurfaceRenderer {
     }
 
     // 3. Draw Living & Recently Fallen Entities
+    const dots = pxPerTile < 1.5; // far away a creature is just a dot
     for (const ent of this.ecosystem.entities) {
       const px = ent.x * ts;
       const py = ent.y * ts;
@@ -404,6 +562,15 @@ export class SurfaceRenderer {
       // Culling
       if (px < -this.camera.x / this.camera.zoom - 20 || px > (w - this.camera.x) / this.camera.zoom + 20) continue;
       if (py < -this.camera.y / this.camera.zoom - 20 || py > (h - this.camera.y) / this.camera.zoom + 20) continue;
+
+      if (dots) {
+        if (ent.alive) {
+          ctx.fillStyle = ent.isSapient ? '#ffffff' : 'rgba(255, 224, 150, 0.85)';
+          const d = (ent.isSapient ? 2.2 : 1.6) / this.camera.zoom;
+          ctx.fillRect(px - d / 2, py - d / 2, d, d);
+        }
+        continue;
+      }
 
       if (!ent.alive) {
         // Render fallen entity tombstone / memorial

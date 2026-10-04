@@ -110,7 +110,10 @@ export class TerrainGenerator {
     // Rivers wind through the lowlands and end in the sea
     let riverDist = 1;
     if (e > 0.5 && e < 0.8) {
-      riverDist = Math.abs(this.rivers.noise(x * 0.0055 + 7, y * 0.0055 - 3));
+      // (warped so the rivers meander instead of running in straight lines)
+      const rx = x + this.warp.noise(x * 0.012 + 9, y * 0.012) * 55;
+      const ry = y + this.warp.noise(x * 0.012, y * 0.012 + 9) * 55;
+      riverDist = Math.abs(this.rivers.noise(rx * 0.0055 + 7, ry * 0.0055 - 3));
       if (riverDist < 0.0075) e = 0.47;
     }
     if (out) out.riverDist = riverDist;
@@ -150,7 +153,7 @@ export class TerrainGenerator {
 
     // Moisture bands: wet equator, dry ~30 degrees (deserts), wet temperate belt (~60), dry poles
     let moisture = 0.46 + 0.3 * Math.cos(lat * 6)
-      + (this.wetness.fbm(x * 0.006 + 50, y * 0.006 + 50, 3) - 0.5) * 0.7;
+      + (this.wetness.fbm(x * 0.006 + 50, y * 0.006 + 50, 3) - 0.5) * 1.3;
     if (info.riverDist < 0.03) moisture += 0.12;
     if (this.planetType === 'desert') moisture *= 0.35;
     moisture = clamp(moisture, 0.04, 0.96);
