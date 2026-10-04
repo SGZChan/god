@@ -1,6 +1,10 @@
 // 2D High-Performance Surface Canvas Renderer with Minecraft-Style Top-Down Structures, Smooth Pan/Zoom & Drag Brush
 import { CHUNK_SIZE } from './terrain.js';
 import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
+import { JOB_INFO } from '../civilization/jobs.js';
+import { itemColor } from '../civilization/economy.js';
+
+const JOB_TOOLS = Object.fromEntries(Object.entries(JOB_INFO).map(([k, v]) => [k, v.tool]));
 import { getResourceIcon, getTreeSprite, getStumpSprite } from '../art/resourceIcons.js';
 import { getOverview, LodBlocks } from '../world/overview.js';
 import { BuildingRenderer } from '../art/buildingRenderer.js';
@@ -584,6 +588,14 @@ export class SurfaceRenderer {
     // Buildings and creatures share one depth order: a creature behind a building is hidden by it
     const br = this.buildingRenderer;
     if (!farView) br.begin(ctx, { minX: minTileX, maxX: maxTileX, minY: minTileY, maxY: maxTileY }, ts, this.camera.zoom, this.waterAnimTime);
+    // clan colours for the headbands (rebuilt a few times a second)
+    this._clanTick = (this._clanTick || 0) + 1;
+    if (!this._clanColors || this._clanTick % 20 === 1) {
+      const m = this._clanColors || (this._clanColors = new Map());
+      m.clear();
+      for (const civ of this.society.civilizations) for (const clan of civ.clans || []) m.set(clan.id, clan.color);
+    }
+    const clanColors = this._clanColors;
     const ents = this._sortedEnts || (this._sortedEnts = []);
     ents.length = 0;
     for (const e of this.ecosystem.entities) ents.push(e);
@@ -599,7 +611,7 @@ export class SurfaceRenderer {
 
       if (dots) {
         if (ent.alive) {
-          ctx.fillStyle = ent.isSapient ? '#ffffff' : 'rgba(255, 224, 150, 0.85)';
+          ctx.fillStyle = ent.isSapient ? (clanColors.get(ent.clanId) || '#ffffff') : 'rgba(255, 224, 150, 0.85)';
           const d = (ent.isSapient ? 2.2 : 1.6) / this.camera.zoom;
           ctx.fillRect(px - d / 2, py - d / 2, d, d);
         }
@@ -665,8 +677,34 @@ export class SurfaceRenderer {
         ctx.scale(-1, 1);
         ctx.translate(-px, 0);
       }
-      ctx.drawImage(getCreatureCanvas(ent.traits, frame), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
+      // sapients wear their clan's colour and carry the tool of their job
+      let extras = null;
+      if (ent.isSapient && ent.civilization && ent.isAdult) {
+        extras = this._extras || (this._extras = { clanColor: null, tool: null });
+        extras.clanColor = clanColors.get(ent.clanId) || null;
+        extras.tool = (ent.role === 'SOLDIER' && ent.civilization.warTarget) ? 'spear' : (JOB_TOOLS[ent.job] || null);
+      } else if (ent.isSapient && ent.civilization) {
+        extras = this._extras || (this._extras = { clanColor: null, tool: null });
+        extras.clanColor = clanColors.get(ent.clanId) || null;
+        extras.tool = null;
+      }
+      ctx.drawImage(getCreatureCanvas(ent.traits, frame, extras), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
       ctx.restore();
+
+      // goods on the carrier's back: a small bundle in the colour of what it carries (wood, stone, grain...)
+      if (ent.isSapient && ent.inventory) {
+        let load = null;
+        for (const k in ent.inventory) { load = k; break; }
+        if (load) {
+          const s = Math.max(2, ts * 0.3);
+          const bx = px - (ent.facing < 0 ? -1 : 1) * spriteW * 0.34 - s / 2;
+          const by = py - spriteH * 0.5;
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(bx - 0.5, by - 0.5, s + 1, s + 1);
+          ctx.fillStyle = itemColor(load);
+          ctx.fillRect(bx, by, s, s);
+        }
+      }
 
       // Small badges above the head for role & belief (and the champion's crown)
       let badge = null;

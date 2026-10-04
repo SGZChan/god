@@ -1,7 +1,13 @@
 // World overview: a live summary of civilizations, wildlife and recent events.
 // summarizeWorld() is a pure data model (testable in Node); OverviewPanel renders it.
-import { ERAS } from '../civilization/techTree.js';
+import { ERAS, missingForEra } from '../civilization/techTree.js';
 import { creatureDataURL } from '../art/creatureSprite.js';
+import { getResourceIcon } from '../art/resourceIcons.js';
+import { RESOURCES } from '../world/resources.js';
+import { itemName, itemColor, foodUnits } from '../civilization/economy.js';
+import { JOB_INFO, seasonOf, SEASON_NAMES } from '../civilization/jobs.js';
+import { exploredFraction } from '../civilization/exploration.js';
+import { housingCapacityOfCiv } from '../civilization/settlements.js';
 
 export function civStatus(civ) {
   if (civ.warTarget) return { kind: 'war', label: `At war with ${civ.warTarget.name}` };
@@ -17,6 +23,36 @@ export function eraProgress(civ) {
   const span = next.reqPoints - civ.era.reqPoints;
   const percent = ((civ.techPoints - civ.era.reqPoints) / span) * 100;
   return { percent: Math.max(0, Math.min(100, percent)), nextName: next.name };
+}
+
+// Society figures of one civilization for the overview (pure data): settlements, clans, jobs, stockpile, discoveries.
+export function summarizeSociety(sim, civ) {
+  const jobs = {};
+  let homeless = 0;
+  for (const e of sim.ecosystem.entities) {
+    if (!e.alive || e.civilization !== civ || !e.isSapient) continue;
+    if (e.job) jobs[e.job] = (jobs[e.job] || 0) + 1;
+    if (e.isAdult && !e.homeId) homeless++;
+  }
+  const stock = {};
+  for (const st of civ.settlements || []) for (const [k, v] of Object.entries(st.stock)) stock[k] = (stock[k] || 0) + v;
+  let sites = 0;
+  for (const b of sim.terrain.buildings.values()) if (b.civId === civ.id && b.progress < 1 && b.type !== 'ruins') sites++;
+  const nextIndex = ERAS.findIndex(e => e.id === civ.era.id) + 1;
+  const needs = ERAS[nextIndex] && sim.society.eraHave ? missingForEra(civ, ERAS[nextIndex].id, sim.society.eraHave(civ)) : [];
+  return {
+    settlements: (civ.settlements || []).length,
+    clans: (civ.clans || []).length,
+    jobs: Object.entries(jobs).sort((a, b) => b[1] - a[1]).map(([job, n]) => ({ job, name: JOB_INFO[job] ? JOB_INFO[job].name : job, n })),
+    homeless,
+    sites,
+    housing: housingCapacityOfCiv(sim.terrain, civ),
+    food: Math.round((civ.settlements || []).reduce((n, s) => n + foodUnits(s.stock), 0)),
+    stock: Object.entries(stock).filter(([, v]) => v >= 1).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([id, n]) => ({ id, name: itemName(id), n: Math.round(n), color: itemColor(id) })),
+    discovered: (civ.discovered || []).filter(t => RESOURCES[t] && RESOURCES[t].tier >= 1 || t === 'obsidian'),
+    explored: Math.round(exploredFraction(civ, sim.terrain) * 1000) / 10,
+    needs
+  };
 }
 
 export function summarizeWorld(sim) {
@@ -38,9 +74,11 @@ export function summarizeWorld(sim) {
       citizens: civ.citizens,
       soldiers: civ.soldiers,
       territory: civ.territory.length,
+      society: summarizeSociety(sim, civ),
       status: civStatus(civ),
       progress: eraProgress(civ)
     })),
+    season: SEASON_NAMES[seasonOf(sim.ecosystem.timeYears)],
     wildlife: sim.ecosystem.speciesCatalog
       .filter(s => s.type !== 'humanoid' && (s.population > 0 || extinct.includes(s.name)))
       .map(s => ({ id: s.id, symbol: s.symbol, traits: s.centroid, name: s.name, count: s.population, extinct: s.population === 0 }))
@@ -98,7 +136,7 @@ export class OverviewPanel {
 
     nodes.push(el('div', 'ov-summary',
       `${model.planetName} • ${model.civs.length} civilization${model.civs.length === 1 ? '' : 's'}`
-      + `${model.fallen ? ` (${model.fallen} fallen)` : ''} • ${model.creatures} creatures`));
+      + `${model.fallen ? ` (${model.fallen} fallen)` : ''} • ${model.creatures} creatures • ${model.season}`));
 
     for (const civ of model.civs) {
       const card = el('div', 'civ-card');
@@ -119,6 +157,44 @@ export class OverviewPanel {
         stat('flag', civ.territory, 'Territory (tiles)')
       );
       card.appendChild(stats);
+
+      const soc = civ.society;
+      if (soc) {
+        card.appendChild(el('div', 'civ-meta', `${soc.settlements} settlement${soc.settlements === 1 ? '' : 's'} • ${soc.clans} clan${soc.clans === 1 ? '' : 's'} • ${soc.sites} under construction${soc.homeless ? ` • ${soc.homeless} homeless` : ''}`));
+        if (soc.jobs.length) {
+          const row = el('div', 'civ-chips');
+          row.title = 'Jobs';
+          for (const j of soc.jobs.slice(0, 8)) row.appendChild(el('span', 'civ-chip', `${j.name} ${j.n}`));
+          card.appendChild(row);
+        }
+        if (soc.stock.length) {
+          const row = el('div', 'civ-chips');
+          row.title = 'Stockpiles';
+          for (const s of soc.stock) {
+            const chip = el('span', 'civ-chip', `${s.name} ${s.n}`);
+            chip.style.setProperty('--dot', s.color);
+            chip.classList.add('with-dot');
+            row.appendChild(chip);
+          }
+          card.appendChild(row);
+        }
+        if (soc.discovered.length) {
+          const row = el('div', 'civ-chips');
+          row.title = `Discovered resources (${soc.explored}% of the planet explored)`;
+          row.appendChild(el('span', 'civ-chip muted', `Found (${soc.explored}% explored)`));
+          for (const t of soc.discovered) {
+            const chip = el('span', 'civ-chip', RESOURCES[t].name);
+            const img = document.createElement('img');
+            img.src = getResourceIcon(t).toDataURL();
+            img.alt = '';
+            img.style.cssText = 'width: 12px; height: 12px; image-rendering: pixelated;';
+            chip.prepend(img);
+            row.appendChild(chip);
+          }
+          card.appendChild(row);
+        }
+        if (soc.needs.length && civ.progress.nextName) card.appendChild(el('div', 'civ-meta civ-needs', `Next era needs: ${soc.needs.join(', ')}`));
+      }
 
       const bar = el('div', 'era-bar');
       bar.title = civ.progress.nextName ? `Progress to the ${civ.progress.nextName}` : 'Highest era reached';

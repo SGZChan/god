@@ -1,6 +1,14 @@
 import { creatureDataURL } from '../art/creatureSprite.js';
 import { RESOURCES, TIER_NAMES } from '../world/resources.js';
 import { getResourceIcon } from '../art/resourceIcons.js';
+import { JOB_INFO } from '../civilization/jobs.js';
+import { itemName } from '../civilization/economy.js';
+import { getSettlement } from '../civilization/settlements.js';
+import { getClan } from '../civilization/clans.js';
+import { familyOf } from '../civilization/families.js';
+import { BUILDING_TYPES } from '../world/buildings.js';
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const iconUrls = new Map(); // the inspector re-renders every frame, so encode each icon once
 const iconUrl = (type) => {
@@ -14,6 +22,36 @@ export class InspectorPanel {
     this.container = containerElement;
     this.currentTarget = null;
     this.targetType = null;
+    this.sim = null; // set by the game loop: the simulation being shown (family lookups)
+  }
+
+  // Job, clan, home, family, load and current task of a citizen.
+  societyHTML(ent) {
+    if (!ent.isSapient || !ent.civilization) return '';
+    const civ = ent.civilization;
+    const clan = getClan(civ, ent.clanId);
+    const st = getSettlement(civ, ent.settlementId);
+    const sim = this.sim;
+    const home = ent.homeId && sim ? sim.terrain.getBuilding(ent.homeId) : null;
+    let family = { mate: null, parents: [], children: [] };
+    if (sim) family = familyOf(ent, sim.ecosystem.byId, sim.ecosystem.entities);
+    const names = list => (list.length ? list.slice(0, 5).map(e => esc(e.name)).join(', ') + (list.length > 5 ? ` +${list.length - 5}` : '') : '—');
+    const carried = Object.entries(ent.inventory || {}).filter(([, n]) => n > 0.05).map(([k, n]) => `${esc(itemName(k))} ${Math.round(n * 10) / 10}`).join(', ');
+    const job = ent.job && JOB_INFO[ent.job] ? JOB_INFO[ent.job].name : (ent.isAdult ? 'No job' : 'Child');
+    const guardian = ent.guardianId && sim ? sim.ecosystem.byId.get(ent.guardianId) : null;
+    return `
+      <div class="society-section" style="--clan: ${clan ? clan.color : '#94a3b8'}">
+        <div class="section-title">Society</div>
+        <div class="society-row"><span>Job</span><span>${esc(job)}${ent.role === 'SOLDIER' || ent.role === 'GUARD' ? ` (${ent.role.toLowerCase()})` : ''}</span></div>
+        <div class="society-row"><span>Doing</span><span>${esc(ent.activity || ent.state || '')}</span></div>
+        <div class="society-row"><span>Clan</span><span>${clan ? `<i class="clan-swatch"></i>${esc(clan.name)}` : '—'}</span></div>
+        <div class="society-row"><span>Settlement</span><span>${st ? esc(st.name) : '—'} (${esc(civ.name)})</span></div>
+        <div class="society-row"><span>Home</span><span>${home ? esc(BUILDING_TYPES[home.type].name) : (ent.isAdult ? 'Homeless — sleeps rough' : '—')}</span></div>
+        <div class="society-row"><span>Mate</span><span>${family.mate ? esc(family.mate.name) : '—'}</span></div>
+        <div class="society-row"><span>Parents</span><span>${guardian ? `guardian ${esc(guardian.name)}` : names(family.parents)}</span></div>
+        <div class="society-row"><span>Children</span><span>${names(family.children)}</span></div>
+        <div class="society-row"><span>Carrying</span><span>${carried || 'nothing'}</span></div>
+      </div>`;
   }
 
   inspect(type, target) {
@@ -113,6 +151,8 @@ export class InspectorPanel {
             </div>
           </div>
         `}
+
+        ${this.societyHTML(ent)}
 
         <!-- Follow Camera Action -->
         ${ent.alive ? `

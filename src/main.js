@@ -1207,6 +1207,7 @@ class GameApp {
 
     // 5. Live update inspector if inspecting and on planet surface
     if (this.inspector.currentTarget) {
+      this.inspector.sim = this.activeSim; // family and settlement lookups
       if (this.currentView !== 'SURFACE') {
         this.inspector.clear();
       } else {

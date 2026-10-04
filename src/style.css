@@ -1865,6 +1865,66 @@ button:focus:not(:focus-visible) {
   color: var(--text-secondary);
 }
 
+.civ-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.civ-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.civ-chip.muted { color: var(--text-muted); background: transparent; padding-left: 0; }
+
+.civ-chip.with-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot, #cbd5e1);
+}
+
+.civ-needs { color: var(--text-muted); font-style: italic; }
+
+.society-section {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-left: 3px solid var(--clan, var(--accent-cyan));
+  border-radius: 10px;
+  font-size: 0.78rem;
+}
+
+.society-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.society-row > span:first-child { color: var(--text-muted); white-space: nowrap; }
+.society-row > span:last-child { text-align: right; min-width: 0; }
+
+.clan-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border-radius: 2px;
+  background: var(--clan, #fff);
+  vertical-align: middle;
+}
+
 .era-bar {
   height: 4px;
   overflow: hidden;
