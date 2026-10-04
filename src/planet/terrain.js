@@ -1,11 +1,35 @@
-// Infinite, chunked planet surface.
+// Finite, chunked planet surface.
 //
-// The world is generated on demand in 32x32 tile chunks from the planet's seed (see world/generator.js),
-// so it has no edge. A chunk that is far from the camera, creatures and civilizations is evicted; only
-// the tiles that differ from what the generator would produce (buildings, borders, god powers, grazed
-// flora...) are remembered, so a chunk always comes back exactly as it was left.
+// The planet is `width` x `height` tiles (x in [0, width), y in [0, height); see planetSize() in
+// world/generator.js: width = round(1024 * radius), height = width / 2). There is no wrap-around: the east
+// and west edges are deep ocean, the poles are ice. getTile() clamps out-of-range coordinates to the nearest
+// edge tile, so it never crashes; use inBounds(x, y) when you must know (pathfinding and movement do).
+//
+// The world is generated on demand in 32x32 tile chunks from the planet's seed (see world/generator.js).
+// A chunk that is far from the camera, creatures and civilizations is evicted; only the tiles that differ
+// from what the generator would produce (buildings, borders, god powers, grazed flora, depleted or regrown
+// resource deposits...) are remembered, so a chunk always comes back exactly as it was left.
+//
+// ---------- RESOURCE API (catalog and generation: world/resources.js) ----------
+// Every tile has `tile.deposit`: null or { type, amount, max? }. Minerals are finite (no `max`); renewables
+// (wood, fibre, berries, fish, freshwater) have `max` and regrow toward it.
+//
+//   terrain.getDeposit(x, y)                      -> { type, amount, max? } | null
+//       A snapshot (a copy; never mutate it). Does not generate chunks; works for unloaded land.
+//   terrain.extract(x, y, amount)                 -> number actually extracted (0 if nothing there)
+//       Takes up to `amount` from the tile's deposit. A depleted mineral disappears (deposit = null); a
+//       depleted renewable stays at amount 0 (a tree becomes a stump) and regrows. The change is a normal
+//       tile delta, so it survives chunk eviction and save/load.
+//   terrain.findNearestDeposit(x, y, type, maxRadius = 250, { minAmount = 1 } = {})
+//                                                 -> { x, y, type, amount, distance } | null
+//       The nearest tile within maxRadius holding at least minAmount of `type`, using the generator's coarse
+//       vein index (no scan of millions of tiles); sees depletion in loaded or evicted chunks.
+//   terrain.regrow(dt, speedMultiplier)           -> advances regrowth of harvested renewables (update() calls it)
+//   terrain.inBounds(x, y)                        -> is (x, y) on the map?
+// Resource types: RESOURCES / RESOURCE_TYPES / TIER_NAMES from world/resources.js.
 import { classifyBiome, BIOMES } from './biomes.js';
-import { TerrainGenerator, FlatGenerator } from '../world/generator.js';
+import { TerrainGenerator, FlatGenerator, planetSize, DEFAULT_WIDTH, FLAT_WIDTH, FLAT_HEIGHT } from '../world/generator.js';
+import { RESOURCES, ResourceField } from '../world/resources.js';
 import { random } from '../simulation/random.js';
 
 export const CHUNK_SIZE = 32;
@@ -13,15 +37,27 @@ const SHIFT = 5;
 const MASK = CHUNK_SIZE - 1;
 const chunkKey = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
 
-const DELTA_FIELDS = ['elevation', 'temperature', 'moisture', 'flora', 'structure', 'civId', 'resource'];
+const DELTA_FIELDS = ['elevation', 'temperature', 'moisture', 'flora', 'structure', 'civId', 'deposit'];
+
+const round2 = v => Math.round(v * 100) / 100;
+const sameDeposit = (a, b) => (!a && !b) || Boolean(a && b && a.type === b.type && a.amount === b.amount && a.max === b.max);
 
 export class PlanetTerrain {
-  // options: { seed, type, flat }. `flat` builds a featureless grassland (unit tests).
-  constructor({ seed = 'terrain', type = 'terrestrial', flat = false } = {}) {
+  // options: { seed, type, flat, width, height, radius }. `flat` builds a small featureless grassland (unit
+  // tests, 256x128). Otherwise the size is width x height, or derived from the planet `radius`, or 1024x512.
+  constructor({ seed = 'terrain', type = 'terrestrial', flat = false, width, height, radius } = {}) {
     this.seed = String(seed);
     this.planetType = type;
     this.flat = flat;
-    this.generator = flat ? new FlatGenerator() : new TerrainGenerator(this.seed, type);
+    if (!width) {
+      if (flat) { width = FLAT_WIDTH; height = height || FLAT_HEIGHT; }
+      else if (radius) ({ width, height } = planetSize(radius));
+      else width = DEFAULT_WIDTH;
+    }
+    this.width = Math.round(width);
+    this.height = Math.round(height || Math.floor(this.width / 2));
+    this.generator = flat ? new FlatGenerator(this.width, this.height) : new TerrainGenerator(this.seed, type, this.width, this.height);
+    this.regrowing = new Set();      // loaded tiles whose renewable deposit is below its max
 
     this.chunks = new Map();         // key -> { cx, cy, tiles }
     this.chunkList = [];             // loaded chunks, for random sampling
@@ -41,14 +77,25 @@ export class PlanetTerrain {
 
   // ---------- tiles and chunks ----------
 
+  inBounds(x, y) {
+    return x >= 0 && y >= 0 && x < this.width && y < this.height;
+  }
+
+  // The tile at (x, y); coordinates outside the map are clamped to the nearest edge tile.
   getTile(x, y) {
     x = Math.floor(x);
     y = Math.floor(y);
+    if (x < 0) x = 0; else if (x >= this.width) x = this.width - 1;
+    if (y < 0) y = 0; else if (y >= this.height) y = this.height - 1;
     const chunk = this.getChunk(x >> SHIFT, y >> SHIFT);
     return chunk.tiles[(y & MASK) * CHUNK_SIZE + (x & MASK)];
   }
 
   getChunk(cx, cy) {
+    const maxCx = (this.width - 1) >> SHIFT;
+    const maxCy = (this.height - 1) >> SHIFT;
+    if (cx < 0) cx = 0; else if (cx > maxCx) cx = maxCx;
+    if (cy < 0) cy = 0; else if (cy > maxCy) cy = maxCy;
     const key = chunkKey(cx, cy);
     return this.chunks.get(key) || this.generateChunk(cx, cy, key);
   }
@@ -72,7 +119,7 @@ export class PlanetTerrain {
           flora: g.flora,
           structure: null,
           civId: null,
-          resource: g.resource
+          deposit: g.deposit
         };
       }
     }
@@ -93,6 +140,7 @@ export class PlanetTerrain {
       if (name in fields) tile[name] = fields[name];
     }
     if ('biome' in fields) tile.biome = BIOMES[fields.biome];
+    if (tile.deposit && tile.deposit.max !== undefined && tile.deposit.amount < tile.deposit.max) this.regrowing.add(tile);
   }
 
   // The fields of `tile` that differ from freshly generated terrain (null when unchanged).
@@ -103,9 +151,10 @@ export class PlanetTerrain {
       if (!fields) fields = {};
       fields[name] = value;
     };
-    for (const name of ['elevation', 'temperature', 'moisture', 'flora', 'resource']) {
+    for (const name of ['elevation', 'temperature', 'moisture', 'flora']) {
       if (tile[name] !== base[name]) mark(name, tile[name]);
     }
+    if (!sameDeposit(tile.deposit, base.deposit)) mark('deposit', tile.deposit ? { ...tile.deposit } : null);
     if (tile.biome !== base.biome) mark('biome', tile.biome.id);
     if (tile.structure) mark('structure', tile.structure);
     if (tile.civId) mark('civId', tile.civId);
@@ -142,6 +191,7 @@ export class PlanetTerrain {
       const deltas = this.diffChunk(chunk);
       if (deltas.length) this.evictedDeltas.set(chunk.key, deltas);
       this.chunks.delete(chunk.key);
+      if (this.regrowing.size) for (const tile of chunk.tiles) this.regrowing.delete(tile);
       evicted++;
     }
     if (evicted) this.chunkList = this.chunkList.filter(c => this.chunks.has(c.key));
@@ -168,6 +218,7 @@ export class PlanetTerrain {
     this.chunks.clear();
     this.chunkList = [];
     this.evictedDeltas.clear();
+    this.regrowing.clear();
     for (const [x, y, fields] of list) {
       const key = chunkKey(x >> SHIFT, y >> SHIFT);
       if (!this.evictedDeltas.has(key)) this.evictedDeltas.set(key, []);
@@ -180,6 +231,7 @@ export class PlanetTerrain {
     this.chunks.clear();
     this.chunkList = [];
     this.evictedDeltas.clear();
+    this.regrowing.clear();
     this._home = null;
   }
 
@@ -201,51 +253,157 @@ export class PlanetTerrain {
 
   // ---------- where to build ----------
 
-  // Land that can hold a building: not water, not glacial ice, not a mountain peak.
+  // Land that can hold a building: on the map, not water, not glacial ice, not a mountain peak.
   isBuildable(x, y) {
+    if (!this.inBounds(Math.floor(x), Math.floor(y))) return false;
     const tile = this.getTile(x, y);
     return !tile.biome.isWater && tile.biome.id !== 'GLACIAL_ICE' && tile.elevation < 0.85;
   }
 
   // Cheap land test straight from the generator (no chunk is created), for searching.
   isLandProbe(x, y) {
-    const e = this.generator.elevationAt(x, y);
-    return e > 0.53 && e < 0.8;
+    return this.generator.isLandProbe(x, y);
   }
 
   // The nearest open land to (x, y): a spot whose surroundings (within `openRadius`) are all land.
   findLand(x, y, maxRadius = 400, openRadius = 4) {
-    const open = (px, py) => {
-      if (!this.isLandProbe(px, py)) return false;
-      for (let k = 0; k < 8; k++) {
-        const a = (k / 8) * Math.PI * 2;
-        if (!this.isLandProbe(px + Math.cos(a) * openRadius, py + Math.sin(a) * openRadius)) return false;
-      }
-      return true;
-    };
-    if (open(x, y)) return { x: Math.floor(x), y: Math.floor(y) };
-    for (let r = 4; r <= maxRadius; r += 4) {
-      const steps = Math.max(8, Math.ceil((Math.PI * 2 * r) / 4));
-      for (let i = 0; i < steps; i++) {
-        const a = (i / steps) * Math.PI * 2;
-        const px = Math.round(x + Math.cos(a) * r);
-        const py = Math.round(y + Math.sin(a) * r);
-        if (open(px, py)) return { x: px, y: py };
-      }
-    }
-    return null;
+    return this.generator.findLandNear(x, y, maxRadius, openRadius);
   }
 
-  // The start area: open land nearest the world origin. Creatures and civilizations begin here.
+  // The start area: temperate, habitable open land on a large landmass at 30-50 degrees latitude, found
+  // deterministically from the seed. Creatures and civilizations begin here.
   get home() {
-    if (!this._home) this._home = this.findLand(0, 0) || { x: 0, y: 0 };
+    if (!this._home) this._home = this.generator.findHome();
     return this._home;
+  }
+
+  // ---------- resources ----------
+
+  // The deposit on (x, y) without creating chunks: from the loaded tile, the remembered changes of an evicted
+  // chunk, or the generator. This is the live object for a loaded tile; getDeposit() hands out a copy.
+  peekDeposit(x, y) {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (!this.inBounds(x, y)) return null;
+    const key = chunkKey(x >> SHIFT, y >> SHIFT);
+    const chunk = this.chunks.get(key);
+    if (chunk) return chunk.tiles[(y & MASK) * CHUNK_SIZE + (x & MASK)].deposit;
+    const deltas = this.evictedDeltas.get(key);
+    if (deltas) {
+      const lx = x & MASK;
+      const ly = y & MASK;
+      for (const [dx, dy, fields] of deltas) {
+        if (dx === lx && dy === ly && 'deposit' in fields) return fields.deposit;
+      }
+    }
+    return this.generator.depositAt(x, y);
+  }
+
+  getDeposit(x, y) {
+    const d = this.peekDeposit(x, y);
+    return d ? { ...d } : null;
+  }
+
+  // Takes up to `amount` from the deposit on (x, y); returns how much was actually taken.
+  extract(x, y, amount) {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    if (!this.inBounds(x, y) || !(amount > 0)) return 0;
+    const tile = this.getTile(x, y);
+    const d = tile.deposit;
+    if (!d || d.amount <= 0) return 0;
+    const taken = round2(Math.min(amount, d.amount));
+    d.amount = round2(d.amount - taken);
+    if (d.max !== undefined) {
+      this.regrowing.add(tile); // stays on the tile (a stump at amount 0) and grows back
+    } else if (d.amount <= 0) {
+      tile.deposit = null;
+    }
+    return taken;
+  }
+
+  // The nearest deposit of `type` (at least opts.minAmount of it) within maxRadius tiles of (x, y).
+  findNearestDeposit(x, y, type, maxRadius = 250, { minAmount = 1 } = {}) {
+    if (!RESOURCES[type]) return null;
+    const field = this.generator.resources;
+    if (!field) return null;
+    x = Math.floor(x);
+    y = Math.floor(y);
+    let best = null;
+    let bestDist = maxRadius;
+    const consider = (px, py) => {
+      const d = this.peekDeposit(px, py);
+      if (!d || d.type !== type || d.amount < minAmount) return;
+      const dist = Math.hypot(px - x, py - y);
+      if (dist <= bestDist) {
+        bestDist = dist;
+        best = { x: px, y: py, type, amount: d.amount, distance: dist };
+      }
+    };
+
+    if (ResourceField.isOre(type)) {
+      // Ores: the generator knows every vein centre exactly; scan each vein, nearest first
+      for (const vein of field.veinsNear(type, x, y, maxRadius)) {
+        if (vein.dist - vein.a - 1 > bestDist) break;
+        const r = Math.ceil(vein.a) + 1;
+        for (let py = vein.y - r; py <= vein.y + r; py++) {
+          for (let px = vein.x - r; px <= vein.x + r; px++) consider(px, py);
+        }
+      }
+      return best;
+    }
+
+    // Common deposits: walk 32x32 cells outwards in rings, using the sampled coarse index
+    const cx0 = x >> SHIFT;
+    const cy0 = y >> SHIFT;
+    const maxRing = Math.ceil(maxRadius / CHUNK_SIZE) + 1;
+    const maxCx = (this.width - 1) >> SHIFT;
+    const maxCy = (this.height - 1) >> SHIFT;
+    for (let ring = 0; ring <= maxRing; ring++) {
+      if (best && (ring - 1) * CHUNK_SIZE > bestDist) break;
+      for (let cy = cy0 - ring; cy <= cy0 + ring; cy++) {
+        if (cy < 0 || cy > maxCy) continue;
+        const fullRow = ring === 0 || cy === cy0 - ring || cy === cy0 + ring;
+        for (let cx = cx0 - ring; cx <= cx0 + ring; cx += (fullRow ? 1 : ring * 2)) {
+          if (cx < 0 || cx > maxCx) continue;
+          const list = field.sampleCell(cx, cy).get(type);
+          if (!list) continue;
+          for (let i = 0; i < list.length; i += 2) consider(list[i], list[i + 1]);
+        }
+      }
+    }
+    if (best) {
+      // Refine: a sample point is within a few tiles of the true nearest tile
+      const bx = best.x;
+      const by = best.y;
+      for (let py = by - 4; py <= by + 4; py++) {
+        for (let px = bx - 4; px <= bx + 4; px++) consider(px, py);
+      }
+    }
+    return best;
+  }
+
+  // Renewable deposits that were harvested grow back toward their max (loaded chunks only).
+  regrow(dt, speedMultiplier = 1) {
+    if (this.regrowing.size === 0) return;
+    const years = dt * Math.min(Math.max(1, speedMultiplier), 180) / 4;
+    for (const tile of this.regrowing) {
+      const d = tile.deposit;
+      if (!d || d.max === undefined || d.amount >= d.max) {
+        this.regrowing.delete(tile);
+        continue;
+      }
+      const info = RESOURCES[d.type];
+      d.amount = Math.min(d.max, round2(d.amount + d.max * (info ? info.regrowPerYear : 0.1) * years));
+      if (d.amount >= d.max) this.regrowing.delete(tile);
+    }
   }
 
   // ---------- simulation ----------
 
   update(dt, speedMultiplier) {
     this.timeAge += dt * speedMultiplier * 0.001;
+    this.regrow(dt, speedMultiplier);
 
     // Flora slowly regrows on random loaded land tiles
     if (this.chunkList.length > 0) {

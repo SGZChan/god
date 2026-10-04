@@ -103,6 +103,7 @@ export class AStarPathfinder {
       for (const [dx, dy] of NEIGHBORS) {
         const nx = current.x + dx;
         const ny = current.y + dy;
+        if (!this.terrain.inBounds(nx, ny)) continue; // the map has edges: never path off the planet
         const nKey = key(nx, ny);
         if (closed.has(nKey)) continue;
 

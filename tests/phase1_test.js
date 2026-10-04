@@ -348,7 +348,7 @@ section('Buildings: never on water, ice or mountain peaks');
   const peak = w.terrain.getTile(7, 5);
   peak.elevation = 0.95;
   assert(!w.terrain.isBuildable(5, 5) && !w.terrain.isBuildable(6, 5) && !w.terrain.isBuildable(7, 5), 'water, ice and peaks are not buildable');
-  assert(w.terrain.isBuildable(8, 5) && w.terrain.isBuildable(-500, 800), 'ordinary land is buildable, even far outside where the world once ended');
+  assert(w.terrain.isBuildable(8, 5) && w.terrain.isBuildable(200, 100) && !w.terrain.isBuildable(-500, 800), 'ordinary land is buildable, but nothing off the edge of the planet is');
 
   // Half the map is sea: no matter how often a civ expands, nothing is built on bad ground
   for (let x = -80; x < 30; x++) for (let y = -20; y < 60; y++) w.terrain.getTile(x, y).biome = BIOMES.OCEAN;

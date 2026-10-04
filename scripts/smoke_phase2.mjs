@@ -49,7 +49,7 @@ check(before.civs.length > 0, 'a populated planet is running', `(${before.civs.l
 
 const saved = await page.evaluate(() => window.game.saveGame({ announce: true }));
 check(saved === true, 'saveGame() succeeds');
-const size = await page.evaluate(() => localStorage.getItem('genesis-cosmos-save-v2').length);
+const size = await page.evaluate(() => localStorage.getItem('genesis-cosmos-save-v3').length);
 check(size > 1000 && size < 4e6, 'save fits in localStorage', `(${Math.round(size / 1024)} KB)`);
 
 // Reload: the prompt must appear, and autosave must not overwrite the save before the choice

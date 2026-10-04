@@ -679,6 +679,9 @@ export class Entity {
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
     this.x += (dx / dist) * Math.min(dist, moveDist);
     this.y += (dy / dist) * Math.min(dist, moveDist);
+    // The planet has edges: never walk off the map
+    this.x = Math.max(0.01, Math.min(terrain.width - 0.01, this.x));
+    this.y = Math.max(0.01, Math.min(terrain.height - 0.01, this.y));
   }
 
   findNearestEntity(entities, filter) {

@@ -180,14 +180,14 @@ export function classifyBiome(elevation, temperature, moisture, planetType = 'te
     return BIOMES.GLACIAL_ICE;
   }
   if (temperature < 0.32) {
-    return moisture > 0.4 ? BIOMES.TAIGA : BIOMES.TUNDRA;
+    return moisture > 0.45 ? BIOMES.TAIGA : BIOMES.TUNDRA;
   }
 
   // Temperate zone
-  if (temperature < 0.65) {
+  if (temperature < 0.72) {
     if (moisture < 0.25) return BIOMES.DESERT;
-    if (moisture < 0.5) return BIOMES.GRASSLAND;
-    if (moisture < 0.75) return BIOMES.TEMPERATE_FOREST;
+    if (moisture < 0.54) return BIOMES.GRASSLAND;
+    if (moisture < 0.78) return BIOMES.TEMPERATE_FOREST;
     return BIOMES.RAINFOREST;
   }
 

@@ -15,7 +15,8 @@ section('A*: paths on open ground');
   assert(straight.length === 10 && straight[9].x === 10.5 && straight[9].y === 0.5, 'a straight 10 tile path has 10 steps and ends on the goal');
   const bent = pf.findPath(0, 0, 6, 4);
   assert(bent.length === 10, 'the shortest 4-way path is the Manhattan distance');
-  assert(pf.findPath(-30, -30, -20, -35).length === 15, 'negative coordinates work (the world is infinite)');
+  assert(pf.findPath(130, 60, 140, 65).length === 15, 'paths work away from the origin');
+  assert(pf.findPath(2, 2, -20, 2).every(p => p.x > 0 && p.y > 0), 'a path never leaves the map (no wrap-around)');
   const far = pf.findPath(0, 0, 900, 0);
   assert(far.length > 20 && far[far.length - 1].x > far[0].x, 'a goal beyond the search limit gives a partial path towards it');
 }

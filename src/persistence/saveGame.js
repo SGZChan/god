@@ -1,7 +1,7 @@
 // Save / load for Genesis & Cosmos.
 //
 // serializeSim / restoreSim turn one planet's simulation into plain JSON and back.
-// The infinite terrain regenerates from its seed, so only the tiles that differ from generated terrain
+// The terrain (a finite planet-sized map) regenerates from its seed and size, so only the tiles that differ from generated terrain
 // (buildings, borders, god powers, grazed flora...) are saved. Saving is lossless and idempotent
 // (serialize -> restore -> serialize gives identical JSON).
 import { PlanetTerrain } from '../planet/terrain.js';
@@ -14,7 +14,7 @@ import { ERAS } from '../civilization/techTree.js';
 import { SeededRNG } from '../cosmos/seed.js';
 import { withRng } from '../simulation/random.js';
 
-export const SAVE_VERSION = 2; // 2: infinite chunked world (version 1 saved a fixed-size grid)
+export const SAVE_VERSION = 3; // 3: finite planet-sized map + resource deposits (2: infinite chunked world, 1: fixed grid)
 
 const ENTITY_SKIP = new Set(['species', 'civilization', 'target', 'path', 'lastJevDecision', 'genome', 'traits', 'stats', 'pregnancy']);
 const CIV_SKIP = new Set(['diplomacy', 'warTarget', 'era', 'government', 'territory']);
@@ -37,6 +37,8 @@ function serializeTerrain(terrain) {
     seed: terrain.seed,
     planetType: terrain.planetType,
     flat: terrain.flat,
+    width: terrain.width,
+    height: terrain.height,
     waterLevel: terrain.waterLevel,
     globalTemp: terrain.globalTemp,
     timeAge: terrain.timeAge,
@@ -122,7 +124,7 @@ export function restoreSim(data, rngSeedLabel = 'restore') {
   // Construct on a scratch stream: the constructors roll random worlds that we overwrite below
   const scratch = new SeededRNG('restore-scratch');
   const { terrain, ecosystem, society } = withRng(scratch, () => {
-    const terrain = new PlanetTerrain({ seed: data.terrain.seed, type: data.terrain.planetType, flat: data.terrain.flat });
+    const terrain = new PlanetTerrain({ seed: data.terrain.seed, type: data.terrain.planetType, flat: data.terrain.flat, width: data.terrain.width, height: data.terrain.height });
     const ecosystem = new Ecosystem(terrain);
     const society = new SocietyManager(terrain, ecosystem);
     terrain.ecosystem = ecosystem;
@@ -187,6 +189,9 @@ export function validateSave(data) {
   if (!data || typeof data !== 'object') throw new SaveError('This is not a Genesis & Cosmos save file.');
   if (data.version === 1) {
     throw new SaveError('This save was made before the infinite-world update and cannot be loaded.');
+  }
+  if (data.version === 2) {
+    throw new SaveError('This save was made before the planet-sized world update (finite map and resources) and cannot be loaded.');
   }
   if (data.version !== SAVE_VERSION) {
     throw new SaveError(`Unsupported save version ${data.version} (this game reads version ${SAVE_VERSION}).`);

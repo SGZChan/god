@@ -16,7 +16,7 @@ import { random, setActiveRng } from './simulation/random.js';
 import { createPlanetWorld } from './simulation/world.js';
 import { SaveError, serializeGame, restoreSim, parseSave } from './persistence/saveGame.js';
 
-const SAVE_KEY = 'genesis-cosmos-save-v2';
+const SAVE_KEY = 'genesis-cosmos-save-v3';
 const AUTOSAVE_MS = 30000;
 
 class GameApp {
@@ -167,7 +167,8 @@ class GameApp {
           world = createPlanetWorld(new SeededRNG(planetSeed), {
             type: p.type,
             populated: p.isPopulated,
-            seed: planetSeed
+            seed: planetSeed,
+            radius: p.radius // the planet's size sets the size of its map
           });
         }
         this.attachSim(p, world, Boolean(saved));

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "test": "node tests/qa_test.js && node tests/phase1_test.js && node tests/phase2_test.js && node tests/phase3_test.js && node tests/space_test.js && node tests/world_test.js && node tests/life_test.js && node tests/ecology_test.js && node tests/art_test.js && node tests/pathfinding_test.js",
+    "test": "node tests/qa_test.js && node tests/phase1_test.js && node tests/phase2_test.js && node tests/phase3_test.js && node tests/space_test.js && node tests/world_test.js && node tests/life_test.js && node tests/ecology_test.js && node tests/art_test.js && node tests/pathfinding_test.js && node tests/planet_test.js && node tests/resources_test.js",
     "build": "vite build",
     "preview": "vite preview"
   },
