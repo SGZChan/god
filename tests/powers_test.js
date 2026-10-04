@@ -196,6 +196,7 @@ section('Nature');
   const t = tileAt(w, 3, 3);
   t.flora = 0;
   cast(w, 'PLANT_FOREST', 3, 3);
+  cast(w, 'PLANT_FOREST', 3, 3); // the moisture change is a 90% roll per cast
   assert(t.flora >= 80 && t.moisture >= 0.6, 'plant forest raises flora and moisture');
   w = world();
   const c = tileAt(w, 0, 0);

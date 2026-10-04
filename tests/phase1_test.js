@@ -156,11 +156,11 @@ section('Population: food decides how readily couples conceive; children cost fo
 {
   const w = emptyWorld();
   const alpha = addCiv(w, 'Alpha', 10, 20, 5);
-  alpha.food = 300;
-  w.society.update(0.05, 1);
+  alpha.food = 300; // powers write civ.food directly; the economy reconciles it with the stockpiles at the next tick
+  w.society.update(1, 1);
   assert(alpha.prosperity > 1, 'a food surplus makes couples more fertile');
   alpha.food = -50;
-  w.society.update(0.05, 1);
+  w.society.update(1, 1);
   assert(alpha.prosperity < 1, 'famine makes them less fertile');
 
   alpha.food = 200;
@@ -170,16 +170,18 @@ section('Population: food decides how readily couples conceive; children cost fo
   const before = liveCitizens(w, alpha);
   w.ecosystem.giveBirth(mother);
   assert(liveCitizens(w, alpha) === before + 1, 'a birth adds exactly one citizen, who is a real child');
-  assert(alpha.food === 180, 'raising a child cost the nation food');
+  assert(alpha.food === 200, 'a birth costs no abstract food (children eat real food from the stockpile, see society_test)');
 }
 
-section('Population: famine kills real citizens');
+section('Population: famine kills real citizens (hunger, not an abstract timer)');
 {
   const w = emptyWorld();
   const alpha = addCiv(w, 'Alpha', 10, 20, 5);
-  alpha.food = -500;
-  for (let i = 0; i < 4; i++) w.society.update(1, 1);
-  assert(liveCitizens(w, alpha) < 5, `famine killed a citizen (now ${liveCitizens(w, alpha)})`);
+  for (const st of alpha.settlements) st.stock = {};
+  alpha.food = 0;
+  for (const e of w.ecosystem.entities) { e.hunger = 100; e.health = 3; }
+  for (let i = 0; i < 4; i++) { w.ecosystem.update(1, 1); w.society.update(1, 1); }
+  assert(liveCitizens(w, alpha) < 5, `starving citizens die (now ${liveCitizens(w, alpha)})`);
 }
 
 section('Population: a civ with no citizens collapses');

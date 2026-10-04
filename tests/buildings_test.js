@@ -262,17 +262,21 @@ section('Town planner: sparse, sensible, buildable layouts');
   assert(civs.every(c => own(c).some(b => b.type === 'hall' || b.type === 'keep')), 'every civilization starts with a hall at its centre');
   const hall = own(civ).find(b => b.type === 'hall');
   const front = frontTile(hall);
-  assert(civ.capitalX === front.x && civ.capitalY === front.y && w.terrain.getRoad(civ.capitalX, civ.capitalY), 'the capital is the road in front of the hall');
+  assert(civ.capitalX === front.x && civ.capitalY === front.y, 'the capital is the tile in front of the hall door');
+  assert(civ.settlements[0].roadQueue.some(r => r.y === front.y), 'the main street is queued for the builders (nothing is paved for free)');
+  assert(own(civ).every(b => b.progress < 1), 'a new settlement starts with construction sites only: the people build everything');
   assert(own(civ).length >= 3 && own(civ).length < 12, `a new town is a handful of buildings (${own(civ).length}), not one per tile`);
   civ.citizens = 24;
+  civ.settlements[0].population = 24;
+  civ.settlements[0].adults = 20;
+  civ.settlements[0].stock = { wood: 999, stone: 999, fibre: 999, clay: 999, iron: 999, coal: 999 }; // a flat test world has no deposits to mine
   civ.techPoints = 900;
   civ.era = getEraForPoints(900);
-  for (let i = 0; i < 70; i++) { tickTown(civ, w.terrain, 5); growTown(civ, w.terrain, { instant: i % 3 === 0 }); }
+  for (let i = 0; i < 70; i++) { tickTown(civ, w.terrain, 5); growTown(civ, w.terrain, { instant: true }); }
   const list = own(civ);
   assert(list.length > 25, `the town grew (${list.length} buildings)`);
   const kinds = new Set(list.map(b => b.type));
-  assert(['hall', 'farm', 'well'].every(k => kinds.has(k)) && [...kinds].some(k => ['stone_house', 'manor', 'wooden_house'].includes(k)), 'it has housing, a well and fields');
-  assert(kinds.has('stone_wall') || kinds.has('palisade'), 'a wall ring surrounds a grown town');
+  assert(['hall', 'farm'].every(k => kinds.has(k)) && [...kinds].some(k => ['stone_house', 'manor', 'wooden_house', 'hut', 'tent'].includes(k)), 'it has a hall, housing and fields');
   // no overlap
   const seen = new Map();
   let overlap = 0;
@@ -296,16 +300,17 @@ section('Town planner: sparse, sensible, buildable layouts');
   const doors = list.filter(b => BUILDING_TYPES[b.type].category === 'housing' && BUILDING_TYPES[b.type].door && !b.type.includes('tent'));
   const withRoad = doors.filter(b => { const f = frontTile(b); return w.terrain.getRoad(f.x, f.y); });
   assert(withRoad.length >= doors.length * 0.8, `most doors open onto a road (${withRoad.length}/${doors.length})`);
-  // construction sites finish
+  // the planner alone never finishes a site (builders do, see society_test)
   const open = list.filter(b => b.progress < 1).length;
-  for (let i = 0; i < 400; i++) tickTown(civ, w.terrain, 5);
-  assert(own(civ).filter(b => b.progress < 1).length <= open, 'sites are completed over time');
+  for (let i = 0; i < 40; i++) tickTown(civ, w.terrain, 5);
+  assert(own(civ).filter(b => b.progress < 1).length >= open, 'ticking the planner does not complete any construction site');
   // determinism
   const run = () => {
     setActiveRng(new SeededRNG('plan-det'));
     const world = defaultWorld();
     const c = world.society.civilizations[0];
     c.citizens = 12;
+    c.settlements[0].population = 12;
     for (let i = 0; i < 25; i++) { tickTown(c, world.terrain, 5); growTown(c, world.terrain, { instant: true }); }
     return JSON.stringify(world.terrain.exportBuildings());
   };

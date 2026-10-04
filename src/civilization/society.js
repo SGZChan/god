@@ -39,7 +39,7 @@ export class Civilization {
     this.capitalY = config.capitalY || 30;
 
     this.population = config.population || 40;
-    this.food = 120;        // aggregate of every settlement's food stockpile (economy.syncFood keeps them in step)
+    this.food = 96;         // aggregate of every settlement's food stockpile (economy.syncFood keeps them in step)
     this.techPoints = 0;
     this.era = ERAS[0];
     this.piety = config.piety !== undefined ? config.piety : 75;
@@ -80,6 +80,7 @@ export class Civilization {
     this.clock = 0;          // simulated seconds this civilization has existed
     this.tickAcc = 0;
     this.foodDebt = 0;
+    this.foodSeen = 96;      // civ.food as last reconciled with the stockpiles (economy.syncFood)
     this.eraFloor = 0;
     this.seq = {};
   }
