@@ -161,11 +161,11 @@ export class Entity {
       return { status: 'WILDLIFE', label: 'Wild Instinct', symbol: '🐾', desc: 'A wild creature guided by nature and primal survival instincts.' };
     }
     if (this.personality.piety > 0.65) {
-      return { status: 'DEVOUT_BELIEVER', label: 'Devout Believer', symbol: '🙏', desc: 'Prays and builds shrines to you, the Creator.' };
+      return { status: 'DEVOUT_BELIEVER', label: 'Devout Believer', symbol: '🙏', desc: 'Prays to the gods of their faith and keeps the rites.' };
     } else if (this.personality.piety > 0.35) {
-      return { status: 'SECULAR_SKEPTIC', label: 'Secular Skeptic', symbol: '⚖️', desc: 'Focuses on mortal crafts and science rather than divine worship.' };
+      return { status: 'SECULAR_SKEPTIC', label: 'Secular Skeptic', symbol: '⚖️', desc: 'Keeps the rites, but trusts mortal crafts and science more.' };
     } else {
-      return { status: 'ATHEIST_HERETIC', label: 'Atheist / Heretic', symbol: '⚡', desc: 'Rejects divine authority; proclaims mortals govern their own fate.' };
+      return { status: 'ATHEIST_HERETIC', label: 'Atheist / Heretic', symbol: '⚡', desc: 'Doubts every god; proclaims mortals govern their own fate.' };
     }
   }
 
@@ -701,6 +701,8 @@ export class Entity {
           e.personality.piety = Math.min(1, e.personality.piety + 0.05 * (0.5 + this.personality.extraversion));
           e.belief = e.determineBelief();
           if (before !== 'DEVOUT_BELIEVER' && e.belief.status === 'DEVOUT_BELIEVER') stats.converts = (stats.converts || 0) + 1;
+          // the champion's own faith (religion.js) spreads to listeners
+          if (this.faithId && e.faithId !== this.faithId && random() < 0.25) e.faithId = this.faithId;
         }
         if (civ) civ.piety = Math.min(100, civ.piety + 1);
         break;

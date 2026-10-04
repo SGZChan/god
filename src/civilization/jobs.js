@@ -19,6 +19,7 @@ import { getSettlement, nearestSettlement, depotOf, buildingsOf, openSites, coun
 import { revealAround, scanForDeposits, nearestKnown, isExplored, isDiscovered, syncDiscoveries, DISCOVERABLE } from './exploration.js';
 import { ERA_REQUIREMENTS, ERAS } from './techTree.js';
 import { eraTier } from './townPlanner.js';
+import { holyPlaceOf, performRite } from './religion.js';
 
 export const JOBS = ['farmer', 'herder', 'hunter', 'gatherer', 'fisher', 'woodcutter', 'miner', 'builder', 'hauler', 'crafter', 'trader', 'scout', 'scholar', 'leader', 'priest'];
 
@@ -169,6 +170,7 @@ export function aptitude(ent, job) {
     case 'scout': a = speed * 0.7 + pers.openness * 0.6 + (1 - pers.neuroticism) * 0.3; break;
     case 'scholar': a = p.science / 60 + intel * 0.8; break;
     case 'leader': a = p.statesmanship / 60 + pers.extraversion * 0.4; break;
+    case 'priest': a = pers.piety * 1.2 + p.mysticism / 100 + pers.extraversion * 0.2; break;
     default: a = 0.5;
   }
   if (ent.stage === 'elder') {
@@ -234,6 +236,8 @@ function wantedJobs(c, st, members, adults) {
   add('herder', Math.min(penSlots, Math.ceil(N * 0.08)));
   add('fisher', st.fishNear === false ? 0 : (countBuilt(terrain, st, 'dock') > 0 ? Math.ceil(N * 0.1) : (N >= 10 ? 1 : 0)));
   add('trader', settlementsOf(civ).length >= 2 && N >= 8 ? 1 + Math.floor(N / 20) : 0);
+  // a settlement with a faith keeps a priest or two (religion.js)
+  add('priest', st.faithId && N >= 10 ? 1 + Math.floor(N / 24) : 0);
   return want;
 }
 
@@ -973,9 +977,17 @@ function stepTrader(ent, c) {
   return true;
 }
 
+// Priests lead rites at the settlement's shrine or temple (or at the hall while there is none): the faithful nearby
+// grow more devout and listeners of other faiths may convert (religion.js performRite).
 function stepPriest(ent, c) {
-  // placeholder for the religion system: a priest keeps to the hall
-  return stepLeader(ent, c);
+  const { terrain, st, soc } = c;
+  const holy = holyPlaceOf(terrain, buildingsOf(terrain, st));
+  const spot = holy ? (frontTile(holy) || doorTile(holy) || { x: holy.x, y: holy.y }) : depotOf(terrain, st);
+  say(ent, holy ? `Leading rites at the ${BUILDING_TYPES[holy.type].name.toLowerCase()}` : 'Preaching at the hall');
+  if (!walkTo(ent, c, spot.x, spot.y, 2.5)) return true;
+  if (soc) performRite(soc, ent, holy ? 7 : 5);
+  ent.actionCooldown = 2.5;
+  return true;
 }
 
 // ---------- eating ----------

@@ -366,9 +366,11 @@ section('Roads: planned and worn by foot traffic');
   assert(t.getRoad(x, y) === 'dirt', 'a worn path becomes a dirt road (desire path)');
   const st = civ.settlements[0];
   assert(st.roadQueue.length > 0, 'the planner queued street tiles for the builders');
-  const queued = st.roadQueue.length;
+  // (new plots queue new streets, so compare the tiles queued now rather than the queue's length)
+  const queued = st.roadQueue.map(r => ({ ...r }));
   run(sim, 2400);
-  assert(st.roadQueue.length < queued || queued === 0, 'builders pave the queued road tiles');
+  const paved = queued.filter(r => t.getRoad(r.x, r.y) === r.kind || !st.roadQueue.some(q => q.x === r.x && q.y === r.y)).length;
+  assert(paved > 0 || queued.length === 0, `builders pave the queued road tiles (${paved}/${queued.length})`);
   // roads respect water
   const lake = (() => { for (let yy = 0; yy < 200; yy++) for (let xx = 0; xx < 300; xx++) if (t.getTile(xx, yy).biome.isWater) return { x: xx, y: yy }; return null; })();
   for (let i = 0; i < 40; i++) sim.society.footstep(lake.x, lake.y);

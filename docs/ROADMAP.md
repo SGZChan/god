@@ -47,7 +47,7 @@ Dependencies: 3 needs 1 and 2; 4 needs 3; 5 needs 3; 6 needs 3 and 4. Sub-projec
 3. **DONE - Society and behaviour AI** (2026-10-05, see "Society" below): needs plus personality (utility) with planning, jobs (farmer, builder, hunter, gatherer,
    guard, priest, scholar...), pair bonds and families, children who grow up, clans (kin groups that split when large),
    camps that grow into towns, **construction by builders in stages**, desire-path roads, farms near water.
-4. **Beliefs and religions**: deity invention, rituals, shrines/temples built by priests, spread, schism and conflict;
+4. **DONE - Beliefs and religions** (src/civilization/religion.js): deity invention, rituals, shrines/temples built by priests, spread, schism and conflict;
    the player is unknown to mortals.
 5. **Graphics for buildings and disasters**: procedural pixel-art building tiles per type/era/culture with construction
    stages; animated disaster effects (meteor streak and crater, shockwave, lava, lightning, flood, plague mist, quake).
@@ -154,3 +154,10 @@ chooses sites).
   trust learns from those choices, and an Omni summary shows Attention/Recent/Milestones. Champions are sacred to soldiers,
   have triple health, eat and pray when needed. Tests: tests/laya_test.js. Follow button toggles and no longer leaks
   clicks to the map.
+- 4: religions (src/civilization/religion.js, tests/religion_test.js). A people's first deity comes from the land around its
+  capital; world events near a clan (god powers and disasters) are read as the work of a deity of the matching domain, add a
+  deity to the pantheon (max 4) or found a new faith. A deity = domain + one counterintuitive trait. Faith spreads by contact
+  (the more devout convert the less; priests and champions are persuasive), children take their clan's faith, priests (new
+  job) lead rites at shrines/temples, settlements with a faith plan a shrine (now a Stone Age building), temple and cathedral,
+  old faiths over several clans split into sects, and different faiths between devout neighbours can start holy wars.
+  The player is never named. Saved in the planet's society block (religions, faithSeq) and entity.faithId.

@@ -6,6 +6,7 @@ import { itemName } from '../civilization/economy.js';
 import { getSettlement } from '../civilization/settlements.js';
 import { getClan } from '../civilization/clans.js';
 import { familyOf } from '../civilization/families.js';
+import { getReligion, deityLabel } from '../civilization/religion.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { PERSONAS, DECREES, approveCard, dismissCard, issueDecree, omni, layaState } from '../ai/layaEngine.js';
 
@@ -67,11 +68,14 @@ export class InspectorPanel {
     const carried = Object.entries(ent.inventory || {}).filter(([, n]) => n > 0.05).map(([k, n]) => `${esc(itemName(k))} ${Math.round(n * 10) / 10}`).join(', ');
     const job = ent.job && JOB_INFO[ent.job] ? JOB_INFO[ent.job].name : (ent.isAdult ? 'No job' : 'Child');
     const guardian = ent.guardianId && sim ? sim.ecosystem.byId.get(ent.guardianId) : null;
+    const faith = sim && sim.society ? getReligion(sim.society, ent.faithId) : null;
     return `
       <div class="society-section" style="--clan: ${clan ? clan.color : '#94a3b8'}">
         <div class="section-title">Society</div>
         <div class="society-row"><span>Job</span><span>${esc(job)}${ent.role === 'SOLDIER' || ent.role === 'GUARD' ? ` (${ent.role.toLowerCase()})` : ''}</span></div>
         <div class="society-row"><span>Doing</span><span>${esc(ent.activity || ent.state || '')}</span></div>
+        <div class="society-row"><span>Faith</span><span>${faith ? `<i class="clan-swatch" style="background: ${faith.color}"></i>${esc(faith.name)}` : '—'}</span></div>
+        ${faith ? `<div class="society-row"><span>Gods</span><span>${faith.deities.map(d => esc(deityLabel(d))).join(', ')}</span></div>` : ''}
         <div class="society-row"><span>Clan</span><span>${clan ? `<i class="clan-swatch"></i>${esc(clan.name)}` : '—'}</span></div>
         <div class="society-row"><span>Settlement</span><span>${st ? esc(st.name) : '—'} (${esc(civ.name)})</span></div>
         <div class="society-row"><span>Home</span><span>${home ? esc(BUILDING_TYPES[home.type].name) : (ent.isAdult ? 'Homeless — sleeps rough' : '—')}</span></div>

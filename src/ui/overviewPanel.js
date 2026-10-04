@@ -8,6 +8,7 @@ import { itemName, itemColor, foodUnits } from '../civilization/economy.js';
 import { JOB_INFO, seasonOf, SEASON_NAMES } from '../civilization/jobs.js';
 import { exploredFraction } from '../civilization/exploration.js';
 import { housingCapacityOfCiv } from '../civilization/settlements.js';
+import { religionsOf, getReligion, deityLabel, DOMAINS } from '../civilization/religion.js';
 
 export function civStatus(civ) {
   if (civ.warTarget) return { kind: 'war', label: `At war with ${civ.warTarget.name}` };
@@ -76,8 +77,20 @@ export function summarizeWorld(sim) {
       territory: civ.territory.length,
       society: summarizeSociety(sim, civ),
       status: civStatus(civ),
-      progress: eraProgress(civ)
+      progress: eraProgress(civ),
+      faith: getReligion(sim.society, civ.faithId) ? getReligion(sim.society, civ.faithId).name : null
     })),
+    religions: religionsOf(sim.society)
+      .filter(r => !r.extinct && r.adherents > 0)
+      .sort((a, b) => b.adherents - a.adherents)
+      .map(r => ({
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        adherents: r.adherents,
+        sect: Boolean(r.parentId),
+        deities: r.deities.map(d => ({ label: deityLabel(d), symbol: DOMAINS[d.domain] ? DOMAINS[d.domain].symbol : '✦', trait: d.trait, origin: d.origin }))
+      })),
     season: SEASON_NAMES[seasonOf(sim.ecosystem.timeYears)],
     wildlife: sim.ecosystem.speciesCatalog
       .filter(s => s.type !== 'humanoid' && (s.population > 0 || extinct.includes(s.name)))
@@ -148,7 +161,7 @@ export class OverviewPanel {
       card.appendChild(title);
       if (civ.status.kind === 'war') card.appendChild(el('div', 'civ-meta', civ.status.label));
 
-      card.appendChild(el('div', 'civ-meta', `${civ.government} • ${civ.era}`));
+      card.appendChild(el('div', 'civ-meta', `${civ.government} • ${civ.era}${civ.faith ? ` • ${civ.faith}` : ''}`));
 
       const stats = el('div', 'civ-stats');
       stats.append(
@@ -203,6 +216,27 @@ export class OverviewPanel {
       bar.appendChild(fill);
       card.appendChild(bar);
       nodes.push(card);
+    }
+
+    if (model.religions && model.religions.length) {
+      const section = el('div');
+      section.appendChild(el('div', 'ov-title', 'Faiths'));
+      for (const r of model.religions) {
+        const row = el('div', 'faith-row');
+        row.style.setProperty('--faith', r.color);
+        const head = el('div', 'faith-head');
+        head.append(el('span', 'faith-name', `${r.sect ? '⚡ ' : ''}${r.name}`), el('span', 'faith-count', `${r.adherents} faithful`));
+        row.appendChild(head);
+        const gods = el('div', 'faith-gods');
+        for (const d of r.deities) {
+          const g = el('span', 'civ-chip', `${d.symbol} ${d.label}`);
+          g.title = `Who ${d.trait}. First seen in ${d.origin}.`;
+          gods.appendChild(g);
+        }
+        row.appendChild(gods);
+        section.appendChild(row);
+      }
+      nodes.push(section);
     }
 
     if (model.wildlife.length) {

@@ -113,7 +113,7 @@ export function serializeSim(sim) {
     effectsMeta: { seq: sim.terrain.effects ? sim.terrain.effects.seq : 0, naturalTimer: sim.terrain.effects ? sim.terrain.effects.naturalTimer : null },
     civs: civs.map(serializeCiv),
     // desire-path footsteps (only the worn-in tiles), sorted so equal worlds save identically
-    society: { traffic: [...sim.society.traffic.entries()].filter(([, n]) => n >= 3).sort((a, b) => (b[1] - a[1]) || (a[0] - b[0])).slice(0, 4000) },
+    society: { religions: sim.society.religions || [], faithSeq: sim.society.faithSeq || 0, traffic: [...sim.society.traffic.entries()].filter(([, n]) => n >= 3).sort((a, b) => (b[1] - a[1]) || (a[0] - b[0])).slice(0, 4000) },
     entities: sim.ecosystem.entities.map(e => ({
       ...pickFields(e, ENTITY_SKIP),
       genome: e.genome.toJSON(),
@@ -177,6 +177,8 @@ export function restoreSim(data, rngSeedLabel = 'restore') {
 
   society.civilizations = civs;
   society.traffic = new Map((data.society && data.society.traffic) || []);
+  society.religions = (data.society && data.society.religions) || [];
+  society.faithSeq = (data.society && data.society.faithSeq) || 0;
   society._lastAliveCount = civs.filter(c => c.isAlive).length;
 
   return { terrain, ecosystem, society, rng, lastActiveCosmicAge: data.lastActiveCosmicAge, simSeconds: data.simSeconds || 0 };

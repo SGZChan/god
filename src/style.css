@@ -2644,3 +2644,16 @@ body.panels-hidden #surface-nav-controls {
 .laya-approved { font-size: 0.72rem; color: #86efac; }
 .laya-empty { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 6px; }
 .laya-decrees { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+
+/* Faiths in the world overview (religion.js) */
+.faith-row {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--faith, var(--accent-gold));
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 8px;
+}
+.faith-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.78rem; }
+.faith-name { font-weight: 700; color: #fff; }
+.faith-count { color: var(--text-muted); white-space: nowrap; }
+.faith-gods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }

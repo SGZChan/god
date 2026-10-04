@@ -271,8 +271,8 @@ function housingType(civ, terrain, st, tier) {
   return options[options.length - 1][0];
 }
 
-// The wish list of one settlement: [{ type, weight, kind, res? }]
-function wishes(civ, terrain, st, n, tier, cn) {
+// The wish list of one settlement: [{ type, weight, kind, res? }] (exported for tests)
+export function wishes(civ, terrain, st, n, tier, cn) {
   const pop = Math.max(st.population || 0, 3);
   const list = [];
   const need = new Set();
@@ -328,6 +328,13 @@ function wishes(civ, terrain, st, n, tier, cn) {
   {
     if (civHave('factory') < 1 + Math.floor(nSettle / 3) && pop >= 10) want('factory', 2, 'edge');
     if (civHave('power_plant') < 1 + Math.floor(nSettle / 4) && pop >= 12) want('power_plant', 1.5, 'edge');
+  }
+  // a settlement with a faith raises a holy place; bigger and later towns raise temples and cathedrals (religion.js)
+  if (st.faithId) {
+    const holy = have('shrine') + have('temple') + have('cathedral');
+    if (holy < 1 && pop >= 5) want('shrine', 2);
+    if (have('temple') + have('cathedral') < 1 && pop >= 14) want('temple', 1.5);
+    if (st.capital && have('cathedral') < 1 && pop >= 24) want('cathedral', 1.2);
   }
   if (st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
   return list;

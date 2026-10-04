@@ -82,7 +82,7 @@ const LIST = [
   T('keep', 'Castle Keep', 'defense', 6, 6, 3, { stone: 90, wood: 30, iron: 8 }, 420, 24, { health: 650, ext: 40, icon: '🏰', door: { x: 2, y: 5 } }),
 
   // ---------- religion ----------
-  T('shrine', 'Shrine', 'religious', 2, 2, 1, { stone: 6, wood: 2 }, 30, 2, { health: 90, ext: 20, icon: '⛩️', door: { x: 0, y: 1 } }),
+  T('shrine', 'Shrine', 'religious', 2, 2, 0, { stone: 6, wood: 2 }, 30, 2, { health: 90, ext: 20, icon: '⛩️', door: { x: 0, y: 1 } }),
   T('temple', 'Temple', 'religious', 4, 4, 2, { stone: 40, wood: 8, gold: 1 }, 220, 8, { health: 260, ext: 28, icon: '🏛️', door: { x: 1, y: 3 } }),
   T('cathedral', 'Cathedral', 'religious', 5, 4, 3, { stone: 70, wood: 14, gold: 2 }, 340, 14, { health: 380, ext: 46, icon: '⛪', door: { x: 2, y: 3 } }),
 

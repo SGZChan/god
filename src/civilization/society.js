@@ -9,6 +9,7 @@ import { refreshClans, ensureClan, createClan, pickSplinter, CLAN_SPLIT_SIZE, ge
 import { bondFounders, assignHomes, adoptOrphans, feedChildren, clearDeadMates, householdConceptions } from './families.js';
 import { revealAround, syncDiscoveries, isExplored, isDiscovered } from './exploration.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
+import { tickReligion } from './religion.js';
 
 export const INITIAL_CITIZENS = 6;
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
@@ -154,8 +155,10 @@ export class Civilization {
         const curStatus = this.diplomacy.get(other.id) || 'PEACE';
 
         if (curStatus === 'PEACE' && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0) {
-          // Religious difference or resource greed can trigger war!
-          const religiousRift = Math.abs(this.piety - other.piety) > 40;
+          // Religious difference or resource greed can trigger war! Different faiths (religion.js) under a devout
+          // people, or a great gap in devotion
+          const differentFaith = this.faithId && other.faithId && this.faithId !== other.faithId && Math.max(this.piety, other.piety) > 60;
+          const religiousRift = (differentFaith && random() < 0.5) || Math.abs(this.piety - other.piety) > 40;
           if (religiousRift || random() < 0.12) {
             this.declareWar(other, ecosystem, religiousRift ? 'Holy Crusade over Heresy' : 'Border Dispute & Expansion');
           }
@@ -571,6 +574,9 @@ export class SocietyManager {
       refreshClans(civ, ecosystem.entities);
       this.splitClans(civ);
     }
+
+    // faith: deities, conversion, schisms (religion.js)
+    tickReligion(this, civ, dt);
   }
 
   // A clan that outgrew CLAN_SPLIT_SIZE sends a splinter group to found a new hamlet.
