@@ -2,8 +2,8 @@
 // rhythm rather than a calendar day). People sleep at night and work by day (life/entity.js, civilization/jobs.js);
 // the surface darkens at night and windows and hearths glow (planet/surfaceRenderer.js).
 export const DAY_SECONDS = 24;
-export const NIGHT_START = 0.78; // fraction of the day when night falls
-export const NIGHT_END = 0.22;   // ... and when the sun rises
+export const NIGHT_START = 0.83; // fraction of the day when night falls
+export const NIGHT_END = 0.17;   // ... and when the sun rises (a third of the day is night)
 
 // 0..1 through the current day (0 = midnight, 0.5 = noon), from the ecosystem's clock in years
 export function timeOfDay(timeYears) {

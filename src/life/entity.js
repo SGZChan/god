@@ -3,6 +3,7 @@ import { random } from '../simulation/random.js';
 import { Genome, derive, traitDistance } from './genome.js';
 import { MATE_THRESHOLD } from './species.js';
 import { makeName } from './names.js';
+import { livestockAI } from '../civilization/livestock.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -290,7 +291,8 @@ export class Entity {
     // AI Decision Cycle
     this.actionCooldown -= sim;
     if (this.actionCooldown <= 0) {
-      this.actionCooldown = this.aiSystem === 'LAYA' ? 2.2 : 1.5;
+      // people rest at night (dayCycle.js), so by day they get through their work more briskly than animals do
+      this.actionCooldown = this.aiSystem === 'LAYA' ? 2.2 : (this.isSapient && this.civilization ? 1.0 : 1.5);
       this.decideAction(worldContext);
     }
 
@@ -383,6 +385,8 @@ export class Entity {
 
     // Sapient beings still obey their civic duties first (war, law enforcement)
     if (this.isSapient && this.executeRoleAI(world)) return;
+    // Livestock live in their pen (civilization/livestock.js)
+    if (!this.isSapient && this.penId && livestockAI(this, world, random)) return;
 
     const options = [];
 
@@ -575,27 +579,68 @@ export class Entity {
 
   // Duties of sapient creatures: soldiers fight, guards enforce the law. Returns true if handled.
   executeRoleAI(worldContext) {
-    // 1. WARFARE: If Soldier and nation is at War, engage enemy soldiers!
-    if (this.role === 'SOLDIER' && this.civilization && this.civilization.warTarget) {
-      const enemyCivId = this.civilization.warTarget.id;
-      // Champions are sacred to every side: soldiers fight each other's people, never the god's chosen
+    // 1. WARFARE (adult soldiers only). Battles are fought between soldiers near the front; with no enemy soldier
+    //    in reach, soldiers raid the nearest enemy settlement: they loot its stores and burn a building. Civilians are
+    //    rarely killed (only adults caught in a raid) and children never: wars bleed armies, not whole peoples.
+    if (this.role === 'SOLDIER' && this.isAdult && this.stage !== 'elder' && this.civilization && this.civilization.warTarget) {
+      const foe = this.civilization.warTarget;
+      const front = 70;
+      // Champions are sacred to every side
       const enemy = this.findNearestEntity(worldContext.entities, e =>
-        e.alive && !e.isSpecialIndividual && e.civilization && e.civilization.id === enemyCivId
+        e.alive && !e.isSpecialIndividual && e.civilization === foe && e.role === 'SOLDIER' && e.isAdult
+        && Math.hypot(e.x - this.x, e.y - this.y) < front
       );
-
       if (enemy) {
         this.state = 'WAR_MARCH';
         this.target = enemy;
+        this.activity = `Fighting the soldiers of ${foe.name}`;
         this.requestPath(enemy.x, enemy.y, worldContext.pathfinder);
-
         if (Math.hypot(this.x - enemy.x, this.y - enemy.y) < 1.4) {
-          enemy.health -= 35;
+          enemy.health -= 22 + this.proficiencies.warfare / 5;
           if (enemy.health <= 0) {
             enemy.die(`Killed in War by ${this.civilization.name} Soldier`);
             this.kills++;
           }
         }
         return true;
+      }
+      // raid the nearest enemy settlement within reach
+      let target = null;
+      let best = front;
+      for (const st of foe.settlements || []) {
+        const d = Math.hypot(st.x - this.x, st.y - this.y);
+        if (d < best) { best = d; target = st; }
+      }
+      if (target) {
+        this.state = 'RAID';
+        this.activity = `Raiding ${target.name}`;
+        if (best > 3) {
+          if (this.path.length === 0 || random() < 0.2) this.requestPath(target.x + 0.5, target.y + 0.5, worldContext.pathfinder);
+          return true;
+        }
+        // loot food and goods for home, and set fire to a building
+        const loot = {};
+        for (const k of ['grain', 'meat', 'fish', 'berries', 'tools', 'bronze', 'iron_bar']) {
+          const n = Math.min(2, target.stock[k] || 0);
+          if (n > 0) { target.stock[k] -= n; loot[k] = n; }
+        }
+        for (const [k, n] of Object.entries(loot)) this.inventory[k] = (this.inventory[k] || 0) + n;
+        const terrain = worldContext.terrain;
+        const victims = terrain.buildingsInRect(target.x - 8, target.y - 8, target.x + 8, target.y + 8).filter(b => b.civId === foe.id && b.progress >= 1);
+        if (victims.length && random() < 0.35) {
+          const b = victims[Math.floor(random() * victims.length)];
+          terrain.damageBuilding(b.id, 30);
+          terrain.spawnParticles(b.x + b.w / 2, b.y + b.h / 2, 12, '#f97316', 1.2);
+        }
+        // an adult who stands in the way may be struck down
+        const defender = this.findNearestEntity(worldContext.entities, e => e.alive && e.civilization === foe && e.isAdult && !e.isSpecialIndividual && Math.hypot(e.x - this.x, e.y - this.y) < 2);
+        if (defender && random() < 0.12) {
+          defender.health -= 30;
+          if (defender.health <= 0) defender.die(`Killed in a raid by ${this.civilization.name}`);
+        }
+        // and then home with the spoils
+        this.civilization.warLoot = (this.civilization.warLoot || 0) + Object.values(loot).reduce((a, b) => a + b, 0);
+        return false;
       }
     }
 
@@ -609,8 +654,22 @@ export class Entity {
         this.state = 'ENFORCE_LAW';
         this.requestPath(criminal.x, criminal.y, worldContext.pathfinder);
         if (Math.hypot(this.x - criminal.x, this.y - criminal.y) < 1.3) {
-          criminal.health -= 25;
-          if (criminal.health <= 0) criminal.die('Executed by City Guard for Crimes');
+          // criminals are jailed and set to hard labour, not killed; a heretic under a theocracy usually recants, and
+          // only the stubborn few are executed
+          if (criminal.role === 'CRIMINAL') {
+            criminal.role = 'CITIZEN';
+            criminal.crimeRecord = (criminal.crimeRecord || 0) + 1;
+            criminal.actionCooldown = 12;
+            criminal.path = [];
+            criminal.activity = 'Serving a sentence';
+          } else if (random() < 0.75) {
+            criminal.personality.piety = Math.min(1, criminal.personality.piety + 0.35);
+            criminal.belief = criminal.determineBelief();
+            if (criminal.role === 'HERETIC') criminal.role = 'CITIZEN';
+            criminal.activity = 'Recanted before the guards';
+          } else {
+            criminal.die('Executed by City Guard for Heresy');
+          }
         }
         return true;
       }

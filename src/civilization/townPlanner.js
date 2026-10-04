@@ -320,7 +320,8 @@ export function wishes(civ, terrain, st, n, tier, cn) {
     if (civHave('kiln') < 1 + Math.floor(nSettle / 3) && pop >= 5) want('kiln', 2.5);
     if (civHave('smithy') < 1 + Math.floor(nSettle / 3) && pop >= 6 && (isDiscovered(civ, 'copper') || isDiscovered(civ, 'iron'))) want('smithy', 3);
     if (have('market_stall') + have('market') < Math.floor(pop / 12) && pop >= 8 && tier < 2) want('market_stall', 1.2);
-    if (have('pen') < Math.floor(farms / 2) && farms >= 2) want('pen', 1.5, 'edge');
+    // pens for tamed herds (livestock.js) from the first farms on: meat besides grain
+    if (have('pen') < Math.max(1, Math.floor(farms / 2)) && farms >= 1 && pop >= 5) want('pen', 2, 'edge');
     if (have('dock') < 1 && pop >= 8 && st.fishNear !== false) want('dock', 1.2, 'dock');
     if (have('watchtower') < Math.min(3, 1 + Math.floor(pop / 14)) && pop >= 8) want('watchtower', 0.8, 'edge');
   }

@@ -95,6 +95,14 @@ export class Ecosystem {
         const dist = 15 + random() * 40;
         const spot = this.terrain.findLand(home.x + Math.cos(angle) * dist, home.y + Math.sin(angle) * dist, 60) || home;
         this.spawnFounders(species, plan.count, spot.x, spot.y, template);
+        // ... and the same kind roams farther lands too, so the whole continent is not empty (hunters and herders
+        // need game beyond the first valley). These are founders as well: after this, animals only come from mating.
+        for (let k = 0; k < 2; k++) {
+          const a2 = random() * Math.PI * 2;
+          const d2 = 70 + random() * 110;
+          const far = this.terrain.findLand(home.x + Math.cos(a2) * d2, home.y + Math.sin(a2) * d2, 40);
+          if (far) this.spawnFounders(species, Math.max(6, Math.round(plan.count * 0.6)), far.x, far.y, template);
+        }
       }
     }
   }
@@ -311,6 +319,7 @@ export class Ecosystem {
     });
     baby.homeX = mother.homeX;
     baby.homeY = mother.homeY;
+    if (mother.penId) baby.penId = mother.penId; // born in the pen, belongs to it
     baby.civilization = mother.civilization;
     // A child belongs to its mother's clan (its father's if she has none), settlement and household
     baby.clanId = mother.clanId || (father && father.clanId) || null;

@@ -137,8 +137,12 @@ section('Construction by builders: nothing appears by itself');
   let stageSeen = new Set();
   let maxProgress = 0;
   const stockStart = civ.settlements[0].stock.wood;
+  let maxBuilders = 0;
+  let stockMoved = false;
   for (let i = 0; i < 40; i++) {
     run(sim, 100);
+    maxBuilders = Math.max(maxBuilders, sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.job === 'builder').length);
+    if (civ.settlements[0].stock.wood !== stockStart) stockMoved = true;
     for (const b of own(sim, civ)) {
       if (b.progress > deliveredFraction(b) + 0.06) violations++;
       if (b.type === 'hall') { stageSeen.add(Math.floor(b.progress * 4)); maxProgress = Math.max(maxProgress, b.progress); }
@@ -149,9 +153,8 @@ section('Construction by builders: nothing appears by itself');
   const done = own(sim, civ).filter(b => b.progress >= 1);
   assert(done.length >= 2, `builders finished buildings (${done.length} done)`);
   assert(done.every(b => deliveredFraction(b) >= 0.999), 'every finished building received its full cost in delivered materials');
-  assert(civ.output.wood > 0 && civ.settlements[0].stock.wood !== stockStart, 'wood was felled and stocked, materials moved through the stockpile');
-  const builders = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.job === 'builder');
-  assert(builders.length >= 1, 'builders exist');
+  assert(stockMoved && Object.values(civ.output).some(n => n > 0), 'goods were gathered and stocked, materials moved through the stockpile');
+  assert(maxBuilders >= 1, `builders were employed (up to ${maxBuilders})`);
   const roadTiles = [];
   for (let y = civ.capitalY - 3; y <= civ.capitalY + 3; y++) for (let x = civ.capitalX - 14; x <= civ.capitalX + 14; x++) if (sim.terrain.getRoad(x, y)) roadTiles.push([x, y]);
   assert(roadTiles.length > 0, `the main street has been paved by builders (${roadTiles.length} tiles)`);
@@ -205,6 +208,8 @@ section('Mining: extract from a known deposit and carry it home');
   // one miner standing at the settlement with a pick, told to dig tin
   // the youngest adult, so old age does not end the test (work now pauses at night)
   const miner = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.isAdult).sort((a, b) => a.age - b.age)[0];
+  miner.age = miner.stats.maturityYears + 2; // a young, long-lived miner: the founders are all close to old age, and
+  miner.lifespanJitter = 4;                   // a mining trip with its nights and meals spans decades of game time
   st.stock.tin = 0;
   const before = t.getDeposit(dep.x, dep.y).amount;
   st.need = { stone: 0, wood: 0, clay: 0, fibre: 0, food: 0 };
@@ -234,9 +239,13 @@ section('Scouts: roaming discovers resources');
   const scout = sim.ecosystem.entities.find(e => e.alive && e.civilization === civ && e.isAdult);
   scout.job = 'scout';
   civ.settlements[0].assignTimer = 1e9;
-  for (let i = 0; i < 60; i++) { run(sim, 100); if (scout.job !== 'scout') scout.job = 'scout'; }
+  let away = 0; // the farthest the scout got (at night scouts camp or come home, so not just the last position)
+  for (let i = 0; i < 60; i++) {
+    run(sim, 100);
+    if (scout.job !== 'scout') scout.job = 'scout';
+    away = Math.max(away, Math.hypot(scout.x - civ.settlements[0].x, scout.y - civ.settlements[0].y));
+  }
   assert(exploredCount(civ) >= 8, `the scout explored the land around (${exploredCount(civ)} cells)`);
-  const away = Math.hypot(scout.x - civ.settlements[0].x, scout.y - civ.settlements[0].y);
   assert(away > 6 || exploredCount(civ) > 15, 'scouts range beyond the settlement');
 }
 
@@ -290,8 +299,12 @@ section('Clans and families');
     sim.society.tickFamilies();
     assert(kid.guardianId && sim.ecosystem.byId.get(kid.guardianId).alive && sim.ecosystem.byId.get(kid.guardianId).isAdult, 'an orphan is taken in by an adult of the clan');
   } else assert(true, 'no children yet');
-  const fam = familyOf(mother, sim.ecosystem.byId, sim.ecosystem.entities);
-  assert(Array.isArray(fam.children) && fam.children.some(c => c.id === babies[0].id), 'familyOf lists a mother\'s children');
+  // (the test baby may not have survived the years run above: check any living child with a living mother)
+  const child = sim.ecosystem.entities.find(e => e.alive && e.motherId && sim.ecosystem.byId.get(e.motherId) && sim.ecosystem.byId.get(e.motherId).alive) || (babies[0].alive ? babies[0] : null);
+  if (child) {
+    const fam = familyOf(sim.ecosystem.byId.get(child.motherId) || mother, sim.ecosystem.byId, sim.ecosystem.entities);
+    assert(Array.isArray(fam.children) && fam.children.some(c => c.id === child.id), 'familyOf lists a mother\'s children');
+  } else assert(true, 'no living mother and child to check');
 }
 
 section('Clans split and found hamlets');

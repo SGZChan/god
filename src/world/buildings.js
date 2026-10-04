@@ -50,7 +50,7 @@ const LIST = [
 
   // ---------- farming ----------
   T('farm', 'Farm Field', 'farm', 4, 3, 0, { wood: 2, fibre: 2 }, 30, 3, { solid: false, door: null, health: 50, ext: 8, icon: '🌾' }),
-  T('pen', 'Pasture Pen', 'farm', 3, 3, 1, { wood: 8 }, 30, 2, { solid: false, door: null, health: 60, ext: 8, icon: '🐑' }),
+  T('pen', 'Pasture Pen', 'farm', 3, 3, 0, { wood: 8 }, 30, 2, { solid: false, door: null, health: 60, ext: 8, icon: '🐑' }),
 
   // ---------- workshops ----------
   T('workshop', 'Workshop', 'workshop', 3, 3, 1, { wood: 14, stone: 4 }, 70, 3, { health: 120, ext: 18, icon: '🔨' }),

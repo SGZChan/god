@@ -155,7 +155,7 @@ export class Civilization {
       // Wars of conquest: a neighbour holds deposits this people needs (expansion.js); the winner annexes them
       if (dist < 75 && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0 && ecosystem.terrain) {
         const goal = covetedDeposit(this, other, ecosystem.terrain);
-        if (goal && this.militaryStrength >= other.militaryStrength * 0.7 && random() < 0.35) {
+        if (goal && this.militaryStrength >= other.militaryStrength * 1.2 && random() < 0.12) {
           this.warGoal = goal;
           this.declareWar(other, ecosystem, `War for the ${goal.type} of ${other.name}`);
           continue;

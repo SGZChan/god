@@ -20,7 +20,8 @@ import { revealAround, scanForDeposits, nearestKnown, isExplored, isDiscovered, 
 import { ERA_REQUIREMENTS, ERAS } from './techTree.js';
 import { eraTier } from './townPlanner.js';
 import { holyPlaceOf, performRite } from './religion.js';
-import { timeOfDay, isNight } from '../simulation/dayCycle.js';
+import { timeOfDay, isNight, NIGHT_START } from '../simulation/dayCycle.js';
+import { penAnimals, tameable, PEN_CAPACITY } from './livestock.js';
 
 export const JOBS = ['farmer', 'herder', 'hunter', 'gatherer', 'fisher', 'woodcutter', 'miner', 'builder', 'hauler', 'crafter', 'trader', 'scout', 'scholar', 'leader', 'priest'];
 
@@ -230,7 +231,8 @@ function wantedJobs(c, st, members, adults) {
   const oreNeed = st.shortage.ore ? 0.5 : 0;
   add('gatherer', (foodShort > 0.25 || farmSlots === 0) ? Math.ceil(N * (0.08 + 0.3 * foodShort + 0.12 * need.fibre)) : (need.fibre > 0.3 ? Math.ceil(N * 0.1 * need.fibre) : 0));
   // hunting thins the herds: only when food is short
-  add('hunter', foodShort > 0.2 ? Math.ceil(N * 0.1) : 0);
+  // hunters when food is short, and always one when the stores have little meat (people want meat, not only grain)
+  add('hunter', foodShort > 0.2 ? Math.ceil(N * 0.1) : ((st.stock.meat || 0) < Math.max(4, pop * 0.4) && N >= 5 ? 1 : 0));
   add('woodcutter', need.wood > 0.05 ? Math.ceil(N * (0.05 + 0.3 * need.wood)) : 0);
   const mineNeed = Math.max(need.stone, need.clay, oreNeed);
   add('miner', mineNeed > 0.05 || oreNeed ? Math.ceil(N * (0.04 + 0.28 * mineNeed)) : 0);
@@ -594,6 +596,93 @@ function stepField(ent, c, type) {
     field.growth = Math.min(1, (field.growth || 0) + TEND_GAIN * (0.6 + ent.proficiencies.farming / 100));
   }
   ent.actionCooldown = 1;
+  return true;
+}
+
+// ---------- herding (livestock.js) ----------
+
+// A herder keeps a pen stocked with real animals: tames wild grazers into it, feeds the herd, and slaughters the
+// surplus (or one beast when food is short) for meat and fibre.
+function stepHerder(ent, c) {
+  const t = taskOf(ent, 'herd');
+  const { terrain, st, ecosystem } = c;
+  const cap = eco.carryCapacity(ent);
+  if (t.phase === 'return') {
+    say(ent, 'Bringing meat to the stores');
+    if (returnLoad(ent, c)) t.phase = undefined;
+    return true;
+  }
+  let pen = t.siteId ? terrain.getBuilding(t.siteId) : null;
+  if (!pen || pen.type !== 'pen' || pen.progress < 1) {
+    pen = null;
+    let fewest = Infinity;
+    for (const b of buildingsOf(terrain, st)) {
+      if (b.type !== 'pen' || b.progress < 1) continue;
+      const n = penAnimals(ecosystem, b).length;
+      if (n < fewest) { fewest = n; pen = b; }
+    }
+    if (!pen) return failTask(ent, c, 'No pen to tend');
+    t.siteId = pen.id;
+  }
+  const herd = penAnimals(ecosystem, pen);
+  const cx = pen.x + (pen.w >> 1);
+  const cy = pen.y + (pen.h >> 1);
+
+  // 1. taming: walk up to the chosen wild animal; once beside it, it is ours and walks into the pen by itself
+  if (t.captiveId) {
+    const a = ecosystem.byId.get(t.captiveId);
+    if (!a || !tameable(a)) { t.captiveId = undefined; }
+    else {
+      say(ent, `Taming a wild ${a.species ? a.species.name : 'beast'}`);
+      if (Math.hypot(a.x - ent.x, a.y - ent.y) > 1.8) {
+        if (ent.path.length === 0 || random() < 0.3) ent.requestPath(a.x, a.y, c.world.pathfinder);
+        return true;
+      }
+      a.penId = pen.id;
+      a.path = [];
+      t.captiveId = undefined;
+      say(ent, `Led a ${a.species ? a.species.name : 'beast'} into the pen`);
+      return true;
+    }
+  }
+  // 2. too few animals (or only one sex): find a wild one to tame, of the missing sex if possible
+  const sexes = new Set(herd.filter(a => a.isAdult).map(a => a.sex));
+  if (herd.length < 2 || (herd.length < PEN_CAPACITY / 2 && sexes.size < 2)) {
+    let best = null;
+    let bestScore = Infinity;
+    for (const a of c.world.grid.within(cx, cy, 45)) {
+      if (!tameable(a)) continue;
+      const d = Math.hypot(a.x - cx, a.y - cy);
+      const score = d - (sexes.size === 1 && !sexes.has(a.sex) ? 20 : 0);
+      if (score < bestScore) { bestScore = score; best = a; }
+    }
+    if (best) { t.captiveId = best.id; return true; }
+  }
+  // 3. slaughter: the surplus, or one beast when the stores run short of food
+  const foodShort = eco.foodUnits(st.stock) < Math.max(6, (st.population || 0) * 1.2);
+  if (herd.length > PEN_CAPACITY || (herd.length >= 4 && foodShort)) {
+    const victim = herd.filter(a => a.isAdult).sort((a, b) => b.age - a.age)[0];
+    if (victim) {
+      say(ent, `Slaughtering a ${victim.species ? victim.species.name : 'beast'}`);
+      if (!walkTo(ent, c, Math.floor(victim.x), Math.floor(victim.y), 1.8)) return true;
+      victim.die('Slaughtered for meat');
+      victim.decayTimer = 0;
+      eco.add(ent.inventory, 'meat', Math.min(cap, Math.round((2 + victim.stats.sizeScale * 5) * 10) / 10));
+      eco.add(ent.inventory, 'fibre', 1);
+      t.phase = 'return';
+      ent.actionCooldown = 1;
+      return true;
+    }
+  }
+  // 4. tend the herd: feed them and let the pen grass recover
+  if (!walkTo(ent, c, cx, cy, 2.2)) return true;
+  say(ent, herd.length ? 'Feeding the herd' : 'Mending the pen');
+  for (const a of herd) a.hunger = Math.max(0, a.hunger - 30);
+  for (let y = pen.y; y < pen.y + pen.h; y++) for (let x = pen.x; x < pen.x + pen.w; x++) {
+    const tile = terrain.getTile(x, y);
+    if (tile && !tile.biome.isWater) tile.flora = Math.min(100, tile.flora + 6);
+  }
+  ent.actionCooldown = 1.5;
   return true;
 }
 
@@ -1047,6 +1136,10 @@ function stepEat(ent, c) {
   }
   ent.hunger = Math.max(0, ent.hunger - eaten);
   ent.health = Math.min(ent.maxHealth, ent.health + 3);
+  // while at the stores: unload what was carried home, and take a ration so the next meal can be eaten at work
+  if (eco.total(ent.inventory) > 0 && !(ent.task && (ent.task.kind === 'build' || ent.task.kind === 'trade'))) dropAll(ent, c); // (builders and traders keep their cargo)
+  const ration = eco.bestFood(c.st.stock);
+  if (ration && eco.foodUnits(c.st.stock) > Math.max(4, (c.st.population || 0) * 0.8)) eco.add(ent.inventory, ration, eco.take(c.st.stock, ration, 1));
   say(ent, 'Eating at the stores');
   ent.state = 'EAT';
   ent.actionCooldown = 1;
@@ -1057,7 +1150,7 @@ function stepEat(ent, c) {
 
 const STEPS = {
   farmer: (e, c) => stepField(e, c, 'farm'),
-  herder: (e, c) => stepField(e, c, 'pen'),
+  herder: stepHerder,
   hunter: stepHunter,
   gatherer: stepGatherer,
   fisher: stepFisher,
@@ -1091,8 +1184,11 @@ export function sapientOptions(ent, world, options) {
   }
   // food: carried, or at the depot; with a hungry worker food beats work around hunger 55
   const holdsFood = eco.foodUnits(ent.inventory) >= 1;
-  if (ent.hunger > 38 && (holdsFood || eco.foodUnits(c.st.stock) >= 0.5)) {
-    options.push({ score: (ent.hunger / 100) * 1.1, run: () => stepEat(ent, c) });
+  // supper: in the evening people eat before bed, so nobody wakes up too hungry to work or start a family
+  const tod = timeOfDay(c.ecosystem.timeYears);
+  const evening = tod > NIGHT_START - 0.1 && tod < NIGHT_START + 0.03;
+  if ((ent.hunger > 38 || (evening && ent.hunger > 20)) && (holdsFood || eco.foodUnits(c.st.stock) >= 0.5)) {
+    options.push({ score: evening ? 0.95 : (ent.hunger / 100) * 1.1, run: () => stepEat(ent, c) });
   }
   // night: home to bed (guards, and soldiers while their people are at war, keep watch); by day a tired worker naps
   const night = isNight(timeOfDay(c.ecosystem.timeYears));
