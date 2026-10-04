@@ -46,7 +46,8 @@ function moveIn(house, e) {
 }
 
 // One pass over a settlement: valid homes, new households, evictions of the youngest when a house is overfull.
-export function assignHomes(terrain, civ, st, members, byId) {
+export function assignHomes(terrain, civ, st, allMembers, byId) {
+  const members = allMembers.filter(e => e.alive); // (the census list may still hold someone who just died)
   const houses = housesOf(terrain, st);
   const houseById = new Map(houses.map(h => [h.id, h]));
   for (const h of houses) cleanHouse(h, byId);
@@ -111,7 +112,7 @@ export function assignHomes(terrain, civ, st, members, byId) {
 // Children without a living parent are taken in by the eldest adult of their clan in the settlement.
 export function adoptOrphans(members, byId) {
   for (const e of members) {
-    if (e.isAdult) continue;
+    if (e.isAdult || !e.alive) continue;
     const hasParent = [e.motherId, ...(e.parents || [])].some(id => id && id !== 'unknown' && byId.get(id) && byId.get(id).alive);
     const guardian = e.guardianId ? byId.get(e.guardianId) : null;
     if (hasParent || (guardian && guardian.alive)) continue;
