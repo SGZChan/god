@@ -161,7 +161,7 @@ section('Construction by builders: nothing appears by itself');
 section('Jobs: demand and aptitude');
 {
   const sim = realWorld('jobs-1');
-  run(sim, 3000);
+  run(sim, 4500); // (people sleep at night, so towns take a little longer to grow than before the day cycle)
   const civ = sim.society.civilizations[0];
   const members = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ);
   const adults = members.filter(e => e.isAdult);
@@ -176,6 +176,7 @@ section('Jobs: demand and aptitude');
   brute.proficiencies = { architecture: 90, warfare: 60, statesmanship: 20, farming: 20, science: 10, mysticism: 5 };
   brute.stats = { ...a.stats, sizeScale: 1.2 };
   brute.personality = { ...a.personality, conscientiousness: 0.9 };
+  brute.age = a.stats.maturityYears + 1; // a young adult (adults[0] may itself be an elder)
   const sage = Object.assign(Object.create(Object.getPrototypeOf(a)), a);
   sage.proficiencies = { architecture: 20, warfare: 20, statesmanship: 60, farming: 20, science: 95, mysticism: 50 };
   sage.stats = { ...a.stats, sizeScale: 0.4 };
@@ -202,7 +203,8 @@ section('Mining: extract from a known deposit and carry it home');
   learnDeposit(civ, 'tin', dep.x, dep.y);
   syncDiscoveries(civ);
   // one miner standing at the settlement with a pick, told to dig tin
-  const miner = sim.ecosystem.entities.find(e => e.alive && e.civilization === civ && e.isAdult);
+  // the youngest adult, so old age does not end the test (work now pauses at night)
+  const miner = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.isAdult).sort((a, b) => a.age - b.age)[0];
   st.stock.tin = 0;
   const before = t.getDeposit(dep.x, dep.y).amount;
   st.need = { stone: 0, wood: 0, clay: 0, fibre: 0, food: 0 };
@@ -343,7 +345,7 @@ section('Trade: caravans carry surplus between settlements');
   a.stock = { wood: 200, stone: 100, grain: 50 };
   b.stock = { grain: 20 };
   a.assignTimer = 1e9; b.assignTimer = 1e9;
-  const trader = sim.ecosystem.entities.find(e => e.alive && e.civilization === civ && e.isAdult);
+  const trader = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.isAdult).sort((a, b) => a.age - b.age)[0];
   trader.job = 'trader';
   trader.settlementId = a.id;
   const woodB0 = b.stock.wood || 0;

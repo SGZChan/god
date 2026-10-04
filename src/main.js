@@ -18,6 +18,7 @@ import { random, setActiveRng, withRng } from './simulation/random.js';
 import { createPlanetWorld } from './simulation/world.js';
 import { SaveError, serializeGame, restoreSim, parseSave } from './persistence/saveGame.js';
 import { foundColony } from './civilization/spaceflight.js';
+import { timeOfDay, partOfDay, isNight } from './simulation/dayCycle.js';
 
 const SAVE_KEY = 'genesis-cosmos-save-v3';
 const AUTOSAVE_MS = 30000;
@@ -616,6 +617,9 @@ class GameApp {
     if (this.palette) this.palette.update();
     const sim = this.activeSim;
     this.yearDisplay.textContent = 'Year ' + Math.floor(sim.simSeconds * 0.25).toLocaleString();
+    const t = timeOfDay(sim.ecosystem.timeYears);
+    const clock = document.getElementById('clock-display');
+    if (clock) clock.textContent = `${isNight(t) ? '🌙' : '☀️'} ${partOfDay(t)}`;
     if (this.currentView === 'SURFACE' && !this.overview.isCollapsed) {
       this.overview.render(summarizeWorld(sim), sim.eventLog.slice(0, 6));
     }

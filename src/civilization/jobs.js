@@ -20,6 +20,7 @@ import { revealAround, scanForDeposits, nearestKnown, isExplored, isDiscovered, 
 import { ERA_REQUIREMENTS, ERAS } from './techTree.js';
 import { eraTier } from './townPlanner.js';
 import { holyPlaceOf, performRite } from './religion.js';
+import { timeOfDay, isNight } from '../simulation/dayCycle.js';
 
 export const JOBS = ['farmer', 'herder', 'hunter', 'gatherer', 'fisher', 'woodcutter', 'miner', 'builder', 'hauler', 'crafter', 'trader', 'scout', 'scholar', 'leader', 'priest'];
 
@@ -113,6 +114,9 @@ function walkTo(ent, c, x, y, reach = 1.2) {
     t.gy = y;
     // a goal behind an obstacle needs a wider search than the usual 300 nodes
     ent.requestPath(x + 0.5, y + 0.5, c.world.pathfinder, 300 + (t.stuck || 0) * 500);
+    // the short search found nothing (a lake or a river bend in between): search properly at once. Without this a
+    // worker whose stuck counter is reset by every meal or night never reaches a site behind water.
+    if (ent.path.length === 0 && Math.hypot(dx, dy) > reach + 1) ent.requestPath(x + 0.5, y + 0.5, c.world.pathfinder, 4000);
   }
   if ((t.stuck || 0) >= 5) {
     t.failed = true;
@@ -220,6 +224,8 @@ function wantedJobs(c, st, members, adults) {
     }
   }
   add('builder', Math.min(Math.ceil(N * 0.4), workable * 2 + (roads > 0 ? 1 : 0)));
+  // a settlement with a faith keeps a priest or two (religion.js)
+  add('priest', st.faithId && N >= 8 ? 1 + Math.floor(N / 24) : 0);
   const need = st.need || { wood: 0.5, fibre: 0.5, stone: 0.5, clay: 0, food: foodShort };
   const oreNeed = st.shortage.ore ? 0.5 : 0;
   add('gatherer', (foodShort > 0.25 || farmSlots === 0) ? Math.ceil(N * (0.08 + 0.3 * foodShort + 0.12 * need.fibre)) : (need.fibre > 0.3 ? Math.ceil(N * 0.1 * need.fibre) : 0));
@@ -237,8 +243,6 @@ function wantedJobs(c, st, members, adults) {
   add('herder', Math.min(penSlots, Math.ceil(N * 0.08)));
   add('fisher', st.fishNear === false ? 0 : (countBuilt(terrain, st, 'dock') > 0 ? Math.ceil(N * 0.1) : (N >= 10 ? 1 : 0)));
   add('trader', settlementsOf(civ).length >= 2 && N >= 8 ? 1 + Math.floor(N / 20) : 0);
-  // a settlement with a faith keeps a priest or two (religion.js)
-  add('priest', st.faithId && N >= 10 ? 1 + Math.floor(N / 24) : 0);
   return want;
 }
 
@@ -663,8 +667,23 @@ function abandonSite(c, ent, site) {
   }
 }
 
-function siteSpot(site) {
-  return { x: site.x + (site.w >> 1), y: site.y + (site.h >> 1) };
+// Where a builder stands to deliver to or work on a site: the walkable tile of the site or right around it that is
+// nearest to the builder (not its centre: a field beside a lake has its centre on the far side of the water).
+function siteSpot(site, ent = null, terrain = null) {
+  const centre = { x: site.x + (site.w >> 1), y: site.y + (site.h >> 1) };
+  if (!ent || !terrain) return centre;
+  let best = null;
+  let bestD = Infinity;
+  for (let y = site.y - 1; y <= site.y + site.h; y++) {
+    for (let x = site.x - 1; x <= site.x + site.w; x++) {
+      if (!terrain.inBounds(x, y) || terrain.isSolid(x, y)) continue;
+      const tile = terrain.getTile(x, y);
+      if (!tile || tile.biome.isWater) continue;
+      const d = Math.hypot(x + 0.5 - ent.x, y + 0.5 - ent.y);
+      if (d < bestD) { bestD = d; best = { x, y }; }
+    }
+  }
+  return best || centre;
 }
 
 function stepBuilder(ent, c, haulOnly) {
@@ -691,8 +710,9 @@ function stepBuilder(ent, c, haulOnly) {
     }
     t.siteId = site.id;
     say(ent, `Hauling materials to the ${BUILDING_TYPES[site.type].name.toLowerCase()}`);
-    const spot = siteSpot(site);
-    if (!walkTo(ent, c, spot.x, spot.y, 1.8)) {
+    const spot = siteSpot(site, ent, terrain);
+    // (within arm's reach of the site's edge is close enough to hand materials over)
+    if (!walkTo(ent, c, spot.x, spot.y, 2.6)) {
       if (t.failed) { abandonSite(c, ent, site); if (returnLoad(ent, c)) t.siteId = undefined; }
       return true;
     }
@@ -713,8 +733,8 @@ function stepBuilder(ent, c, haulOnly) {
     if (!haulOnly && site.progress < fraction - 0.002) {
       t.siteId = site.id;
       say(ent, `Building the ${BUILDING_TYPES[site.type].name.toLowerCase()}`);
-      const spot = siteSpot(site);
-      if (!walkTo(ent, c, spot.x, spot.y, 1.9)) {
+      const spot = siteSpot(site, ent, terrain);
+      if (!walkTo(ent, c, spot.x, spot.y, 2.6)) {
         if (t.failed) abandonSite(c, ent, site);
         return true;
       }
@@ -1074,7 +1094,21 @@ export function sapientOptions(ent, world, options) {
   if (ent.hunger > 38 && (holdsFood || eco.foodUnits(c.st.stock) >= 0.5)) {
     options.push({ score: (ent.hunger / 100) * 1.1, run: () => stepEat(ent, c) });
   }
+  // night: home to bed (guards, and soldiers while their people are at war, keep watch); by day a tired worker naps
+  const night = isNight(timeOfDay(c.ecosystem.timeYears));
+  const onWatch = ent.role === 'GUARD' || (ent.role === 'SOLDIER' && civ.warTarget);
+  if (night && !onWatch) options.push({ score: 0.9, run: () => stepSleep(ent, c) });
+  else if (!night && ent.energy < 12) options.push({ score: 0.7, run: () => stepSleep(ent, c) });
+  else if (!night && !ent.isAdult) {
+    // children play close to home instead of roaming the wilds
+    const home = homeSpot(ent, c);
+    if (Math.hypot(ent.x - home.x, ent.y - home.y) > 9) options.push({ score: 0.6, run: () => { say(ent, 'Playing near home'); walkTo(ent, c, home.x, home.y, 4); return true; } });
+  }
   if (!ent.isAdult) return false;
+  // awake and working: the day wears a worker out a little (sleep restores it)
+  if (!night) ent.energy = Math.max(0, ent.energy - 0.35);
+  // an adult with no job helps where hands are always needed: gathering food and fibre around the settlement
+  if (!ent.job && !night) options.push({ score: 0.42, run: () => { ent.state = 'WORK'; say(ent, 'Helping to gather'); return stepGatherer(ent, c); } });
   if (ent.job && STEPS[ent.job]) {
     options.push({
       score: 0.5 + Math.min(0.08, aptitude(ent, ent.job) * 0.02),
@@ -1087,6 +1121,43 @@ export function sapientOptions(ent, world, options) {
     });
   }
   return false;
+}
+
+// Where a person sleeps: the door of their home, else by the settlement's hall fire.
+function homeSpot(ent, c) {
+  const home = ent.homeId ? c.terrain.getBuilding(ent.homeId) : null;
+  if (home && home.progress >= 1) {
+    const d = frontTile(home) || doorTile(home);
+    if (d) return { x: d.x, y: d.y, home };
+  }
+  const dep = depotOf(c.terrain, c.st);
+  return { x: dep.x, y: dep.y, home: null };
+}
+
+// Go home and sleep: energy comes back; people in a home sleep better than those by the fire.
+function stepSleep(ent, c) {
+  const spot = homeSpot(ent, c);
+  // (the job's task is kept: work resumes where it stopped in the morning)
+  // far from home (a distant mine, a hunt, a scouting trip) people camp where they are
+  if (Math.hypot(ent.x - spot.x, ent.y - spot.y) > 14) {
+    ent.path = [];
+    ent.state = 'SLEEP';
+    ent.energy = Math.min(100, ent.energy + 4);
+    say(ent, 'Camping for the night');
+    ent.actionCooldown = 2;
+    return true;
+  }
+  if (!walkTo(ent, c, spot.x, spot.y, 1.6)) {
+    say(ent, spot.home ? 'Going home for the night' : 'Looking for a place to sleep');
+    ent.state = 'HOMEWARD';
+    return true;
+  }
+  ent.path = [];
+  ent.state = 'SLEEP';
+  ent.energy = Math.min(100, ent.energy + (spot.home ? 9 : 5));
+  say(ent, spot.home ? 'Sleeping at home' : 'Sleeping rough by the fire');
+  ent.actionCooldown = 2;
+  return true;
 }
 
 // Clan splinters walk to the new hamlet and hand over what they carry.

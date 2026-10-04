@@ -8,6 +8,7 @@ const JOB_TOOLS = Object.fromEntries(Object.entries(JOB_INFO).map(([k, v]) => [k
 import { getResourceIcon, getTreeSprite, getStumpSprite } from '../art/resourceIcons.js';
 import { getOverview, LodBlocks } from '../world/overview.js';
 import { BuildingRenderer } from '../art/buildingRenderer.js';
+import { timeOfDay, daylight } from '../simulation/dayCycle.js';
 
 export const MIN_ZOOM = 0.04; // zoomed all the way out you see a continent (a few thousand tiles across)
 export const MAX_ZOOM = 6.0;
@@ -759,6 +760,33 @@ export class SurfaceRenderer {
       ctx.fill();
     }
     ctx.globalAlpha = 1.0;
+
+    // 5. Night: the world darkens; windows, hearths and torches glow (simulation/dayCycle.js)
+    const light = daylight(timeOfDay(this.ecosystem.timeYears));
+    if (light < 0.98) {
+      const dark = (1 - light) * 0.48;
+      const x0 = -this.camera.x / this.camera.zoom;
+      const y0 = -this.camera.y / this.camera.zoom;
+      ctx.fillStyle = `rgba(8, 14, 40, ${dark.toFixed(3)})`;
+      ctx.fillRect(x0, y0, w / this.camera.zoom, h / this.camera.zoom);
+      if (dark > 0.12 && !farView) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const glow = Math.min(1, (dark - 0.12) * 2.2);
+        for (const b of this.buildingRenderer.queue) {
+          if (b.progress < 1 || b.type === 'ruins' || b.type === 'farm' || b.type === 'pen') continue;
+          const cx = (b.x + b.w / 2) * ts;
+          const cy = (b.y + b.h - 0.6) * ts;
+          const r = ts * (1.2 + b.w * 0.35);
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          g.addColorStop(0, `rgba(255, 190, 90, ${(0.35 * glow).toFixed(3)})`);
+          g.addColorStop(1, 'rgba(255, 190, 90, 0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        }
+        ctx.restore();
+      }
+    }
 
     if (this.currentPower && this.currentPower.radius && this.hover && this.enabled) {
       drawPowerCursor(ctx, this.hover, this.currentPower, ts, this.waterAnimTime);
