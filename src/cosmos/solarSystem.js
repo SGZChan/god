@@ -46,10 +46,10 @@ export class SolarSystem {
   }
 
   initLighting() {
-    this.ambientLight = new THREE.AmbientLight(0x223355, 0.45);
+    this.ambientLight = new THREE.AmbientLight(0x4a5f88, 1.1); // (the dark side stays readable)
     this.scene.add(this.ambientLight);
 
-    this.sunLight = new THREE.PointLight(0xfff5e6, 2.8, 1800, 0.8);
+    this.sunLight = new THREE.PointLight(0xfff5e6, 3.2, 0, 0); // no falloff: every orbit is lit alike
     this.sunLight.castShadow = true;
     this.scene.add(this.sunLight);
   }
@@ -68,7 +68,7 @@ export class SolarSystem {
 
     this.physics.updateStarProperties(starMass, radius, starName);
     this.sunLight.color.setHex(lightCol);
-    this.sunLight.intensity = 2.8;
+    this.sunLight.intensity = 3.2;
 
     const sunGeom = new THREE.SphereGeometry(radius, 48, 48);
     const sunMat = new THREE.MeshBasicMaterial({ color: color });

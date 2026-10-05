@@ -18,7 +18,7 @@
 // `instant: true` (tests, dev tools) places finished buildings instead of sites.
 import { ERAS, ERA_REQUIREMENTS } from './techTree.js';
 import { random } from '../simulation/random.js';
-import { BUILDING_TYPES, doorTile, frontTile } from '../world/buildings.js';
+import { BUILDING_TYPES, doorTile, frontTile, missingMaterials } from '../world/buildings.js';
 import { RESOURCES } from '../world/resources.js';
 import { createSettlement, settlementsOf, buildingsOf, housesOf, housingCapacity, openSites, STARTER_KIT } from './settlements.js';
 import { isDiscovered, nearestKnown, DISCOVERABLE, revealAround } from './exploration.js';
@@ -101,7 +101,7 @@ function obtainable(civ, terrain, st, res) {
 
 // Shelter, farmland and the camps that gather the materials are always allowed: the settlement could not get going otherwise.
 const ALWAYS_FUNDED = new Set(['tent', 'hut', 'farm', 'pen', 'hall', 'barrow', 'lumber_camp', 'quarry', 'dock']);
-const FUNDED_SHARE = 0.4; // a new building is only started once the stockpile holds this share of its raw materials
+const FUNDED_SHARE = 0.3; // a new building is only started once the stockpile holds this share of its raw materials
 
 // Raw materials the open building sites still wait for (already earmarked: a new site cannot count on them)
 function committed(terrain, st) {
@@ -519,7 +519,13 @@ export function planSettlement(civ, terrain, st, { instant = false, maxSites = n
   const cn = {};
   for (const other of settlementsOf(civ)) for (const [k, v] of Object.entries(other === st ? n : counts(terrain, other))) cn[k] = (cn[k] || 0) + v;
   // wall pieces are raised by the whole town over time, they do not hold up other building
-  const sites = openSites(terrain, st).filter(b => !BUILDING_TYPES[b.type].connects).length;
+  // (a site stalled for want of materials does not hold up the next plan: it would block the kiln and smithy that make ages)
+  const stalled = b => {
+    const missing = missingMaterials(b);
+    const keys = Object.keys(missing).filter(k => missing[k] > 0.01);
+    return keys.length > 0 && !keys.some(k => (st.stock[k] || 0) > 0.01) && b.progress < 0.05;
+  };
+  const sites = openSites(terrain, st).filter(b => !BUILDING_TYPES[b.type].connects && !stalled(b)).length;
   town.rx = Math.min(st.wall ? st.wall.R - 4 : 24, 6 + Math.floor((n.housing || 0) * 0.9));
   const cap = maxSites !== null ? maxSites : Math.max(2, 1 + Math.ceil(((st.jobs.builder || 0) + (st.jobs.hauler || 0)) / 2));
   if (sites >= cap && !instant) return null;

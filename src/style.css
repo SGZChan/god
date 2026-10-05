@@ -2737,3 +2737,7 @@ button[hidden], p[hidden] { display: none !important; }
 .ws-row .ws-note { margin: 0; flex: 1; min-width: 160px; }
 .vice-bar > div { background: linear-gradient(90deg, #a855f7, #ef4444); }
 .persona-text { margin: 6px 0 0; font-size: 12px; opacity: 0.75; font-style: italic; }
+
+/* Workshop presets */
+.preset-row { margin-top: 6px; }
+.ws-select, .ws-input { flex: 1; min-width: 0; padding: 7px 9px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.25); color: inherit; font: inherit; }

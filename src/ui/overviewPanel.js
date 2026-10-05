@@ -1,7 +1,7 @@
 // World overview: a live summary of civilizations, wildlife and recent events.
 // summarizeWorld() is a pure data model (testable in Node); OverviewPanel renders it.
 import { ERAS, missingForEra } from '../civilization/techTree.js';
-import { creatureDataURL } from '../art/creatureSprite.js';
+import { setPortrait, speciesSheet } from '../art/icons.js';
 import { getResourceIcon } from '../art/resourceIcons.js';
 import { RESOURCES } from '../world/resources.js';
 import { itemName, itemColor, foodUnits } from '../civilization/economy.js';
@@ -104,7 +104,7 @@ export function summarizeWorld(sim) {
     season: SEASON_NAMES[seasonOf(sim.ecosystem.timeYears)],
     wildlife: sim.ecosystem.speciesCatalog
       .filter(s => s.type !== 'humanoid' && (s.population > 0 || extinct.includes(s.name)))
-      .map(s => ({ id: s.id, symbol: s.symbol, traits: s.centroid, name: s.name, count: s.population, extinct: s.population === 0, sea: [6, 13, 14].includes(Math.round(s.centroid.body)), hunter: s.centroid.carnivory > 0.6, size: s.centroid.size })),
+      .map(s => ({ id: s.id, symbol: s.symbol, traits: s.centroid, sheet: speciesSheet(s), name: s.name, count: s.population, extinct: s.population === 0, sea: [6, 13, 14].includes(Math.round(s.centroid.body)), hunter: s.centroid.carnivory > 0.6, size: s.centroid.size })),
     ecology: sim.ecosystem.trophic || null,
     people: sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length
   };
@@ -309,7 +309,7 @@ export function buildOverview(model, events, only = null) {
           const chip = el('span', `wild-chip${animal.extinct ? ' extinct' : ''}`);
           chip.title = animal.extinct ? `${animal.name} (extinct)` : `${animal.name}${animal.hunter ? ' (hunter)' : ''}`;
           const portrait = document.createElement('img');
-          portrait.src = creatureDataURL(animal.traits);
+          setPortrait(portrait, animal.traits, animal.sheet);
           portrait.alt = '';
           portrait.style.cssText = 'width: 18px; height: 18px; image-rendering: pixelated;';
           chip.append(portrait, document.createTextNode(animal.extinct ? 'extinct' : String(animal.count)));

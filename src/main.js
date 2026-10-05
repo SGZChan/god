@@ -9,6 +9,7 @@ import { InspectorPanel } from './ui/inspector.js';
 import { CreationWorkshop } from './workshop/creator.js';
 import { catchUpEngine } from './simulation/catchUpEngine.js';
 import { skipTime } from './simulation/timeSkip.js';
+import { buildGlobeCanvas } from './cosmos/surfaceMap.js';
 import { NotificationManager } from './ui/notificationManager.js';
 import { OverviewPanel, WorldTab, summarizeWorld } from './ui/overviewPanel.js';
 import { Minimap } from './ui/minimap.js';
@@ -1055,6 +1056,15 @@ class GameApp {
     this.updateBreadcrumb();
   }
 
+  // Paints every planet of the system with its real surface (cosmos/surfaceMap.js), so the globes in space match the maps
+  refreshGlobes() {
+    for (const body of this.solarSystem.planets) {
+      const sim = this.simulations.get(body.id);
+      if (!sim || !body.setSurfaceMap) continue;
+      try { body.setSurfaceMap(buildGlobeCanvas(sim.terrain, sim.society)); } catch (e) { console.warn('globe', e); }
+    }
+  }
+
   switchView(targetView) {
     sounds.playUIClick();
     this.currentView = targetView;
@@ -1066,6 +1076,7 @@ class GameApp {
     this.universe.group.visible = targetView === 'UNIVERSE';
     this.galaxy.group.visible = targetView === 'GALAXY';
     solar.setSystemVisible(targetView === 'SYSTEM');
+    if (targetView === 'SYSTEM') this.refreshGlobes();
     solar.pickables = [];
 
     const spaceView = targetView === 'UNIVERSE' || targetView === 'GALAXY' || targetView === 'SYSTEM';

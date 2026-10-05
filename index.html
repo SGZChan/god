@@ -442,6 +442,19 @@
             <!-- Champion: a person of this planet's people, with a mind you shape -->
             <section data-panel="champion" role="tabpanel">
               <fieldset class="ws-group">
+                <legend>My presets</legend>
+                <div class="ws-row preset-row">
+                  <select id="ws-ch-presets" class="ws-select" aria-label="Saved champion presets"></select>
+                  <button type="button" class="preset-btn" id="ws-ch-load">Use</button>
+                  <button type="button" class="preset-btn" id="ws-ch-del">Delete</button>
+                </div>
+                <div class="ws-row preset-row">
+                  <input type="text" id="ws-ch-name" class="ws-input" maxlength="30" placeholder="Name this champion to save it…">
+                  <button type="button" class="preset-btn" id="ws-ch-save">💾 Save preset</button>
+                </div>
+              </fieldset>
+
+              <fieldset class="ws-group">
                 <legend>Start from</legend>
                 <div id="ws-champ-archetypes" class="archetype-grid"></div>
               </fieldset>
@@ -525,6 +538,19 @@
 
             <!-- Species: a founding group; after that they breed and evolve on their own -->
             <section data-panel="species" role="tabpanel" hidden>
+              <fieldset class="ws-group">
+                <legend>My presets</legend>
+                <div class="ws-row preset-row">
+                  <select id="ws-sp-presets" class="ws-select" aria-label="Saved species presets"></select>
+                  <button type="button" class="preset-btn" id="ws-sp-load">Use</button>
+                  <button type="button" class="preset-btn" id="ws-sp-del">Delete</button>
+                </div>
+                <div class="ws-row preset-row">
+                  <input type="text" id="ws-sp-name" class="ws-input" maxlength="30" placeholder="Name this species to save it…">
+                  <button type="button" class="preset-btn" id="ws-sp-save">💾 Save preset</button>
+                </div>
+              </fieldset>
+
               <fieldset class="ws-group">
                 <legend>Start from</legend>
                 <div id="ws-archetypes" class="archetype-grid"></div>

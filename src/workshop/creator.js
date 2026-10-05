@@ -66,6 +66,15 @@ const CHAMPIONS = [
     vices: { wrath: 0.2 }, text: 'A quiet hermit and explorer, a hunter who roams the land alone.' }
 ];
 
+// ---------- saved presets (the sliders need not be redone) ----------
+const PRESET_KEY = 'genesis.workshop.presets.v1';
+function loadPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || { species: [], champion: [] }; } catch (e) { return { species: [], champion: [] }; }
+}
+function storePresets(all) {
+  try { localStorage.setItem(PRESET_KEY, JSON.stringify(all)); return true; } catch (e) { return false; }
+}
+
 const FORMATS = {
   pct: v => `${Math.round(v * 100)}%`,
   int: v => String(Math.round(v)),
@@ -130,7 +139,7 @@ export class CreationWorkshop {
     // how it is drawn: from parts (the look above) or a ready-made sprite sheet (art/sheetSprites.js)
     this.sheetStyle = 'parts';
     this.sheetTarget = 'all';
-    this.sheetPick = { all: null, M: null, F: null };
+    this.sheetPick = { all: [], M: [], F: [] }; // lists: every creature is given one of them at random
     this.champSheetStyle = 'people';
     this.animFrame = 0;
 
@@ -178,7 +187,8 @@ export class CreationWorkshop {
     this.parts = new PartsPicker(root.querySelector('#ws-parts'), this.look, () => this.refresh());
     this.colours = new ColourControls(root.querySelector('#ws-colours'), this.look, () => { this.parts.refresh(); this.refresh(); });
     this.sheetPicker = new SheetPicker(root.querySelector('#ws-sheet-picker'), {
-      onPick: (id) => { this.sheetPick[this.sheetTarget] = id; this.updateSheetNote(); this.refresh(); }
+      multi: true,
+      onPick: (ids) => { this.sheetPick[this.sheetTarget] = ids; this.updateSheetNote(); this.refresh(); }
     });
     this.champPicker = new SheetPicker(root.querySelector('#ws-champ-picker'), {
       categories: ['people', 'soldier', 'monster', 'other', 'boss', 'school', 'festive'],
@@ -249,6 +259,8 @@ export class CreationWorkshop {
       this.syncForm();
       this.refresh();
     });
+    this.bindPresets('species', 'sp', () => this.speciesSnapshot(), snap => this.applySpeciesSnapshot(snap));
+    this.bindPresets('champion', 'ch', () => this.championSnapshot(), snap => this.applyChampionSnapshot(snap));
     // starting points
     const box = root.querySelector('#ws-archetypes');
     for (const a of ARCHETYPES) {
@@ -261,11 +273,100 @@ export class CreationWorkshop {
     this.updateSheetNote();
   }
 
+  // Save / use / delete buttons for one kind of preset
+  bindPresets(kind, prefix, snapshot, apply) {
+    const root = this.root;
+    const select = root.querySelector(`#ws-${prefix}-presets`);
+    const name = root.querySelector(`#ws-${prefix}-name`);
+    const fill = (keep = null) => {
+      const list = loadPresets()[kind] || [];
+      select.replaceChildren();
+      if (!list.length) { const o = document.createElement('option'); o.textContent = 'none saved yet'; o.value = ''; select.appendChild(o); return; }
+      for (const p of list) { const o = document.createElement('option'); o.value = p.name; o.textContent = p.name; select.appendChild(o); }
+      if (keep) select.value = keep;
+    };
+    fill();
+    this['refresh_' + prefix] = fill;
+    root.querySelector(`#ws-${prefix}-save`).addEventListener('click', () => {
+      const label = name.value.trim() || (kind === 'species' ? this.speciesConfig.name : this.championConfig.name);
+      const all = loadPresets();
+      const list = all[kind] || (all[kind] = []);
+      const at = list.findIndex(p => p.name === label);
+      const rec = { name: label, data: JSON.parse(JSON.stringify(snapshot())) };
+      if (at >= 0) list[at] = rec; else list.push(rec);
+      sounds.playUIClick();
+      name.value = '';
+      fill(storePresets(all) ? label : null);
+    });
+    root.querySelector(`#ws-${prefix}-load`).addEventListener('click', () => {
+      const rec = (loadPresets()[kind] || []).find(p => p.name === select.value);
+      if (!rec) return;
+      sounds.playUIClick();
+      apply(JSON.parse(JSON.stringify(rec.data)));
+    });
+    root.querySelector(`#ws-${prefix}-del`).addEventListener('click', () => {
+      const all = loadPresets();
+      all[kind] = (all[kind] || []).filter(p => p.name !== select.value);
+      sounds.playUIClick();
+      storePresets(all);
+      fill();
+    });
+  }
+
+  speciesSnapshot() {
+    return { config: this.speciesConfig, look: this.look, sheetStyle: this.sheetStyle, sheetPick: this.sheetPick };
+  }
+
+  applySpeciesSnapshot(snap) {
+    Object.assign(this.speciesConfig, snap.config, { traits: { ...this.speciesConfig.traits, ...(snap.config.traits || {}) } });
+    Object.assign(this.look, snap.look);
+    this.sheetPick = { all: [], M: [], F: [], ...snap.sheetPick };
+    this.sheetStyle = snap.sheetStyle || 'parts';
+    const root = this.root;
+    for (const o of root.querySelectorAll('[data-style]')) o.classList.toggle('active', o.dataset.style === this.sheetStyle);
+    root.querySelector('#ws-style-parts').hidden = this.sheetStyle !== 'parts';
+    root.querySelector('#ws-style-sheet').hidden = this.sheetStyle !== 'sheet';
+    this.parts.refresh();
+    this.colours.refresh();
+    this.sheetPicker.select(this.sheetPick[this.sheetTarget]);
+    this.updateSheetNote();
+    this.syncForm();
+    this.refresh();
+  }
+
+  championSnapshot() {
+    return { config: this.championConfig, look: this.champLook, style: this.champSheetStyle };
+  }
+
+  applyChampionSnapshot(snap) {
+    const c = this.championConfig;
+    const cfg = snap.config;
+    Object.assign(c, { name: cfg.name, epithet: cfg.epithet, gender: cfg.gender, aiSystem: cfg.aiSystem });
+    Object.assign(c.appearance, cfg.appearance);
+    Object.assign(c.personality, cfg.personality);
+    Object.assign(c.proficiencies, cfg.proficiencies);
+    c.vices = { ...blankVices(), ...cfg.vices };
+    c.persona = cfg.persona || { text: '', tags: [] };
+    Object.assign(this.champLook, snap.look);
+    this.champSheetStyle = snap.style || 'people';
+    const root = this.root;
+    for (const o of root.querySelectorAll('[data-champ-style]')) o.classList.toggle('active', o.dataset.champStyle === this.champSheetStyle);
+    root.querySelector('#ws-champ-sheet').hidden = this.champSheetStyle !== 'sheet';
+    root.querySelector('#ws-champ-people').hidden = this.champSheetStyle !== 'people';
+    this.champPicker.select(c.appearance.sheet);
+    root.querySelector('#ws-champ-desc').value = c.persona.text || '';
+    this.champParts.refresh();
+    this.champColours.refresh();
+    this.syncForm();
+    this.showPlan();
+    this.refresh();
+  }
+
   updateSheetNote() {
     const note = this.root.querySelector('#ws-sheet-chosen');
-    const label = id => (id && sheetInfo(id) ? sheetInfo(id).label : 'none yet');
+    const label = ids => (ids.length ? `${ids.length} chosen` : 'none yet');
     const p = this.sheetPick;
-    note.textContent = `Everyone: ${label(p.all)} • Females: ${label(p.F)} • Males: ${label(p.M)}. A sex without its own pick uses "everyone".`;
+    note.textContent = `Everyone: ${label(p.all)} • Females: ${label(p.F)} • Males: ${label(p.M)}. Click several sprites: each creature that spawns gets one of them at random. A sex without its own picks uses "everyone".`;
   }
 
   applyArchetype(a) {
@@ -462,7 +563,9 @@ export class CreationWorkshop {
     }
     const sp = this.speciesConfig;
     if (this.sheetStyle === 'sheet') {
-      const id = this.sheetPick[this.sheetTarget] || this.sheetPick.all || this.sheetPick.F || this.sheetPick.M;
+      // (several chosen: the preview cycles through them, as the spawned creatures will differ)
+      const pool = [this.sheetPick[this.sheetTarget], this.sheetPick.all, this.sheetPick.F, this.sheetPick.M].find(l => l && l.length) || [];
+      const id = pool.length ? pool[Math.floor(frame / 12) % pool.length] : null;
       if (!(id && sheetOf(id, dir))) {
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.font = '13px sans-serif';
@@ -528,8 +631,10 @@ export class CreationWorkshop {
       sounds.playDivineBlessing();
       const sc = this.speciesConfig;
       const picks = this.sheetPick;
-      const sheets = this.sheetStyle === 'sheet' && (picks.all || picks.F || picks.M)
-        ? { any: picks.all || picks.F || picks.M, ...(picks.F ? { F: picks.F } : {}), ...(picks.M ? { M: picks.M } : {}) }
+      const one = l => (l.length === 1 ? l[0] : [...l]);
+      const first = [picks.all, picks.F, picks.M].find(l => l.length);
+      const sheets = this.sheetStyle === 'sheet' && first
+        ? { any: one(picks.all.length ? picks.all : first), ...(picks.F.length ? { F: one(picks.F) } : {}), ...(picks.M.length ? { M: one(picks.M) } : {}) }
         : null;
       const species = sim.ecosystem.createCustomSpecies({ ...sc, look: { ...this.look }, sheets });
       this.onSpawnReady({ type: 'species', species, founders: this.speciesConfig.founders });

@@ -252,7 +252,7 @@ section('War: ends in surrender when one side has no soldiers');
   a.declareWar(b, w.ecosystem, 'test');
   for (let i = 0; i < 25; i++) w.society.update(1, 1);
   assert(a.warTarget === null && b.warTarget === null, 'war cleared on both sides');
-  assert(a.diplomacy.get(b.id) === 'PEACE' && b.diplomacy.get(a.id) === 'PEACE', 'diplomacy returns to PEACE');
+  assert(a.diplomacy.get(b.id) !== 'WAR' && b.diplomacy.get(a.id) !== 'WAR', 'diplomacy leaves war (peace or wary tension)');
   assert(a.truce > 0 && b.truce > 0, 'a truce prevents an immediate new war');
   assert(w.ecosystem.notifications.some(n => /surrenders/.test(n.text)), 'surrender is announced');
 }

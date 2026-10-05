@@ -158,13 +158,15 @@ export class ColourControls {
 
 // Browser of the ready-made sprite sheets. options: { filter(sheet) -> bool (e.g. only people), categories: ids to offer }
 export class SheetPicker {
-  constructor(container, { onPick, categories = CATEGORIES.map(c => c.id), sexes = true } = {}) {
+  // multi: several sheets may be chosen (a click toggles one); onPick then gets the whole list. Otherwise one id.
+  constructor(container, { onPick, categories = CATEGORIES.map(c => c.id), sexes = true, multi = false } = {}) {
     this.container = container;
     this.onPick = onPick;
+    this.multi = multi;
     this.categories = categories;
     this.cat = categories[0];
     this.sex = 'any';
-    this.selected = null;
+    this.chosen = [];
     this.sexes = sexes;
     this.build();
     loadCatalog().then(() => this.renderGrid());
@@ -198,16 +200,26 @@ export class SheetPicker {
     this.renderGrid();
   }
 
-  select(id) {
-    this.selected = id;
-    for (const b of this.grid.children) b.classList.toggle('active', b.dataset.id === id);
+  get selected() { return this.chosen[0] || null; }
+
+  // id, a list of ids, or null
+  select(ids) {
+    this.chosen = ids ? (Array.isArray(ids) ? [...ids] : [ids]) : [];
+    for (const b of this.grid.children) b.classList.toggle('active', this.chosen.includes(b.dataset.id));
+    if (this.count) this.updateCount();
+  }
+
+  updateCount() {
+    const n = this.shown || 0;
+    this.count.textContent = this.multi ? `${n} sheets • ${this.chosen.length} chosen` : `${n} sheets`;
   }
 
   renderGrid() {
     for (const b of this.chips.children) b.classList.toggle('active', b.dataset.cat === this.cat);
     for (const b of this.container.querySelectorAll('[data-sex]')) b.classList.toggle('active', b.dataset.sex === this.sex);
     const list = catalog().filter(s => s.cat === this.cat && (this.sex === 'any' || !s.sex || s.sex === this.sex));
-    this.count.textContent = `${list.length} sheets`;
+    this.shown = list.length;
+    this.updateCount();
     this.grid.replaceChildren();
     for (const s of list) {
       const b = el('button', 'sheet-cell');
@@ -222,8 +234,16 @@ export class SheetPicker {
       f.style.width = `${s.fw * 2}px`;
       f.style.height = `${s.fh * 2}px`;
       b.appendChild(f);
-      if (s.id === this.selected) b.classList.add('active');
-      b.addEventListener('click', () => { this.select(s.id); this.onPick && this.onPick(s.id, sheetInfo(s.id)); });
+      if (this.chosen.includes(s.id)) b.classList.add('active');
+      b.addEventListener('click', () => {
+        if (this.multi) {
+          this.select(this.chosen.includes(s.id) ? this.chosen.filter(x => x !== s.id) : [...this.chosen, s.id]);
+          this.onPick && this.onPick([...this.chosen]);
+        } else {
+          this.select(s.id);
+          this.onPick && this.onPick(s.id, sheetInfo(s.id));
+        }
+      });
       this.grid.appendChild(b);
     }
   }

@@ -166,9 +166,26 @@ export class CelestialBody {
     const texture = new THREE.CanvasTexture(canvas);
     return new THREE.MeshStandardMaterial({
       map: texture,
+      emissiveMap: texture,
+      emissive: new THREE.Color(0xffffff),
+      emissiveIntensity: 0.32,
       roughness: 0.7,
       metalness: 0.1
     });
+  }
+
+  // Paints the globe with a canvas (the planet's real surface, see cosmos/surfaceMap.js)
+  setSurfaceMap(canvas) {
+    if (!this.mesh) return;
+    const mat = this.mesh.material;
+    if (mat.map) mat.map.dispose();
+    mat.map = new THREE.CanvasTexture(canvas);
+    mat.map.colorSpace = THREE.SRGBColorSpace;
+    // the night side keeps a faint glow of the land (so no planet is ever a black disc)
+    mat.emissiveMap = mat.map;
+    mat.emissive = new THREE.Color(0xffffff);
+    mat.emissiveIntensity = 0.32;
+    mat.needsUpdate = true;
   }
 
   update(timeDelta, timeSpeedMultiplier = 1) {

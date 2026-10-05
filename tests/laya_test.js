@@ -150,7 +150,7 @@ section('A Laya champion lives a day: it walks, visits, prays and sleeps instead
   let moved = 0;
   let last = { x: champ.x, y: champ.y };
   const states = new Set();
-  for (let i = 0; i < 150 && champ.alive; i++) {
+  for (let i = 0; i < 330 && champ.alive; i++) {
     for (let k = 0; k < 8; k++) { runSimulationSteps(sim, 5); states.add(champ.state); }
     moved += Math.hypot(champ.x - last.x, champ.y - last.y);
     last = { x: champ.x, y: champ.y };

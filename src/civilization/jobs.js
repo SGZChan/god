@@ -225,6 +225,8 @@ function wantedJobs(c, st, members, adults) {
   const sites = openSites(terrain, st);
   const roads = st.roadQueue.length;
 
+  // peoples want to know their world: scouts from the start, more as they grow (expansion.js uses what they find)
+  add('scout', N >= 3 ? Math.min(4, 1 + Math.floor(N / 12)) : 0);
   add('farmer', Math.min(farmSlots, Math.ceil(N * (foodRich ? 0.12 : foodShort > 0.4 ? 0.5 : 0.3))));
   // builders are only needed where work can actually go on: materials delivered or in the stockpile
   let workable = 0;
@@ -252,8 +254,6 @@ function wantedJobs(c, st, members, adults) {
   add('hauler', sites.length >= 2 && N >= 8 ? Math.floor(N / 8) : 0);
   const stations = countBuilt(terrain, st, 'workshop') + countBuilt(terrain, st, 'kiln') + countBuilt(terrain, st, 'smithy');
   add('crafter', Math.min(stations + 1, Math.ceil(N * 0.14)));
-  // peoples want to know their world: scouts from the start, more as they grow (expansion.js uses what they find)
-  add('scout', N >= 4 ? Math.min(5, 1 + Math.ceil(N / 10)) : 0);
   add('scholar', N >= 9 ? Math.ceil(N * 0.08) : 0);
   add('herder', Math.min(penSlots, Math.ceil(N * 0.08)));
   add('fisher', st.fishNear === false ? 0 : (countBuilt(terrain, st, 'dock') > 0 ? Math.ceil(N * 0.1) : (N >= 10 ? 1 : 0)));
@@ -288,6 +288,11 @@ function assignJobs(c, st, members) {
       const surplus = list.length - w;
       for (let i = 0; i < Math.min(surplus, 2); i++) { pool.push(list[i]); moves++; }
     }
+  }
+  // a people that explores always has someone out there: when nobody scouts, the best-suited worker of another trade goes
+  if ((wantMap.get('scout') || 0) > 0 && !(cur.get('scout') || []).length && !pool.some(e => !e.job) && moves < 3) {
+    const cand = adults.filter(e => e.job && !['leader', 'priest', 'scout', 'builder'].includes(e.job)).sort((a, b) => aptitude(b, 'scout') - aptitude(a, 'scout'))[0];
+    if (cand) { pool.push(cand); moves++; }
   }
   const poolSet = new Set(pool);
   let remaining = pool.length;
@@ -1003,7 +1008,7 @@ function stepScout(ent, c) {
   if (t.tx === undefined) {
     let best = null;
     let bestScore = -Infinity;
-    const reach = 28 + Math.min(70, (civ.explored ? civ.explored.length : 0) * 0.35);
+    const reach = 30 + Math.min(170, (civ.explored ? civ.explored.length : 0) * 0.5); // (the more they know, the farther they dare)
     for (let i = 0; i < 7; i++) {
       const ang = random() * Math.PI * 2;
       const d = 18 + random() * reach;

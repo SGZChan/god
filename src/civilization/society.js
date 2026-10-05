@@ -1,6 +1,8 @@
 import { ERAS, getEraForPoints, eraFor } from './techTree.js';
 import { scaleChance } from '../simulation/fixedStep.js';
-import { random } from '../simulation/random.js';
+import { random, withRng } from '../simulation/random.js';
+import { SeededRNG } from '../cosmos/seed.js';
+import { makeName } from '../life/names.js';
 import { initTown, tickTown, foundHamlet, queueRoad, roadKindFor, eraTier, retireOldHouse } from './townPlanner.js';
 import { settlementsOf, getSettlement, nearestSettlement, createSettlement, findHamletSite, builtSomewhere, buildingsOf, foodCapOf } from './settlements.js';
 import { sapientOptions, tickSettlement, seasonOf } from './jobs.js';
@@ -19,6 +21,7 @@ import { tickUpkeep } from './upkeep.js';
 import { tickStatecraft, warMotive, noteWarEnd } from './statecraft.js';
 
 export const INITIAL_CITIZENS = 6;
+export const FAR_TRIBES = 5; // peoples that begin far from the home area
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
 export const MIN_POPULATION = 10;       // lower bound for the derived population figure
 export const MAX_CITIZENS = 40;         // legacy flat limit, used only by civilizations without settlements (see settlements.popCap)
@@ -312,6 +315,7 @@ export class SocietyManager {
     ecosystem.society = this;
 
     this.initDefaultCivs();
+    this.initFarTribes();
     this.reassignUnaffiliated();
     this.refreshCensus();
     this._lastAliveCount = this.civilizations.filter(c => c.isAlive).length;
@@ -355,6 +359,51 @@ export class SocietyManager {
         }
       }
     }
+  }
+
+  // More peoples live in the far corners of the world, each a small tribe with its own camp and chief (they meet the
+  // others when scouts and settlers reach them). Drawn from their own random stream, so the home area is unchanged.
+  initFarTribes(count = FAR_TRIBES) {
+    if (!this.ecosystem.sapientSpecies()) return;
+    const home = this.terrain.home;
+    const W = this.terrain.width;
+    const H = this.terrain.height;
+    withRng(new SeededRNG(`${this.terrain.seed}#tribes`), () => {
+      const kinds = [
+        { prefix: 'Tribe of', color: '#e879f9', symbol: '🪶', gov: GOVERNMENTS[3] },
+        { prefix: 'Clans of', color: '#fb7185', symbol: '🔥', gov: GOVERNMENTS[3] },
+        { prefix: 'Free Folk of', color: '#2dd4bf', symbol: '🌲', gov: GOVERNMENTS[2] },
+        { prefix: 'Kingdom of', color: '#a3e635', symbol: '🛡️', gov: GOVERNMENTS[1] },
+        { prefix: 'Temple of', color: '#fde047', symbol: '🕯️', gov: GOVERNMENTS[0] },
+        { prefix: 'Hold of', color: '#60a5fa', symbol: '⛰️', gov: GOVERNMENTS[3] }
+      ];
+      const sites = this.civilizations.map(c => ({ x: c.capitalX, y: c.capitalY }));
+      for (let k = 0; k < count; k++) {
+        const kind = kinds[k % kinds.length];
+        for (let attempt = 0; attempt < 80; attempt++) {
+          const land = this.terrain.findLand(random() * W, random() * H, 30);
+          if (!land) continue;
+          if (Math.hypot(land.x - home.x, land.y - home.y) < 110) continue;
+          if (sites.some(s => Math.hypot(s.x - land.x, s.y - land.y) < 110)) continue;
+          if (!this.terrain.isBuildable(land.x, land.y) || this.terrain.getTile(land.x, land.y).civId) continue;
+          const civ = new Civilization({
+            name: `${kind.prefix} ${makeName(2)}`,
+            color: kind.color,
+            symbol: kind.symbol,
+            capitalX: land.x,
+            capitalY: land.y,
+            government: kind.gov,
+            population: 20
+          });
+          initTown(civ, this.terrain);
+          civ.expandTerritory(this.terrain);
+          this.civilizations.push(civ);
+          this.spawnCitizens(civ, INITIAL_CITIZENS);
+          sites.push({ x: land.x, y: land.y });
+          break;
+        }
+      }
+    });
   }
 
   // Makes sure the civ has at least its capital settlement (old saves, bare test worlds).

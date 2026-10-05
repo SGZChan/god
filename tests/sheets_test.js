@@ -69,4 +69,29 @@ section('Workshop options reach the species: traits, sheets, archetypes; sheets 
   assert(again && again.sheets && again.sheets.any === 'animal-cat-01-1', 'the sheet choice survives a save');
 }
 
+section('Several sprites for one species: each creature gets one at random');
+{
+  setActiveRng(new SeededRNG('multi'));
+  const w = createPlanetWorld(new SeededRNG('multi'), { seed: 'multi', radius: 1 });
+  setActiveRng(new SeededRNG('multi'));
+  const sets = ['animal-cat-01-1', 'animal-cat-01-2', 'animal-cat-01-3'];
+  const sp = w.ecosystem.createCustomSpecies({ name: 'Mixed', type: 'herbivore', diet: 'herbivore', size: 1, speed: 1, lifespan: 30, coldResist: 0.5, heatResist: 0.5, sheets: { any: sets } });
+  const founders = w.ecosystem.spawnFounders(sp, 16, w.terrain.home.x, w.terrain.home.y, null, 5);
+  const used = new Set(founders.map(e => e.sheetId));
+  assert(founders.every(e => sets.includes(e.sheetId)) && used.size >= 2, `they wear different sprites from the list (${used.size} of 3 used)`);
+}
+
+section('Peoples live all over the world, not only around the start');
+{
+  setActiveRng(new SeededRNG('far'));
+  const w = createPlanetWorld(new SeededRNG('far'), { seed: 'far', radius: 1 });
+  setActiveRng(new SeededRNG('far'));
+  const home = w.terrain.home;
+  const civs = w.society.civilizations;
+  const far = civs.filter(c => Math.hypot(c.capitalX - home.x, c.capitalY - home.y) > 100);
+  assert(civs.length >= 6 && far.length >= 3, `${far.length} peoples begin far from home (of ${civs.length})`);
+  assert(far.every(c => w.ecosystem.entities.some(e => e.civilization === c && e.isSapient)), 'each has its people');
+  assert(far.every(c => (c.settlements || []).length >= 1), 'and a camp');
+}
+
 summary();

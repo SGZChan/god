@@ -1,5 +1,5 @@
 import { VICES } from '../ai/temperament.js';
-import { creatureDataURL } from '../art/creatureSprite.js';
+import { entityPortrait } from '../art/icons.js';
 import { RESOURCES, TIER_NAMES } from '../world/resources.js';
 import { getResourceIcon } from '../art/resourceIcons.js';
 import { JOB_INFO } from '../civilization/jobs.js';
@@ -182,7 +182,7 @@ export class InspectorPanel {
       <div class="inspector-card">
         <div class="card-header">
           <div class="avatar-badge" style="border-color: ${ent.appearance?.auraColor || '#ffd700'}">
-            <img src="${creatureDataURL(ent.traits)}" alt="" style="width: 40px; height: 40px; image-rendering: pixelated;">
+            <img class="entity-portrait" alt="" style="width: 40px; height: 40px; image-rendering: pixelated; object-fit: contain;">
           </div>
           <div style="flex: 1;">
             <h2 class="entity-name">${ent.name}</h2>
@@ -300,6 +300,8 @@ export class InspectorPanel {
         ` : ''}
       </div>
     `;
+    const portrait = this.container.querySelector('.entity-portrait');
+    if (portrait) entityPortrait(portrait, ent);
   }
 
   renderTile(tile) {
