@@ -2730,3 +2730,10 @@ button[hidden], p[hidden] { display: none !important; }
 .sheet-frame { image-rendering: pixelated; background-repeat: no-repeat; }
 .ws-form, .ws-form section, .ws-group { min-width: 0; }
 .part-strip { max-width: 100%; }
+
+/* Champion workshop: description and vices */
+.ws-textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.25); color: inherit; font: inherit; }
+.ws-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.ws-row .ws-note { margin: 0; flex: 1; min-width: 160px; }
+.vice-bar > div { background: linear-gradient(90deg, #a855f7, #ef4444); }
+.persona-text { margin: 6px 0 0; font-size: 12px; opacity: 0.75; font-style: italic; }

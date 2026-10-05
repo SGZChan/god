@@ -27,10 +27,12 @@ function hsl(h, s, l) { return `hsl(${Math.round(h * 360)} ${Math.round(s * 100)
 
 export class PartsPicker {
   // look: { head, body, ... , hue, ... } (mutated in place); onChange() after every change
-  constructor(container, look, onChange) {
+  // genes: optional list of the part genes to offer (default: all)
+  constructor(container, look, onChange, genes = null) {
     this.container = container;
     this.look = look;
     this.onChange = onChange;
+    this.genes = genes;
     this.rows = new Map();
     this.build();
   }
@@ -40,6 +42,7 @@ export class PartsPicker {
   build() {
     this.container.replaceChildren();
     for (const row of PART_ROWS) {
+      if (this.genes && !this.genes.includes(row.gene)) continue;
       const wrap = el('div', 'part-row');
       const head = el('div', 'part-head');
       const label = el('span', 'part-label', row.label);

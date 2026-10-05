@@ -433,13 +433,6 @@
             <div id="ws-preview-title" class="preview-title"></div>
             <div id="ws-preview-sub" class="preview-epithet"></div>
             <p id="ws-preview-note" class="ws-note"></p>
-            <div class="ws-preview-actions" data-for="champion">
-              <div class="ws-mini-label">Archetypes</div>
-              <button class="preset-btn" data-preset="prophet">✨ Prophet of Light</button>
-              <button class="preset-btn" data-preset="warlord">⚔️ Divine Warmaster</button>
-              <button class="preset-btn" data-preset="architect">🏛️ Master Architect</button>
-              <button class="preset-btn" data-preset="sage">📜 Sage of the Stars</button>
-            </div>
             <div class="ws-preview-actions" data-for="species" hidden>
               <button class="preset-btn" id="ws-reroll-look">🎲 New look</button>
             </div>
@@ -448,6 +441,11 @@
           <div class="ws-form">
             <!-- Champion: a person of this planet's people, with a mind you shape -->
             <section data-panel="champion" role="tabpanel">
+              <fieldset class="ws-group">
+                <legend>Start from</legend>
+                <div id="ws-champ-archetypes" class="archetype-grid"></div>
+              </fieldset>
+
               <div class="form-grid">
                 <label class="form-group"><span>Name</span><input type="text" data-field="champion.name" maxlength="24"></label>
                 <label class="form-group"><span>Title</span><input type="text" data-field="champion.epithet" maxlength="40"></label>
@@ -463,7 +461,32 @@
                   <button type="button" class="seg active" data-champ-style="people">Like their people</button>
                   <button type="button" class="seg" data-champ-style="sheet">Ready-made sprite</button>
                 </div>
+                <div id="ws-champ-people">
+                  <div id="ws-champ-parts" class="parts-list"></div>
+                  <div id="ws-champ-colours" class="colour-list"></div>
+                </div>
                 <div id="ws-champ-sheet" hidden><div id="ws-champ-picker"></div></div>
+              </fieldset>
+
+              <fieldset class="ws-group">
+                <legend>Who are they?</legend>
+                <textarea id="ws-champ-desc" class="ws-textarea" rows="3" maxlength="400" placeholder="Describe the champion in your own words: a vain, greedy merchant-queen who loves feasts and hates war… Laya will try to act like this person."></textarea>
+                <div class="ws-row">
+                  <button type="button" class="preset-btn" id="ws-champ-read">✦ Let Laya read this</button>
+                  <span id="ws-champ-read-out" class="ws-note"></span>
+                </div>
+              </fieldset>
+
+              <fieldset class="ws-group">
+                <legend>Vices</legend>
+                <p class="ws-note">How the champion's flaws show in the day: where it goes, what it eats, whom it seeks, and which cards it takes up (Laya mind).</p>
+                <label class="ws-slider" title="seeks the crowd, preaches and commands; never sues for peace"><span>Pride</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.pride" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="haunts markets and stores, hoards, takes more than its share"><span>Greed</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.greed" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="courts and lingers with company"><span>Lust</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.lust" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="watches the houses and goods of others"><span>Envy</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.envy" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="eats long before hungry, feasts at the stores"><span>Gluttony</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.gluttony" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="quick to fight, drawn to soldiers and war"><span>Wrath</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.wrath" data-format="pct"><output></output></label>
+                <label class="ws-slider" title="rests, loafs, slow to answer any card"><span>Sloth</span><input type="range" min="0" max="1" step="0.05" data-field="champion.vices.sloth" data-format="pct"><output></output></label>
               </fieldset>
 
               <fieldset class="ws-group">
@@ -485,6 +508,7 @@
                 <label class="ws-slider"><span>Leadership</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.extraversion" data-format="pct"><output></output></label>
                 <label class="ws-slider"><span>Empathy</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.agreeableness" data-format="pct"><output></output></label>
                 <label class="ws-slider"><span>Devotion to you</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.piety" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Anxiety</span><input type="range" min="0" max="1" step="0.05" data-field="champion.personality.neuroticism" data-format="pct"><output></output></label>
               </fieldset>
 
               <fieldset class="ws-group">

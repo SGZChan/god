@@ -10,6 +10,7 @@ import { UNITS, pickUnit, damageAgainst } from '../civilization/military.js';
 import { timeOfDay, isNight } from '../simulation/dayCycle.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { pickSheet } from '../art/sheetSprites.js';
+import { interests } from '../ai/temperament.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -71,6 +72,10 @@ export class Entity {
       neuroticism: 0.5 + (random() - 0.5) * 0.4,
       piety: random() // Full spectrum: from 0.0 (hardcore atheist) to 1.0 (devout fanatic)
     };
+
+    // Temperament chosen in the workshop (ai/temperament.js): the seven vices (0..1) and who the champion is, in words
+    this.vices = config.vices || null;
+    this.persona = config.persona || null;
 
     // Belief Status: Devout Believer vs Skeptic vs Atheist/Heretic
     this.belief = this.determineBelief();
@@ -933,37 +938,70 @@ export class Entity {
       }
       if (go(spot.x, spot.y, 'HOMEWARD', 'Going to rest')) return;
     }
-    // hungry: to the stores
-    if (this.hunger > 55 && civ && civ.food >= 2) {
+    const I = interests(this);
+    const v = this.vices || {};
+    // hungry (a glutton long before): to the stores
+    if (this.hunger > I.appetite && civ && civ.food >= 2) {
       const depot = st ? { x: st.x, y: st.y } : anchor;
-      if (near(depot.x, depot.y, 3)) { civ.food -= 2; this.hunger = Math.max(0, this.hunger - 60); this.state = 'EAT'; this.activity = 'Taking a meal with the people'; this.actionCooldown = 1.5; return; }
+      if (near(depot.x, depot.y, 3)) {
+        const bite = v.greed > 0.6 ? 3 : 2; // (the greedy take more than their share)
+        civ.food -= bite; this.hunger = Math.max(0, this.hunger - 60);
+        this.state = 'EAT';
+        this.activity = v.gluttony > 0.6 ? 'Feasting at the stores' : v.greed > 0.6 ? 'Helping itself at the stores' : 'Taking a meal with the people';
+        this.actionCooldown = v.gluttony > 0.6 ? 3 : 1.5;
+        return;
+      }
       if (go(depot.x, depot.y, 'WORK', 'Going to eat')) return;
     }
-    // otherwise: a round of the town
-    const roll = random();
+    // sloth: loafing about instead of doing anything
+    if (random() < I.idle) {
+      this.state = 'SLEEP'; this.activity = v.sloth > 0.6 ? 'Loafing about' : 'Taking a rest'; this.path = [];
+      this.energy = Math.min(100, this.energy + 3);
+      this.actionCooldown = 2 + random() * 2;
+      return;
+    }
+    // otherwise: a round of the town, shaped by what it likes
     const people = (worldContext.grid ? worldContext.grid.within(this.x, this.y, 40) : worldContext.entities)
       .filter(e => e.alive && e !== this && e.isSapient && (!civ || e.civilization === civ) && Math.hypot(e.x - this.x, e.y - this.y) > 3);
     const sacred = [];
     const work = [];
+    const liked = [];
     for (const b of terrain.buildingsInRect(anchor.x - 24, anchor.y - 24, anchor.x + 24, anchor.y + 24)) {
       if (b.progress < 1 && civ && b.civId === civ.id) work.push(b);
       else if (b.progress >= 1 && (b.type === 'shrine' || b.type === 'temple' || b.type === 'cathedral' || b.type === 'graveyard' || b.type === 'barrow')) sacred.push(b);
       else if (b.progress >= 1 && ['farm', 'market', 'library', 'workshop', 'well', 'granary'].includes(b.type)) work.push(b);
+      if (b.progress >= 1 && I.want[b.type]) liked.push(b);
     }
-    if (roll < 0.34 && people.length) {
-      const p = people[Math.floor(random() * people.length)];
-      if (go(p.x, p.y, 'WORK', `Visiting ${p.name}`)) { this.actionCooldown = 0.6; return; }
-    } else if (roll < 0.52 && sacred.length) {
+    const goBuilding = (b, text) => go(b.x + b.w / 2, b.y + b.h + 0.6, 'WORK', text);
+    const roll = random();
+    const pLiked = liked.length ? Math.min(0.5, 0.1 + 0.12 * Math.max(...liked.map(b => I.want[b.type]))) : 0;
+    const pPeople = people.length ? 0.34 * I.company : 0;
+    if (roll < pLiked) {
+      const b = liked[Math.floor(random() * liked.length)];
+      const name = BUILDING_TYPES[b.type] ? BUILDING_TYPES[b.type].name.toLowerCase() : 'building';
+      const text = v.envy > 0.6 && ['manor', 'stone_house', 'wooden_house'].includes(b.type) ? `Eyeing the ${name} jealously`
+        : v.greed > 0.6 && ['market', 'market_stall'].includes(b.type) ? 'Counting the takings at the market'
+        : v.wrath > 0.6 && b.type === 'barracks' ? 'Watching the soldiers drill'
+        : v.pride > 0.6 && ['hall', 'keep'].includes(b.type) ? 'Holding court' : `Spending time at the ${name}`;
+      if (goBuilding(b, text)) return;
+    } else if (roll < pLiked + pPeople) {
+      // the lustful seek the opposite sex first, the proud seek a crowd, the envious the best-fed
+      let pool = people;
+      if (v.lust > 0.5) { const o = people.filter(e => e.sex !== this.sex && e.isAdult); if (o.length) pool = o; }
+      const p = pool[Math.floor(random() * pool.length)];
+      const text = v.lust > 0.6 && p.sex !== this.sex ? `Courting ${p.name}` : v.pride > 0.6 ? `Holding forth to ${p.name}` : v.wrath > 0.6 ? `Berating ${p.name}` : `Visiting ${p.name}`;
+      if (go(p.x, p.y, 'WORK', text)) { this.actionCooldown = 0.6; return; }
+    } else if (roll < pLiked + pPeople + 0.18 && sacred.length) {
       const b = sacred[Math.floor(random() * sacred.length)];
       if (go(b.x + b.w / 2, b.y + b.h + 0.6, 'WORK', 'Walking to pray')) { L.praying = b.id; return; }
-    } else if (roll < 0.72 && work.length) {
+    } else if (roll < pLiked + pPeople + 0.38 && work.length) {
       const b = work[Math.floor(random() * work.length)];
-      if (go(b.x + b.w / 2, b.y + b.h + 0.6, 'WORK', `Looking in on the ${BUILDING_TYPES[b.type] ? BUILDING_TYPES[b.type].name.toLowerCase() : 'works'}`)) return;
+      if (goBuilding(b, `Looking in on the ${BUILDING_TYPES[b.type] ? BUILDING_TYPES[b.type].name.toLowerCase() : 'works'}`)) return;
     }
-    // patrol: a loop round the settlement
+    // patrol: a loop round the settlement (the adventurous range farther)
     const a = random() * Math.PI * 2;
-    const r = 5 + random() * 14;
-    if (!go(anchor.x + Math.cos(a) * r, anchor.y + Math.sin(a) * r, 'WORK', 'Walking the town')) {
+    const r = 5 + random() * (14 + I.roam * 50);
+    if (!go(anchor.x + Math.cos(a) * r, anchor.y + Math.sin(a) * r, 'WORK', I.roam > 0.4 ? 'Roaming the land' : 'Walking the town')) {
       // nowhere to go from here: a short wander
       this.requestPath(this.x + (random() - 0.5) * 12, this.y + (random() - 0.5) * 12, worldContext.pathfinder);
     }

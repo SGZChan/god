@@ -104,6 +104,9 @@ export class DivinePowersManager {
               appearance: config.appearance,
               personality: config.personality,
               proficiencies: config.proficiencies,
+              vices: config.vices,
+              persona: config.persona,
+              look: config.look,
               x: tileX + 0.5,
               y: tileY + 0.5
             });

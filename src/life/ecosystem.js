@@ -250,12 +250,21 @@ export class Ecosystem {
     if (!species) return null;
     const home = this.terrain.home;
     const spot = this.landNear(home.x, home.y, 45) || home;
+    // a champion's look from the workshop: the people's own body with the chosen parts and colours (not legs or wings)
+    let genome = customConfig.genome;
+    if (!genome && customConfig.look) {
+      const keep = { ...species.centroid };
+      for (const [g, val] of Object.entries(customConfig.look)) if (g !== 'legs' && g !== 'wings' && g !== 'body' && g in keep) keep[g] = val;
+      genome = Genome.fromPhenotype(keep);
+    }
+    const { look, ...rest } = customConfig;
     const entity = new Entity({
       species,
       x: spot.x + 0.5,
       y: spot.y + 0.5,
       isSpecialIndividual: isSpecial,
-      ...customConfig
+      ...rest,
+      ...(genome ? { genome } : {})
     });
     this.entities.push(entity);
     species.population++;

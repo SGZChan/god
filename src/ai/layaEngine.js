@@ -20,6 +20,7 @@
 //   omni     rolling summary in layers: Attention (now), Recent (last acts), Milestones (totals)
 //
 // All state lives in plain JSON on `entity.laya`, so it is saved with the creature.
+import { cardBias } from './temperament.js';
 
 export const PERSONAS = {
   builder: { name: 'Builder', from: 'Engineer', icon: '🏛️' },
@@ -190,7 +191,7 @@ export function stage(ev, routed, entity, state) {
     targetId: ev.targetId || null,
     createdAt: state.seq,
     approved: false,
-    score: Math.round(((4 - routed.priority) + aptitude(routed.persona, entity)) * weight * 100) / 100
+    score: Math.round(((4 - routed.priority) + aptitude(routed.persona, entity)) * weight * cardBias(routed.persona, entity) * 100) / 100
   };
 }
 

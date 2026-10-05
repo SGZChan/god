@@ -1,3 +1,4 @@
+import { VICES } from '../ai/temperament.js';
 import { creatureDataURL } from '../art/creatureSprite.js';
 import { RESOURCES, TIER_NAMES } from '../world/resources.js';
 import { getResourceIcon } from '../art/resourceIcons.js';
@@ -292,6 +293,8 @@ export class InspectorPanel {
             <div class="trait-row"><span>Curiosity:</span><div class="trait-bar"><div style="width: ${p.openness * 100}%"></div></div></div>
             <div class="trait-row"><span>Work Ethic:</span><div class="trait-bar"><div style="width: ${p.conscientiousness * 100}%"></div></div></div>
             <div class="trait-row"><span>Empathy:</span><div class="trait-bar"><div style="width: ${p.agreeableness * 100}%"></div></div></div>
+            ${ent.vices ? VICES.map(v => `<div class="trait-row"><span>${v.label}:</span><div class="trait-bar vice-bar"><div style="width: ${(ent.vices[v.id] || 0) * 100}%"></div></div></div>`).join('') : ''}
+            ${ent.persona && ent.persona.text ? `<p class="persona-text">“${ent.persona.text.replace(/[<>&]/g, '')}”</p>` : ''}
           </div>
         ` : ''}
       </div>

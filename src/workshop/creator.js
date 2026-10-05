@@ -9,31 +9,61 @@ import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js'
 import { ALL_GENES, BODY_GENES, COLOR_GENES, PART_COUNTS } from '../life/genome.js';
 import { PlanetCreator } from './planetCreator.js';
 import { PartsPicker, ColourControls, SheetPicker, ARCHETYPES } from './appearanceEditor.js';
+import { blankVices, applyInterpretation, interpret } from '../ai/temperament.js';
 import { drawSheet, WALK_FRAMES, loadCatalog, sheetInfo } from '../art/sheetSprites.js';
 import { sounds } from '../audio/soundFX.js';
 
-const PRESETS = {
-  prophet: {
-    name: 'Seraphina', epithet: 'The Sacred Voice', gender: 'Female', aiSystem: 'LAYA', aura: '#38bdf8',
-    personality: { openness: 0.95, conscientiousness: 0.7, extraversion: 0.85, agreeableness: 0.85, piety: 1 },
-    proficiencies: { architecture: 50, warfare: 20, statesmanship: 90, farming: 50, science: 60, mysticism: 100 }
-  },
-  warlord: {
-    name: 'Vulkan', epithet: 'The Divine Conqueror', gender: 'Male', aiSystem: 'LAYA', aura: '#ef4444',
-    personality: { openness: 0.4, conscientiousness: 0.8, extraversion: 0.8, agreeableness: 0.2, piety: 0.85 },
-    proficiencies: { architecture: 40, warfare: 100, statesmanship: 85, farming: 30, science: 35, mysticism: 50 }
-  },
-  architect: {
-    name: 'Daedalus', epithet: 'Master of Foundations', gender: 'Male', aiSystem: 'LAYA', aura: '#10b981',
-    personality: { openness: 0.8, conscientiousness: 1, extraversion: 0.5, agreeableness: 0.7, piety: 0.75 },
-    proficiencies: { architecture: 100, warfare: 30, statesmanship: 60, farming: 60, science: 95, mysticism: 55 }
-  },
-  sage: {
-    name: 'Ilyra', epithet: 'Sage of the Stars', gender: 'Female', aiSystem: 'LAYA', aura: '#a855f7',
-    personality: { openness: 1, conscientiousness: 0.75, extraversion: 0.4, agreeableness: 0.8, piety: 0.6 },
-    proficiencies: { architecture: 55, warfare: 15, statesmanship: 55, farming: 45, science: 100, mysticism: 85 }
-  }
-};
+// One-click champions. vices: 0..1 (the rest stay low); text: the description the Laya mind is told to act out
+const CHAMPIONS = [
+  { id: 'prophet', label: '✨ Prophet of Light', name: 'Seraphina', epithet: 'The Sacred Voice', gender: 'Female', aura: '#38bdf8',
+    personality: { openness: 0.95, conscientiousness: 0.7, extraversion: 0.85, agreeableness: 0.85, neuroticism: 0.2, piety: 1 },
+    proficiencies: { architecture: 50, warfare: 20, statesmanship: 90, farming: 50, science: 60, mysticism: 100 },
+    vices: { pride: 0.2 }, text: 'A devout, gentle prophet who preaches to everyone and prays at every shrine.' },
+  { id: 'warlord', label: '⚔️ Divine Warmaster', name: 'Vulkan', epithet: 'The Divine Conqueror', gender: 'Male', aura: '#ef4444',
+    personality: { openness: 0.4, conscientiousness: 0.8, extraversion: 0.8, agreeableness: 0.2, neuroticism: 0.3, piety: 0.85 },
+    proficiencies: { architecture: 40, warfare: 100, statesmanship: 85, farming: 30, science: 35, mysticism: 50 },
+    vices: { pride: 0.6, wrath: 0.8 }, text: 'A ruthless warlord who lives for battle and drills with the soldiers.' },
+  { id: 'architect', label: '🏛️ Master Architect', name: 'Daedalus', epithet: 'Master of Foundations', gender: 'Male', aura: '#10b981',
+    personality: { openness: 0.8, conscientiousness: 1, extraversion: 0.5, agreeableness: 0.7, neuroticism: 0.3, piety: 0.75 },
+    proficiencies: { architecture: 100, warfare: 30, statesmanship: 60, farming: 60, science: 95, mysticism: 55 },
+    vices: { pride: 0.4 }, text: 'A diligent builder and engineer, always at the workshops and quarries.' },
+  { id: 'sage', label: '📜 Sage of the Stars', name: 'Ilyra', epithet: 'Sage of the Stars', gender: 'Female', aura: '#a855f7',
+    personality: { openness: 1, conscientiousness: 0.75, extraversion: 0.4, agreeableness: 0.8, neuroticism: 0.3, piety: 0.6 },
+    proficiencies: { architecture: 55, warfare: 15, statesmanship: 55, farming: 45, science: 100, mysticism: 85 },
+    vices: {}, text: 'A wise, curious scholar who haunts the library and keeps to herself.' },
+  { id: 'tyrant', label: '👑 Vain Tyrant', name: 'Maximus', epithet: 'The Unbowed King', gender: 'Male', aura: '#f59e0b',
+    personality: { openness: 0.3, conscientiousness: 0.6, extraversion: 0.9, agreeableness: 0.1, neuroticism: 0.4, piety: 0.4 },
+    proficiencies: { architecture: 50, warfare: 80, statesmanship: 90, farming: 20, science: 30, mysticism: 30 },
+    vices: { pride: 0.95, wrath: 0.7, greed: 0.6, envy: 0.4 }, text: 'A proud, cruel tyrant who holds court, hates to bow, and never makes peace.' },
+  { id: 'merchant', label: '💰 Greedy Merchant-Queen', name: 'Aurelia', epithet: 'Queen of Coin', gender: 'Female', aura: '#eab308',
+    personality: { openness: 0.6, conscientiousness: 0.8, extraversion: 0.8, agreeableness: 0.4, neuroticism: 0.3, piety: 0.35 },
+    proficiencies: { architecture: 60, warfare: 20, statesmanship: 85, farming: 40, science: 50, mysticism: 20 },
+    vices: { greed: 0.95, pride: 0.6, envy: 0.5 }, text: 'A greedy, charming merchant who counts her gold at the market and hoards the stores.' },
+  { id: 'glutton', label: '🍖 Glutton Friar', name: 'Brother Tuck', epithet: 'The Well-Fed', gender: 'Male', aura: '#fb923c',
+    personality: { openness: 0.5, conscientiousness: 0.4, extraversion: 0.8, agreeableness: 0.75, neuroticism: 0.3, piety: 0.7 },
+    proficiencies: { architecture: 30, warfare: 20, statesmanship: 40, farming: 80, science: 30, mysticism: 60 },
+    vices: { gluttony: 0.95, sloth: 0.55, lust: 0.3 }, text: 'A jolly, sociable friar who loves feasts, ale and a good harvest.' },
+  { id: 'lover', label: '💘 Lustful Bard', name: 'Casimir', epithet: 'The Silver Tongue', gender: 'Male', aura: '#ec4899',
+    personality: { openness: 0.9, conscientiousness: 0.3, extraversion: 0.95, agreeableness: 0.6, neuroticism: 0.4, piety: 0.3 },
+    proficiencies: { architecture: 20, warfare: 30, statesmanship: 60, farming: 20, science: 40, mysticism: 40 },
+    vices: { lust: 0.95, pride: 0.5, gluttony: 0.4, sloth: 0.3 }, text: 'A charming romantic, a flirt and a party-lover who is never alone.' },
+  { id: 'sloth', label: '🛌 Slothful Dreamer', name: 'Odo', epithet: 'The Late Riser', gender: 'Male', aura: '#94a3b8',
+    personality: { openness: 0.8, conscientiousness: 0.1, extraversion: 0.3, agreeableness: 0.7, neuroticism: 0.2, piety: 0.5 },
+    proficiencies: { architecture: 30, warfare: 10, statesmanship: 30, farming: 40, science: 70, mysticism: 60 },
+    vices: { sloth: 0.95, gluttony: 0.4 }, text: 'A lazy, easygoing dreamer who would rather sleep than do anything.' },
+  { id: 'usurper', label: '🐍 Envious Usurper', name: 'Iago', epithet: 'The Second Son', gender: 'Male', aura: '#22c55e',
+    personality: { openness: 0.6, conscientiousness: 0.7, extraversion: 0.5, agreeableness: 0.15, neuroticism: 0.7, piety: 0.3 },
+    proficiencies: { architecture: 40, warfare: 60, statesmanship: 80, farming: 20, science: 40, mysticism: 30 },
+    vices: { envy: 0.95, pride: 0.5, wrath: 0.5, greed: 0.5 }, text: 'A jealous, bitter schemer who covets the great houses of others.' },
+  { id: 'healer', label: '🌿 Humble Healer', name: 'Mara', epithet: 'Hands of Mercy', gender: 'Female', aura: '#34d399',
+    personality: { openness: 0.6, conscientiousness: 0.85, extraversion: 0.5, agreeableness: 1, neuroticism: 0.2, piety: 0.8 },
+    proficiencies: { architecture: 30, warfare: 5, statesmanship: 50, farming: 80, science: 70, mysticism: 70 },
+    vices: { pride: 0, greed: 0, wrath: 0, sloth: 0 }, text: 'A kind, humble healer who tends the sick and is merciful to all.' },
+  { id: 'ranger', label: '🏹 Wandering Hunter', name: 'Kael', epithet: 'Walker of the Wilds', gender: 'Male', aura: '#65a30d',
+    personality: { openness: 0.9, conscientiousness: 0.6, extraversion: 0.2, agreeableness: 0.5, neuroticism: 0.2, piety: 0.5 },
+    proficiencies: { architecture: 30, warfare: 70, statesmanship: 20, farming: 60, science: 40, mysticism: 40 },
+    vices: { wrath: 0.2 }, text: 'A quiet hermit and explorer, a hunter who roams the land alone.' }
+];
 
 const FORMATS = {
   pct: v => `${Math.round(v * 100)}%`,
@@ -76,8 +106,11 @@ export class CreationWorkshop {
       aiSystem: 'LAYA', // 'LAYA' or 'MINECRAFT' (the needs-and-jobs brain every mortal has)
       appearance: { auraColor: '#ffd700' },
       personality: { openness: 0.85, conscientiousness: 0.9, extraversion: 0.75, agreeableness: 0.8, neuroticism: 0.2, piety: 0.98 },
-      proficiencies: { architecture: 80, warfare: 50, statesmanship: 95, farming: 70, science: 85, mysticism: 98 }
+      proficiencies: { architecture: 80, warfare: 50, statesmanship: 95, farming: 70, science: 85, mysticism: 98 },
+      vices: { ...blankVices(), pride: 0.2 },
+      persona: { text: '', tags: [] }
     };
+    this.champLook = randomLook(); // the parts and colours of the champion (only the people's own parts are offered)
 
     this.speciesConfig = {
       name: 'Star Chimera',
@@ -125,9 +158,6 @@ export class CreationWorkshop {
         this.updateOutput(el);
         this.refresh();
       });
-    }
-    for (const btn of root.querySelectorAll('.preset-btn[data-preset]')) {
-      btn.addEventListener('click', () => this.applyPreset(btn.dataset.preset));
     }
     root.querySelector('#ws-reroll-look').addEventListener('click', () => {
       sounds.playUIClick();
@@ -177,11 +207,38 @@ export class CreationWorkshop {
         this.champSheetStyle = b.dataset.champStyle;
         for (const o of root.querySelectorAll('[data-champ-style]')) o.classList.toggle('active', o === b);
         root.querySelector('#ws-champ-sheet').hidden = this.champSheetStyle !== 'sheet';
+        root.querySelector('#ws-champ-people').hidden = this.champSheetStyle !== 'people';
         if (this.champSheetStyle === 'people') this.championConfig.appearance.sheet = null;
         else if (this.champPicker.selected) this.championConfig.appearance.sheet = this.champPicker.selected;
         this.refresh();
       });
     }
+    // the champion's look and who they are
+    const CHAMP_GENES = ['head', 'ears', 'tail', 'horns', 'pattern', 'mutation'];
+    this.champParts = new PartsPicker(root.querySelector('#ws-champ-parts'), this.champLook, () => this.refresh(), CHAMP_GENES);
+    this.champColours = new ColourControls(root.querySelector('#ws-champ-colours'), this.champLook, () => { this.champParts.refresh(); this.refresh(); });
+    const cbox = root.querySelector('#ws-champ-archetypes');
+    for (const c of CHAMPIONS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c.label;
+      b.addEventListener('click', () => this.applyChampion(c));
+      cbox.appendChild(b);
+    }
+    const desc = root.querySelector('#ws-champ-desc');
+    desc.addEventListener('input', () => { this.championConfig.persona = { text: desc.value, tags: interpret(desc.value).tags }; });
+    root.querySelector('#ws-champ-read').addEventListener('click', () => {
+      sounds.playUIClick();
+      const r = applyInterpretation(this.championConfig, desc.value);
+      const out = root.querySelector('#ws-champ-read-out');
+      const bits = [];
+      for (const [k, d] of Object.entries(r.vices)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
+      for (const [k, d] of Object.entries(r.personality)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
+      for (const [k, d] of Object.entries(r.proficiencies)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
+      out.textContent = r.matched.length ? `Laya understood: ${r.matched.join(', ')} → ${bits.join(' ')}${r.tags.length ? ' • interests: ' + r.tags.join(', ') : ''}` : 'Laya found nothing it knows in that. Try words like proud, greedy, gentle, lazy, warrior, scholar, hermit…';
+      this.syncForm();
+      this.refresh();
+    });
     // starting points
     const box = root.querySelector('#ws-archetypes');
     for (const a of ARCHETYPES) {
@@ -224,6 +281,15 @@ export class CreationWorkshop {
     clearInterval(this.animTimer);
     this.animTimer = setInterval(() => { this.animFrame++; if (!this.root.classList.contains('hidden')) this.drawPreview(); }, 260);
     loadCatalog().then(() => { this.sheetPicker.renderGrid(); this.champPicker.renderGrid(); });
+    // the champion starts as one of the people: their own parts and colours, to be changed from there
+    const sim = this.getSim();
+    const people = sim ? sim.ecosystem.sapientSpecies() : null;
+    if (people && this.champLookFrom !== people.id) {
+      this.champLookFrom = people.id;
+      for (const g of Object.keys(this.champLook)) if (g in people.centroid) this.champLook[g] = people.centroid[g];
+      this.champParts.refresh();
+      this.champColours.refresh();
+    }
     this.root.classList.remove('hidden');
     this.selectTab(tab);
   }
@@ -261,15 +327,17 @@ export class CreationWorkshop {
     if (out && FORMATS[el.dataset.format]) out.textContent = FORMATS[el.dataset.format](parseFloat(el.value));
   }
 
-  applyPreset(key) {
-    const preset = PRESETS[key];
-    if (!preset) return;
+  applyChampion(preset) {
     sounds.playUIClick();
     const c = this.championConfig;
-    Object.assign(c, { name: preset.name, epithet: preset.epithet, gender: preset.gender, aiSystem: preset.aiSystem });
+    Object.assign(c, { name: preset.name, epithet: preset.epithet, gender: preset.gender });
     c.appearance.auraColor = preset.aura;
     Object.assign(c.personality, preset.personality);
     Object.assign(c.proficiencies, preset.proficiencies);
+    c.vices = { ...blankVices(), ...preset.vices };
+    c.persona = { text: preset.text, tags: interpret(preset.text).tags };
+    this.root.querySelector('#ws-champ-desc').value = preset.text;
+    this.root.querySelector('#ws-champ-read-out').textContent = '';
     this.syncForm();
     this.refresh();
   }
@@ -379,7 +447,7 @@ export class CreationWorkshop {
       if (this.championConfig.appearance.sheet && sheetOf(this.championConfig.appearance.sheet, dir)) return;
       const sim = this.getSim();
       const people = sim ? sim.ecosystem.sapientSpecies() : null;
-      if (people) this.drawCreature(people.centroid, null, 6, frame & 1);
+      if (people) this.drawCreature({ ...people.centroid, ...this.champLook, body: people.centroid.body, legs: people.centroid.legs, wings: people.centroid.wings }, null, 6, frame & 1);
       return;
     }
     const sp = this.speciesConfig;
@@ -444,7 +512,7 @@ export class CreationWorkshop {
     if (this.activeTab === 'champion') {
       const people = sim.ecosystem.sapientSpecies();
       if (!people) return;
-      this.onSpawnReady({ type: 'champion', species: people, config: JSON.parse(JSON.stringify(this.championConfig)) });
+      this.onSpawnReady({ type: 'champion', species: people, config: { ...JSON.parse(JSON.stringify(this.championConfig)), look: this.champSheetStyle === 'people' ? { ...this.champLook } : null } });
     } else {
       sounds.playDivineBlessing();
       const sc = this.speciesConfig;
