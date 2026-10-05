@@ -1,10 +1,10 @@
-# Builds the game and deploys it to Firebase Hosting on every push to main.
+# Builds the game and deploys it to Firebase Hosting (run by hand from the Actions tab).
 # One-time setup: in the repository settings add the secret FIREBASE_SERVICE_ACCOUNT (a service account JSON with the
 # "Firebase Hosting Admin" role) and edit .firebaserc with your project id. See docs/HOSTING.md.
 name: Deploy to Firebase Hosting
+# Manual only for now (the game runs locally); to deploy on every push to main, add `push: { branches: [main] }` here.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest

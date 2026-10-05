@@ -1,4 +1,6 @@
-# Hosting on Firebase
+# Hosting on Firebase (not in use yet)
+
+The game currently runs locally with `npm run dev` (saves go to this browser's database, or a file you pick under Menu > Save location). Nothing here is deployed or required; cloud saves stay hidden until a Firebase config is present, and the deploy workflow only runs when started by hand.
 
 The game is a static site (Vite build): `npm run build` writes `dist/`, Firebase Hosting serves it.
 
@@ -16,8 +18,8 @@ firebase deploy --only hosting        # or: npm run deploy
 ```
 Preview first with `firebase hosting:channel:deploy preview`.
 
-## Automatic deploys
-`.github/workflows/firebase-hosting.yml` tests, builds and deploys on every push to `main`. Add the repository secret
+## Deploys from GitHub
+`.github/workflows/firebase-hosting.yml` tests, builds and deploys when started by hand (Actions tab); change its `on:` to run on every push to `main`. Add the repository secret
 `FIREBASE_SERVICE_ACCOUNT` (service account JSON, role *Firebase Hosting Admin*) and, for cloud saves, the four
 `VITE_FIREBASE_*` secrets.
 
