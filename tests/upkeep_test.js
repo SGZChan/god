@@ -64,6 +64,7 @@ section('Ruins in the middle of town are cleared; the salvage returns to the sto
   const builder = w.ecosystem.entities.find(e => e.civilization === civ && e.isAdult);
   builder.job = 'builder';
   st.assignTimer = 1e9;
+  st.town.cooldown = 1e9; // (no new plan is raised on top of the rubble meanwhile)
   for (let i = 0; i < 80 && w.terrain.buildings.has(ruin.id); i++) { step(w, 40); builder.job = 'builder'; }
   assert(!w.terrain.buildings.has(ruin.id), 'the ruins were cleared');
   assert((st.stock.stone || 0) > 0, `and the stone was salvaged (${st.stock.stone || 0})`);

@@ -99,9 +99,38 @@ function obtainable(civ, terrain, st, res) {
   return ok;
 }
 
+// Shelter, farmland and the camps that gather the materials are always allowed: the settlement could not get going otherwise.
+const ALWAYS_FUNDED = new Set(['tent', 'hut', 'farm', 'pen', 'hall', 'barrow', 'lumber_camp', 'quarry', 'dock']);
+const FUNDED_SHARE = 0.4; // a new building is only started once the stockpile holds this share of its raw materials
+
+// Raw materials the open building sites still wait for (already earmarked: a new site cannot count on them)
+function committed(terrain, st) {
+  const out = {};
+  for (const b of openSites(terrain, st)) {
+    const def = BUILDING_TYPES[b.type];
+    for (const [res, need] of Object.entries(def.cost)) out[res] = (out[res] || 0) + Math.max(0, need - ((b.delivered && b.delivered[res]) || 0));
+  }
+  return out;
+}
+
+// Materials are not conjured: a plan is drawn up only when the people have gathered most of what it takes
+// (and a settlement without the stuff nearby must go out and find it).
 function affordable(civ, terrain, st, type) {
   const def = BUILDING_TYPES[type];
   for (const res of Object.keys(def.cost)) if (!obtainable(civ, terrain, st, res)) return false;
+  if (ALWAYS_FUNDED.has(type)) return true;
+  const spoken = st._committed && st._committed.t === (civ._clock || 0) ? st._committed.v : null;
+  const held = spoken || committed(terrain, st);
+  if (!spoken) Object.defineProperty(st, '_committed', { value: { t: civ._clock || 0, v: held }, writable: true, configurable: true, enumerable: false });
+  for (const [res, need] of Object.entries(def.cost)) {
+    if (!RESOURCES[res]) continue;
+    if ((st.stock[res] || 0) - (held[res] || 0) < need * FUNDED_SHARE) {
+      // remember what the plans wait for: the labour market sends woodcutters and miners after it
+      if (!st._wish) Object.defineProperty(st, '_wish', { value: {}, writable: true, configurable: true, enumerable: false });
+      st._wish[res] = Math.max(st._wish[res] || 0, Math.ceil(need * (FUNDED_SHARE + 0.3)));
+      return false;
+    }
+  }
   return true;
 }
 

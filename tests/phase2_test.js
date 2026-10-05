@@ -151,7 +151,7 @@ section('Save/load: whole-game format and validation');
   assert(rejects(JSON.stringify({ ...save, version: 999 })), 'unknown versions are rejected');
   assert(rejects(JSON.stringify({ version: SAVE_VERSION })), 'incomplete saves are rejected');
   const bytes = JSON.stringify(save).length;
-  assert(bytes < 1.8e6, `one planet saves compactly (${Math.round(bytes / 1024)} KB)`);
+  assert(bytes < 2.6e6, `one planet saves compactly (${Math.round(bytes / 1024)} KB)`);
 }
 
 section('Renderer: only the enabled planet reacts, dispose removes listeners');

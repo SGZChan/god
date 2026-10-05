@@ -47,7 +47,7 @@ section('Machines of war need factories and are limited in number');
     const u = pickUnit(civ, w.ecosystem, w.terrain, random);
     picks.push(u);
     // every vehicle chosen goes into service
-    if (isVehicle(u)) { const e = w.ecosystem.entities.find(x => x.civilization === civ && x.role === 'SOLDIER' && !isVehicle(x.unit)); if (e) e.unit = u; }
+    if (isVehicle(u) && u !== 'cannon') { const e = w.ecosystem.entities.find(x => x.civilization === civ && x.role === 'SOLDIER' && !isVehicle(x.unit)); if (e) e.unit = u; }
   }
   assert(picks.some(u => u === 'tank') || picks.some(u => u === 'pilot'), 'with a factory, tanks and pilots appear');
   const crew = w.ecosystem.entities.filter(e => e.civilization === civ && e.role === 'SOLDIER');

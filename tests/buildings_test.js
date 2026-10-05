@@ -39,7 +39,7 @@ section('Catalogue: every required kind of building exists with sane data');
   assert(BUILDING_TYPES.keep.w === 6 && BUILDING_TYPES.keep.h === 6 && BUILDING_TYPES.wall_tower.w === 2, 'keeps are 6x6 and towers 2x2');
   assert(BUILDING_TYPES.palisade.connects === 'wall' && BUILDING_TYPES.stone_gate.door, 'walls autotile and gates have a door');
   assert(typesForTier(0).every(d => d.tier === 0) && typesForTier(5).length === BUILDING_IDS.length, 'typesForTier filters by era');
-  assert(missingMaterials({ type: 'hut', delivered: { wood: 6 } }).fibre === 6 && !missingMaterials({ type: 'hut', delivered: { wood: 6 } }).wood, 'missingMaterials subtracts deliveries');
+  assert(missingMaterials({ type: 'hut', delivered: { wood: BUILDING_TYPES.hut.cost.wood } }).fibre === BUILDING_TYPES.hut.cost.fibre && !missingMaterials({ type: 'hut', delivered: { wood: BUILDING_TYPES.hut.cost.wood } }).wood, 'missingMaterials subtracts deliveries');
 }
 
 section('Sprites: houses stand far taller than creatures');

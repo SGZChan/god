@@ -376,10 +376,11 @@ export function tickSettlement(c, st, members, dt) {
   st.wants = wants;
   // how badly each raw material is needed (0 = plenty, 1 = none): stock against a working level plus what sites are missing
   const level = (res, base) => {
-    const target = base + (missing[res] || 0);
+    const target = base + (missing[res] || 0) + ((st._wish && st._wish[res]) || 0);
     return target > 0 ? Math.max(0, Math.min(1, (target - (st.stock[res] || 0)) / target)) : 0;
   };
   const kiln = countBuilt(terrain, st, 'kiln') > 0 ? 12 : 0;
+  const wishUsed = st._wish;
   st.need = {
     wood: level('wood', 24 + (kiln ? 8 : 0)),
     fibre: level('fibre', 12),
@@ -387,6 +388,7 @@ export function tickSettlement(c, st, members, dt) {
     clay: level('clay', kiln),
     food: Math.max(0, 1 - eco.foodUnits(st.stock) / foodTargetOf(members.length, foodCapOf(terrain, st)))
   };
+  if (wishUsed) for (const k of Object.keys(wishUsed)) { wishUsed[k] *= 0.9; if (wishUsed[k] < 1) delete wishUsed[k]; } // plans that stay unfunded renew it
 
   // inbound materials per site, from what builders and haulers carry
   const inbound = new Map();

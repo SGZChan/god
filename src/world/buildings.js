@@ -22,8 +22,13 @@
 export const ROAD_KINDS = ['dirt', 'gravel', 'cobble'];
 export const ROAD_SPEED = { dirt: 1.2, gravel: 1.35, cobble: 1.5 }; // walking speed multiplier on a road tile
 
+// Building takes far more material than a home region can give for long, so settlements have to explore for
+// stone, clay and ore (and walk farther for timber) as they grow.
+export const COST_SCALE = 2.5;
+const scaled = cost => Object.fromEntries(Object.entries(cost).map(([r, n]) => [r, Math.max(1, Math.round(n * COST_SCALE))]));
+
 const T = (id, name, category, w, h, tier, cost, work, capacity, extra = {}) => ({
-  id, name, category, w, h, tier, cost, work, capacity,
+  id, name, category, w, h, tier, cost: scaled(cost), work, capacity,
   door: { x: Math.floor(w / 2), y: h - 1 },
   solid: true,
   health: 100,

@@ -93,6 +93,7 @@ section('Society: priests are employed and settlements with a faith raise holy p
   // the planner wants a holy place for a settlement with a faith (whether a plot is free right now is another matter)
   const civ = civOf(sim);
   const st = civ.settlements[0];
+  st.stock = { ...st.stock, wood: 400, stone: 400, fibre: 200, clay: 200 }; // (plans wait for materials)
   const list = wishes(civ, sim.terrain, st, {}, eraTier(civ), {});
   assert(Boolean(st.faithId) && list.some(w => w.type === 'shrine'), `a settlement with a faith wants a shrine (${list.map(w => w.type).join(', ')})`);
   st.faithId = null;

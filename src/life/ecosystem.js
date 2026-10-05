@@ -156,6 +156,13 @@ export class Ecosystem {
           const far = this.terrain.findLand(home.x + Math.cos(a2) * d2, home.y + Math.sin(a2) * d2, 40);
           if (far) this.spawnFounders(species, Math.max(6, Math.round(plan.count * 0.6)), far.x, far.y, template);
         }
+        // ... and herds scattered over the whole world, so every region has its own wildlife to find
+        const W = this.terrain.width;
+        const H = this.terrain.height || W;
+        for (let k = 0; k < 5; k++) {
+          const far = this.terrain.findLand(random() * W, random() * H, 60);
+          if (far && Math.hypot(far.x - home.x, far.y - home.y) > 60) this.spawnFounders(species, Math.max(4, Math.round(plan.count * 0.5)), far.x, far.y, template);
+        }
       }
     }
   }
@@ -313,6 +320,18 @@ export class Ecosystem {
     if (this.censusTimer >= CENSUS_INTERVAL) {
       this.censusTimer = 0;
       this.takeCensus();
+      this.migrate();
+    }
+  }
+
+  // Wildlife wanders in from unseen lands: a species down to a handful gets a small group arriving somewhere else
+  // on the map (a rare event), so the far regions are never left without animals.
+  migrate() {
+    for (const species of this.registry.living()) {
+      if (species.sapient || species.isCustom || species.population < 1 || species.population > 6) continue;
+      if (isAquaticBody(species.centroid.body) || random() > 0.25) continue;
+      const spot = this.terrain.findLand(random() * this.terrain.width, random() * (this.terrain.height || this.terrain.width), 60);
+      if (spot) this.spawnFounders(species, 4, spot.x, spot.y);
     }
   }
 
