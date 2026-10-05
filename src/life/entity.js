@@ -11,6 +11,7 @@ import { timeOfDay, isNight } from '../simulation/dayCycle.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
 import { pickSheet } from '../art/sheetSprites.js';
 import { interests } from '../ai/temperament.js';
+import { stepBehaviour } from '../ai/behaviours.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -963,6 +964,8 @@ export class Entity {
     // otherwise: a round of the town, shaped by what it likes
     const people = (worldContext.grid ? worldContext.grid.within(this.x, this.y, 40) : worldContext.entities)
       .filter(e => e.alive && e !== this && e.isSapient && (!civ || e.civilization === civ) && Math.hypot(e.x - this.x, e.y - this.y) > 3);
+    // what the player wrote about this champion (ai/intent.js): steals, manipulates, a stranger from another world...
+    if (stepBehaviour(this, { terrain, eco, civ, st, anchor, go, near, people }, L)) return;
     const sacred = [];
     const work = [];
     const liked = [];

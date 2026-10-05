@@ -10,6 +10,7 @@ import { ALL_GENES, BODY_GENES, COLOR_GENES, PART_COUNTS } from '../life/genome.
 import { PlanetCreator } from './planetCreator.js';
 import { PartsPicker, ColourControls, SheetPicker, ARCHETYPES } from './appearanceEditor.js';
 import { blankVices, applyInterpretation, interpret } from '../ai/temperament.js';
+import { parseIntent, BACKSTORIES } from '../ai/intent.js';
 import { drawSheet, WALK_FRAMES, loadCatalog, sheetInfo } from '../art/sheetSprites.js';
 import { sounds } from '../audio/soundFX.js';
 
@@ -226,16 +227,25 @@ export class CreationWorkshop {
       cbox.appendChild(b);
     }
     const desc = root.querySelector('#ws-champ-desc');
-    desc.addEventListener('input', () => { this.championConfig.persona = { text: desc.value, tags: interpret(desc.value).tags }; });
+    // what Laya will play, live as you type (the button below also moves the sliders to match)
+    const showPlan = () => {
+      const intent = parseIntent(desc.value);
+      this.championConfig.persona = { text: desc.value, tags: interpret(desc.value).tags, behaviours: intent.behaviours, backstory: intent.backstory, summary: intent.summary };
+      root.querySelector('#ws-champ-plan').textContent = intent.summary.length ? `Laya will play someone who ${intent.summary.filter((_, i) => i < intent.behaviours.length).join(', ')}${intent.backstory.length ? (intent.behaviours.length ? '; ' : 'is ') + 'who is ' + intent.backstory.map(b => BACKSTORIES[b].label).join(', ') : ''}.` : '';
+    };
+    desc.addEventListener('input', showPlan);
+    this.showPlan = showPlan;
     root.querySelector('#ws-champ-read').addEventListener('click', () => {
       sounds.playUIClick();
       const r = applyInterpretation(this.championConfig, desc.value);
+      showPlan();
       const out = root.querySelector('#ws-champ-read-out');
       const bits = [];
       for (const [k, d] of Object.entries(r.vices)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
       for (const [k, d] of Object.entries(r.personality)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
       for (const [k, d] of Object.entries(r.proficiencies)) if (d) bits.push(`${d > 0 ? '+' : '−'}${k}`);
-      out.textContent = r.matched.length ? `Laya understood: ${r.matched.join(', ')} → ${bits.join(' ')}${r.tags.length ? ' • interests: ' + r.tags.join(', ') : ''}` : 'Laya found nothing it knows in that. Try words like proud, greedy, gentle, lazy, warrior, scholar, hermit…';
+      const said = r.intent.summary.length ? ` • ${r.intent.gender ? 'a ' + (r.intent.gender === 'Female' ? 'woman' : 'man') + ', ' : ''}${r.intent.name ? 'named ' + r.intent.name + ', ' : ''}acts out: ${r.intent.summary.join('; ')}` : '';
+      out.textContent = r.matched.length || r.intent.summary.length ? `Laya understood: ${r.matched.join(', ')} → ${bits.join(' ')}${said}${r.tags.length ? ' • interests: ' + r.tags.join(', ') : ''}` : 'Laya found nothing it knows in that. Try words like proud, greedy, gentle, lazy, warrior, scholar, hermit…';
       this.syncForm();
       this.refresh();
     });
@@ -335,8 +345,8 @@ export class CreationWorkshop {
     Object.assign(c.personality, preset.personality);
     Object.assign(c.proficiencies, preset.proficiencies);
     c.vices = { ...blankVices(), ...preset.vices };
-    c.persona = { text: preset.text, tags: interpret(preset.text).tags };
     this.root.querySelector('#ws-champ-desc').value = preset.text;
+    this.showPlan();
     this.root.querySelector('#ws-champ-read-out').textContent = '';
     this.syncForm();
     this.refresh();
@@ -512,6 +522,7 @@ export class CreationWorkshop {
     if (this.activeTab === 'champion') {
       const people = sim.ecosystem.sapientSpecies();
       if (!people) return;
+      if (this.championConfig.persona && this.championConfig.persona.text && !this.championConfig.persona.behaviours) this.showPlan();
       this.onSpawnReady({ type: 'champion', species: people, config: { ...JSON.parse(JSON.stringify(this.championConfig)), look: this.champSheetStyle === 'people' ? { ...this.champLook } : null } });
     } else {
       sounds.playDivineBlessing();

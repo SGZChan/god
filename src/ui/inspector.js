@@ -295,6 +295,7 @@ export class InspectorPanel {
             <div class="trait-row"><span>Empathy:</span><div class="trait-bar"><div style="width: ${p.agreeableness * 100}%"></div></div></div>
             ${ent.vices ? VICES.map(v => `<div class="trait-row"><span>${v.label}:</span><div class="trait-bar vice-bar"><div style="width: ${(ent.vices[v.id] || 0) * 100}%"></div></div></div>`).join('') : ''}
             ${ent.persona && ent.persona.text ? `<p class="persona-text">“${ent.persona.text.replace(/[<>&]/g, '')}”</p>` : ''}
+            ${ent.persona && ent.persona.summary && ent.persona.summary.length ? `<p class="persona-text">Plays: ${ent.persona.summary.join('; ').replace(/[<>&]/g, '')}${ent.loot ? ` • loot ${Math.round(ent.loot)}` : ''}${ent.notoriety ? ` • caught ${ent.notoriety}×` : ''}</p>` : ''}
           </div>
         ` : ''}
       </div>

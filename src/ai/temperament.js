@@ -6,6 +6,8 @@
 //   interests(entity)     what a champion likes to spend a day on: building types and how much it seeks company, from the
 //                         tags and vices (used by Entity.layaRoutine)
 //   cardBias(persona, e)  how the vices tilt the score of an Action Card of each persona (used by layaEngine.stage)
+import { parseIntent } from './intent.js';
+
 export const VICES = [
   { id: 'pride', label: 'Pride', hint: 'seeks the crowd, preaches and commands; never sues for peace' },
   { id: 'greed', label: 'Greed', hint: 'haunts markets and stores, hoards, takes more than its share' },
@@ -75,11 +77,17 @@ export function interpret(text) {
 // Applies an interpretation to a champion config (vices, personality, proficiencies, persona) and returns what changed.
 export function applyInterpretation(config, text) {
   const r = interpret(text);
+  const intent = parseIntent(text);
   config.vices = { ...blankVices(), ...(config.vices || {}) };
   for (const [k, d] of Object.entries(r.vices)) config.vices[k] = clamp(Math.round((config.vices[k] + d) * 20) / 20, 0, 1);
   for (const [k, d] of Object.entries(r.personality)) if (k in config.personality) config.personality[k] = clamp(Math.round((config.personality[k] + d) * 20) / 20, 0, 1);
   for (const [k, d] of Object.entries(r.proficiencies)) if (k in config.proficiencies) config.proficiencies[k] = clamp(Math.round((config.proficiencies[k] + d) / 5) * 5, 0, 100);
-  config.persona = { text: String(text || ''), tags: r.tags };
+  for (const [k, d] of Object.entries(intent.stats.personality)) if (k in config.personality) config.personality[k] = clamp(Math.round((config.personality[k] + d) * 20) / 20, 0, 1);
+  for (const [k, d] of Object.entries(intent.stats.proficiencies)) if (k in config.proficiencies) config.proficiencies[k] = clamp(Math.round((config.proficiencies[k] + d) / 5) * 5, 0, 100);
+  if (intent.gender) config.gender = intent.gender;
+  if (intent.name) config.name = intent.name;
+  config.persona = { text: String(text || ''), tags: r.tags, behaviours: intent.behaviours, backstory: intent.backstory, summary: intent.summary };
+  r.intent = intent;
   return r;
 }
 
@@ -115,7 +123,7 @@ export function interests(entity) {
   const add = (types, w) => { for (const t of types) want[t] = (want[t] || 0) + w; };
   for (const g of tags) add(TAG_BUILDINGS[g] || [], 1);
   for (const [vice, types] of Object.entries(VICE_BUILDINGS)) add(types, (v[vice] || 0) * 1.5);
-  const company = clamp(0.5 + (v.lust || 0) * 0.8 + (v.pride || 0) * 0.4 + ((p.extraversion || 0.5) - 0.5) * 0.8 + (tags.includes('social') ? 0.3 : 0) - (tags.includes('alone') ? 0.6 : 0), 0.05, 1.6);
+  const company = clamp(0.5 + (v.lust || 0) * 0.8 + (v.pride || 0) * 0.4 + ((p.extraversion || 0.5) - 0.5) * 0.8 + (tags.includes('social') ? 0.3 : 0) - (tags.includes('alone') ? 0.6 : 0) - ((entity.persona && entity.persona.backstory || []).includes('exile') ? 0.3 : 0), 0.05, 1.6);
   return {
     want,
     company,
