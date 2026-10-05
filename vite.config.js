@@ -1,4 +1,4 @@
-// Build settings for hosting (Firebase Hosting serves the dist/ folder). `base: './'` keeps asset URLs relative, so the
+// Build settings for hosting (Vercel serves the dist/ folder). `base: './'` keeps asset URLs relative, so the
 // game works at the site root or under a sub-path; Three.js goes into its own chunk so the game code can cache separately.
 import { defineConfig } from 'vite';
 

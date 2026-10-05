@@ -4,7 +4,7 @@
 //   file      a file on this device, chosen once with the File System Access API (Chrome, Edge, Opera): every
 //             autosave rewrites that file, no downloads, no browser storage. Other browsers fall back to the browser
 //             database plus Export / Import.
-//   cloud     Firebase: signed in with Google, saved to Firestore (see cloudStore.js); needs a Firebase config
+//   cloud     your account: signed in (email link or Google), saved to Supabase Storage (see cloudStore.js); needs a Supabase config
 //
 // Whatever the mode, the browser database always keeps the newest copy as a safety net, and a save left in
 // localStorage by an older version is found and moved over.
@@ -71,11 +71,11 @@ function headerOf(text) {
 }
 
 export class SaveStore {
-  constructor({ legacyKey = null, firebaseConfig = null } = {}) {
+  constructor({ legacyKey = null, cloudConfig = null, createClient = null } = {}) {
     this.legacyKey = legacyKey;
     this.mode = 'browser';
     this.fileHandle = null;
-    this.cloud = new CloudStore(firebaseConfig);
+    this.cloud = new CloudStore(cloudConfig, { createClient });
     this.lastError = null;
   }
 
@@ -118,7 +118,7 @@ export class SaveStore {
 
   describe() {
     if (this.mode === 'file') return this.fileHandle ? `File on this device: ${this.fileHandle.name}` : 'File on this device (not chosen yet)';
-    if (this.mode === 'cloud') return this.cloud.user ? `Cloud (Firebase) as ${this.cloud.user.email || this.cloud.user.displayName}` : 'Cloud (Firebase), not signed in';
+    if (this.mode === 'cloud') return this.cloud.user ? `Your account (${this.cloud.user.email || 'signed in'})` : 'Your account (not signed in)';
     return 'This browser (IndexedDB)';
   }
 
