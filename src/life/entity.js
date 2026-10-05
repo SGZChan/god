@@ -4,6 +4,7 @@ import { Genome, derive, traitDistance } from './genome.js';
 import { MATE_THRESHOLD } from './species.js';
 import { makeName } from './names.js';
 import { livestockAI } from '../civilization/livestock.js';
+import { makeCorpse, CORPSE_LIFE } from '../civilization/deathcare.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -188,6 +189,9 @@ export class Entity {
   update(dt, speedMultiplier, worldContext) {
     if (!this.alive) return;
     const sim = dt * Math.max(1, speedMultiplier); // simulated seconds
+
+    // A building that went up (or completed) where this creature stands must not swallow it
+    if (worldContext && worldContext.terrain) this.unstickFromBuildings(worldContext.terrain);
 
     // Aging: a year is 4 simulated seconds
     this.age += sim * YEARS_PER_SECOND;
@@ -822,6 +826,36 @@ export class Entity {
     }
   }
 
+  // If the creature stands on a solid building tile (a wall rose around it), step out to the nearest free tile.
+  unstickFromBuildings(terrain) {
+    const tx = Math.floor(this.x);
+    const ty = Math.floor(this.y);
+    const here = terrain.getTile(tx, ty);
+    if (!here || !here.structure || !here.structure.solid) return;
+    for (let r = 1; r <= 8; r++) {
+      let best = null;
+      let bd = Infinity;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = tx + dx;
+          const y = ty + dy;
+          if (!terrain.inBounds(x, y)) continue;
+          const t = terrain.getTile(x, y);
+          if ((t.structure && t.structure.solid) || (this.isSapient && t.biome.isWater)) continue;
+          const d = Math.hypot(this.x - (x + 0.5), this.y - (y + 0.5));
+          if (d < bd) { bd = d; best = { x, y }; }
+        }
+      }
+      if (best) {
+        this.x = best.x + 0.5;
+        this.y = best.y + 0.5;
+        this.path = [];
+        return;
+      }
+    }
+  }
+
   // Sapients walk on land only (they do not swim across rivers); everyone else may wade.
   requestPath(targetX, targetY, pathfinder, maxIterations = 300, landOnly = this.isSapient) {
     if (!pathfinder) return;
@@ -854,14 +888,16 @@ export class Entity {
     const grown = 0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears);
     const burden = this.pregnancy ? 0.8 : 1;
     const baseSpeed = this.stats.speedMult * 2.2 * grown * burden;
-    const moveDist = (baseSpeed / terrainCost) * sim;
+    const moveDist = Math.min(0.9, (baseSpeed / terrainCost) * sim); // (never more than a tile per step: no tunnelling through thin walls)
 
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
     const nx = this.x + (dx / dist) * Math.min(dist, moveDist);
     const ny = this.y + (dy / dist) * Math.min(dist, moveDist);
     // Walls block walking: a step into a solid building tile (not through a door) is refused and the path dropped
     const toStruct = terrain.getTile(Math.floor(nx), Math.floor(ny)).structure;
-    if (toStruct && toStruct.solid && !(curTile.structure && curTile.structure.buildingId === toStruct.buildingId)) {
+    // (only a creature already standing inside a solid footprint may move within it, to get out: the door tile is not solid,
+    // so someone standing in a doorway cannot walk on into the walls)
+    if (toStruct && toStruct.solid && !(curTile.structure && curTile.structure.solid && curTile.structure.buildingId === toStruct.buildingId)) {
       this.path = [];
       return;
     }
@@ -905,7 +941,12 @@ export class Entity {
     }
     this.alive = false;
     this.causeOfDeath = cause;
-    this.decayTimer = this.isSapient ? 20 : 12; // the body lingers as a grave marker (and can be resurrected)
+    this.decayTimer = this.isSapient ? 20 : 12; // the body lingers (and can be resurrected)
+    // a citizen's body stays where it fell until the family carries it to be buried (civilization/deathcare.js)
+    if (this.isSapient && this.civilization && this.civilization.isAlive && this.settlementId) {
+      makeCorpse(this);
+      this.decayTimer = CORPSE_LIFE;
+    }
     this.pregnancy = null;
   }
 }

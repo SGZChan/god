@@ -640,6 +640,34 @@ export class SurfaceRenderer {
         continue;
       }
 
+      if (!ent.alive && ent.corpse) {
+        // a citizen's body: lying where it fell, slung over a bearer's shoulder, or at the grave. Indoors (laid out at the
+        // place of healing) it is out of sight.
+        const cp = ent.corpse;
+        if (cp.state === 'laid_out' || cp.state === 'buried') continue;
+        const spriteH = ts * 1.5 * ent.visualScale;
+        const spriteW = spriteH * (SPRITE_W / SPRITE_H);
+        const carried = cp.state === 'carried';
+        const cy = carried ? py - spriteH * 0.55 : py;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+        ctx.beginPath();
+        ctx.ellipse(px, py + spriteH * 0.12, spriteW * 0.5, spriteH * 0.08, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.translate(px, cy);
+        ctx.rotate(Math.PI / 2);
+        ctx.globalAlpha = 0.92;
+        ctx.drawImage(getCreatureCanvas(ent.traits, 0, null), -spriteW / 2, -spriteH * 0.5, spriteW, spriteH);
+        // a pale shroud over the body
+        ctx.fillStyle = 'rgba(232, 230, 222, 0.82)';
+        ctx.fillRect(-spriteW * 0.5, -spriteH * 0.02, spriteW, spriteH * 0.52);
+        ctx.restore();
+        if (cp.state === 'rite') this.drawGlyph(ctx, '🪦', Math.floor(ts * 0.8), px, py - ts * 0.9);
+        else if (cp.state === 'lying' && ent.decayTimer < 120) this.drawGlyph(ctx, '✝', Math.floor(ts * 0.6), px, py - ts * 0.5);
+        continue;
+      }
+
       if (!ent.alive) {
         // Render fallen entity tombstone / memorial
         if (ent.decayTimer > 0) {
@@ -747,6 +775,7 @@ export class SurfaceRenderer {
       else if (ent.role === 'GUARD') badge = '🛡️';
       else if (ent.role === 'CRIMINAL') badge = '🦹';
       else if (ent.belief.status === 'ATHEIST_HERETIC') badge = '⚡';
+      if (ent.state === 'MOURN') badge = '🕯️';
       if (badge) this.drawGlyph(ctx, badge, Math.floor(ts * (ent.isSpecialIndividual ? 0.9 : 0.6)), px, py - spriteH * 0.95);
 
       // Name / Title tags when zoomed in

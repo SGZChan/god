@@ -7,7 +7,7 @@ import { MAX_CITIZENS } from '../civilization/society.js';
 import { popCap } from '../civilization/settlements.js';
 import { random } from '../simulation/random.js';
 
-export const MAX_ENTITIES = 900; // safety limit only; real limits are local crowding and food
+export const MAX_ENTITIES = 1100; // safety limit only; real limits are local crowding and food
 export const MAX_ANIMALS = 560;  // wildlife stops breeding at this many animals, so a growing society never crowds nature out (nor the reverse)
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 const CENSUS_INTERVAL = 3;     // simulated seconds between species censuses
@@ -226,7 +226,23 @@ export class Ecosystem {
       if (ent.alive) {
         ent.update(dt, speedMultiplier, worldContext);
       } else {
-        // Entity died: its remains decay gradually before they are removed
+        // Entity died: its remains decay gradually before they are removed. A citizen's body (ent.corpse) waits for the
+        // family: it is carried (and moves with its bearer), laid out indoors, buried, or lost if nobody comes.
+        const cp = ent.corpse;
+        if (cp) {
+          if (cp.state === 'buried') { this.entities.splice(i, 1); continue; }
+          if (cp.state === 'carried') {
+            const bearer = this.byId.get(cp.carrierId);
+            if (bearer && bearer.alive) { ent.x = bearer.x; ent.y = bearer.y; continue; }
+            cp.state = 'lying';
+            cp.carrierId = null;
+          }
+          if (cp.state === 'laid_out' || cp.state === 'rite') {
+            // (a body at the place of healing or at the grave is cared for: it does not decay for a good while)
+            ent.decayTimer = Math.max(ent.decayTimer, 40);
+            continue;
+          }
+        }
         ent.decayTimer = (ent.decayTimer !== undefined ? ent.decayTimer : 0) - sim;
         if (ent.decayTimer <= 0) {
           this.deaths++;
@@ -263,7 +279,9 @@ export class Ecosystem {
   // A courting pair that meets may conceive. The mother carries the embryos for a gestation period.
   tryConceive(father, mother) {
     // sapients and animals have separate ceilings (MAX_ANIMALS counts only the animals)
-    if (this.entities.length >= MAX_ENTITIES || (!mother.isSapient && this.entities.length - this.sapientCount >= MAX_ANIMALS)) return false;
+    // (a species you created, or any species with few members left, may always breed: the cap is for crowded wildlife)
+    const protectedKind = mother.species && (mother.species.isCustom || mother.species.population < 40);
+    if (this.entities.length >= MAX_ENTITIES || (!mother.isSapient && !protectedKind && this.entities.length - this.sapientCount >= MAX_ANIMALS)) return false;
     if (!father.alive || !mother.alive || father.sex !== 'M' || mother.sex !== 'F') return false;
     if (mother.pregnancy || father.mateCooldown > 0 || mother.mateCooldown > 0) return false;
     if (father.isKinOf(mother) || traitDistance(father.traits, mother.traits) > MATE_THRESHOLD) return false;

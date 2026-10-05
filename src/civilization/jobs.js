@@ -13,6 +13,9 @@
 //   entity.activity   short text for the inspector ("Hauling wood to the hall")
 import { random } from '../simulation/random.js';
 import { BUILDING_TYPES, missingMaterials, doorTile, frontTile } from '../world/buildings.js';
+import { bodyOptions, registerHelpers } from './deathcare.js';
+import { fireOptions, registerHelpers as registerFireHelpers } from './firefighting.js';
+import { stepUpkeep, upkeepWork, registerHelpers as registerUpkeepHelpers } from './upkeep.js';
 import { RESOURCES } from '../world/resources.js';
 import * as eco from './economy.js';
 import { getSettlement, nearestSettlement, depotOf, buildingsOf, openSites, countBuilt, settlementsOf, foodCapOf } from './settlements.js';
@@ -85,6 +88,9 @@ function toolFactor(st) {
 function say(ent, text) {
   ent.activity = text;
 }
+registerHelpers({ walkTo: (...a) => walkTo(...a), say: (...a) => say(...a) });
+registerFireHelpers({ walkTo: (...a) => walkTo(...a), say: (...a) => say(...a) });
+registerUpkeepHelpers({ walkTo: (...a) => walkTo(...a), say: (...a) => say(...a) });
 
 function failTask(ent, c, why) {
   ent.task = null;
@@ -229,7 +235,9 @@ function wantedJobs(c, st, members, adults) {
       if (n - (inb[res] || 0) > 0.01 && (st.stock[res] || 0) > 0.01) { workable++; break; }
     }
   }
-  add('builder', Math.min(Math.ceil(N * 0.4), workable * 2 + (roads > 0 ? 1 : 0)));
+  // (and a few to mend and clear: worn buildings and the ruins in the town, see upkeep.js)
+  const upkeep = upkeepWork(terrain, st);
+  add('builder', Math.min(Math.ceil(N * 0.4), workable * 2 + (roads > 0 ? 1 : 0) + Math.min(6, Math.ceil(upkeep.damaged / 2) + (upkeep.ruins ? 1 : 0))));
   // a settlement with a faith keeps a priest or two (religion.js)
   add('priest', st.faithId && N >= 8 ? 1 + Math.floor(N / 24) : 0);
   const need = st.need || { wood: 0.5, fibre: 0.5, stone: 0.5, clay: 0, food: foodShort };
@@ -818,7 +826,9 @@ function stepBuilder(ent, c, haulOnly) {
     ent.actionCooldown = 0.6;
     return true;
   }
-  // 2. pick a site
+  // 2. a building near collapse, or ruins in the heart of town, come before new building (upkeep.js)
+  if (!haulOnly && stepUpkeep(ent, c, 'urgent')) return true;
+  // pick a site
   // shelter first while people sleep rough: homes are worked on before everything else
   const homesFirst = (st.homeless || 0) > 0 ? 40 : 0;
   const rank = s => Math.hypot(s.x - ent.x, s.y - ent.y) - (BUILDING_TYPES[s.type].category === 'housing' ? homesFirst : 0);
@@ -895,6 +905,8 @@ function stepBuilder(ent, c, haulOnly) {
     ent.actionCooldown = 0.7;
     return true;
   }
+  // 4. nothing to build: mend the town and clear its ruins (upkeep.js)
+  if (!haulOnly && stepUpkeep(ent, c)) return true;
   say(ent, 'Waiting for materials');
   return false;
 }
@@ -1190,6 +1202,10 @@ export function sapientOptions(ent, world, options) {
     options.push({ score: 0.98, run: () => stepMigrate(ent, c) });
     return false;
   }
+  // a fire near the town: everyone runs to put it out (firefighting.js)
+  fireOptions(ent, c, options);
+  // the dead: kin and passers-by carry bodies to the healers and the grave, the family mourns, the hurt seek care
+  if (bodyOptions(ent, c, options)) return false;
   // food: carried, or at the depot; with a hungry worker food beats work around hunger 55
   const holdsFood = eco.foodUnits(ent.inventory) >= 1;
   // supper: in the evening people eat before bed, so nobody wakes up too hungry to work or start a family

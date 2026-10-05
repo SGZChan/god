@@ -697,6 +697,98 @@ function quarry(c) {
   body.vline(x0 + w - 16, top - 10, 8, P.dark);
 }
 
+
+// ---------- death care: burial mound and the places of healing ----------
+
+// A barrow: a grassy earth mound over a stone-lined passage, with standing stones round it (the Stone Age grave).
+function barrow(c) {
+  const { body, P } = c;
+  const x0 = c.x0 + 2;
+  const w = c.W - c.x0 * 2 - 4;
+  const cx = x0 + w / 2;
+  const base = c.fy1 - 1;
+  const hgt = 16;
+  for (let y = 0; y < hgt; y++) {
+    const span = Math.sqrt(Math.max(0, 1 - Math.pow((hgt - y) / hgt, 2))) * (w / 2);
+    for (let x = Math.round(cx - span); x <= Math.round(cx + span); x++) {
+      const h = hash(x, y, c.seed);
+      const top = y < 4;
+      body.set(x, base - hgt + y, top ? (h > 0.5 ? hex('#6f9a4d') : hex('#5f8a42')) : (h > 0.75 ? hex('#7a5b3a') : hex('#6a4d30')));
+    }
+  }
+  body.hline(Math.round(cx - w / 2), base, w, hex('#4a3522'));
+  // stone-lined doorway
+  const dx = Math.round(cx) - 4;
+  body.rect(dx, base - 9, 9, 9, hex('#1c1822'));
+  body.rect(dx - 1, base - 11, 11, 3, hex('#a9afc9'));
+  body.hline(dx - 1, base - 11, 11, hex('#dfe3ee'));
+  body.vline(dx - 2, base - 9, 9, hex('#8087a5'));
+  body.vline(dx + 10, base - 9, 9, hex('#8087a5'));
+  // standing stones
+  for (const [sx, sh] of [[x0 - 1, 9], [x0 + w - 1, 8], [Math.round(cx) + 14, 6]]) {
+    body.rect(sx, base - sh, 3, sh, hex('#9ea3ad'));
+    body.vline(sx + 2, base - sh, sh, hex('#6e7480'));
+    body.hline(sx, base - sh, 3, hex('#cfd3dc'));
+  }
+  // a few offerings: flowers on the mound
+  for (let i = 0; i < 4; i++) body.set(Math.round(cx) - 10 + i * 6, base - hgt + 5 + (i % 2) * 3, i % 2 ? hex('#f4d35e') : hex('#e76f51'));
+}
+
+// Places of healing. kind: 'hut' (a healer's hut, herbs drying under the eaves), 'infirmary' (a stone monastery
+// infirmary with a cross on the roof), 'hospital' (brick wards, a red cross on a white sign).
+function medical(c, o) {
+  const { body, roof, P, def } = c;
+  const base = o.kind === 'fire'
+    ? { wall: 'brick', wallH: 22, roof: 'slate', windows: 1, doorW: 11, doorH: 15, trim: true }
+    : o.kind === 'hut'
+    ? { wall: 'plank', wallH: 16, roof: 'thatch', windows: 0, doorW: 5, doorH: 11 }
+    : o.kind === 'infirmary'
+      ? { wall: 'brick', wallH: 23, roof: 'tile', windows: 3, doorW: 8, doorH: 13, trim: true, chimney: true }
+      : { wall: 'brick', wallH: 33, roof: 'slate', windows: 4, storeys: 2, doorW: 8, doorH: 13, trim: true, lit: true, inset: 3 };
+  gable(c, base); // (never the age styles: each age has its own place of healing)
+  const bx0 = c.x0 + 1;
+  const bx1 = c.x1 - 2;
+  const wallTop = c.fy1 - base.wallH;
+  const cx = def.door ? Math.round(c.x0 + (def.door.x + 0.5) * T) : Math.round((bx0 + bx1) / 2);
+  if (o.kind === 'fire') {
+    // wide red engine doors and a bell on the roof
+    body.rect(cx - 6, c.fy1 - 15, 12, 15, hex('#b91c1c'));
+    body.vline(cx, c.fy1 - 15, 15, hex('#7f1d1d'));
+    body.hline(cx - 6, c.fy1 - 15, 12, hex('#ef4444'));
+    roof.rect(Math.round(c.W / 2) - 2, 1, 5, 5, hex('#d9b24a'));
+    roof.vline(Math.round(c.W / 2), 6, 3, hex('#7f1d1d'));
+    return;
+  }
+  if (o.kind === 'hut') {
+    // bundles of herbs hanging under the eaves and a pot at the door
+    for (let i = 0; i < 4; i++) {
+      const hx = bx0 + 3 + i * 4;
+      body.vline(hx, wallTop + 3, 2, P.woodLo);
+      body.rect(hx - 1, wallTop + 5, 3, 4, i % 2 ? hex('#4f8a3a') : hex('#8a9a3a'));
+      body.set(hx, wallTop + 9, hex('#3b5d2a'));
+    }
+    body.rect(bx1 - 3, c.fy1 - 4, 4, 4, hex('#a05a2c'));
+    body.hline(bx1 - 3, c.fy1 - 4, 4, hex('#c97a45'));
+    body.set(bx1 - 2, c.fy1 - 5, hex('#4f8a3a'));
+    return;
+  }
+  const signY = wallTop + (o.kind === 'hospital' ? 5 : 4);
+  const sx = Math.round(c.W / 2) + (o.kind === 'hospital' ? 8 : 6);
+  if (o.kind === 'hospital') {
+    // white sign with a red cross
+    body.rect(sx - 5, signY, 11, 11, hex('#f8fafc'));
+    body.hline(sx - 5, signY, 11, hex('#cbd5e1'));
+    body.rect(sx - 1, signY + 2, 3, 7, hex('#d62828'));
+    body.rect(sx - 3, signY + 4, 7, 3, hex('#d62828'));
+  } else {
+    // a gold cross on the roof ridge and a green healing cross over the door
+    roof.vline(Math.round(c.W / 2), 0, 8, hex('#d9b24a'));
+    roof.hline(Math.round(c.W / 2) - 2, 2, 5, hex('#d9b24a'));
+    body.rect(cx - 1, signY, 3, 8, hex('#3f9a5a'));
+    body.rect(cx - 3, signY + 2, 7, 3, hex('#3f9a5a'));
+  }
+}
+
 function graveyard(c) {
   const { body, P } = c;
   const x0 = c.x0;
@@ -1245,6 +1337,11 @@ export const ART = {
   library: { fn: gable, o: { wall: 'brick', wallH: 26, roof: 'slate', windows: 5, trim: true, banner: true, doorW: 8, doorH: 15 } },
   barracks: { fn: gable, o: { wall: 'brick', wallH: 22, roof: 'slate', windows: 3, trim: true, banner: true, doorW: 8, doorH: 14, props: ['crate'] } },
   graveyard: { fn: graveyard, flat: true },
+  barrow: { fn: barrow },
+  healers_hut: { fn: medical, o: { kind: 'hut' } },
+  infirmary: { fn: medical, o: { kind: 'infirmary' } },
+  hospital: { fn: medical, o: { kind: 'hospital' } },
+  fire_station: { fn: medical, o: { kind: 'fire' } },
   dock: { fn: dock, flat: true },
   windmill: { fn: windmill },
   watchtower: { fn: watch, o: { top: 6, legH: 36, flag: true } },

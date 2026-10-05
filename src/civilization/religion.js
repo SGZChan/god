@@ -353,7 +353,7 @@ export function holyPlaceOf(terrain, buildings) {
   let best = null;
   for (const b of buildings) {
     const def = BUILDING_TYPES[b.type];
-    if (!def || def.category !== 'religious' || b.type === 'graveyard' || b.progress < 1) continue;
+    if (!def || def.category !== 'religious' || b.type === 'graveyard' || b.type === 'barrow' || b.progress < 1) continue;
     if (!best || def.tier > BUILDING_TYPES[best.type].tier) best = b;
   }
   return best;

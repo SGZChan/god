@@ -156,7 +156,7 @@ function placeAt(terrain, civ, st, type, x, y, instant) {
 // camps are rings of shelters round the fire and chief's hall; Bronze Age city-states pack a dense core round the
 // temple and are walled; Classical towns are grids of blocks round a forum with its market and temple; Medieval
 // towns cluster round the castle and its market square inside a wall; Industrial towns are regular blocks).
-const CIVIC = new Set(['hall', 'keep', 'market', 'market_stall', 'temple', 'shrine', 'cathedral', 'library', 'tavern', 'well', 'barracks']);
+const CIVIC = new Set(['fire_station', 'healers_hut', 'infirmary', 'hospital', 'hall', 'keep', 'market', 'market_stall', 'temple', 'shrine', 'cathedral', 'library', 'tavern', 'well', 'barracks']);
 export function layoutOf(tier) {
   return tier === 0 ? 'camp' : tier === 1 ? 'citadel' : tier === 3 ? 'castle' : 'grid';
 }
@@ -446,6 +446,16 @@ export function wishes(civ, terrain, st, n, tier, cn) {
   if (tier >= 1 && tier <= 3 && pop >= WALL_MIN_POP && (st.capital || pop >= 36)) {
     if (!st.wall) planWall(civ, terrain, st, tier);
     if (st.wall.pieces.length && affordable(civ, terrain, st, st.wall.pieces[0].type)) list.push({ type: st.wall.kind === 'stone' ? 'stone_wall' : 'palisade', weight: 2.2, kind: 'wall' });
+  }
+  // the dead: a burial ground (a barrow in the Stone Age, a graveyard after) and a place of healing, outside and inside the town
+  {
+    const burial = have('barrow') + have('graveyard');
+    if (burial < 1 + Math.floor(pop / 30) && pop >= 5) want(tier === 0 ? 'barrow' : 'graveyard', 2.2, 'edge');
+    if (tier >= 2 && have('fire_station') < 1 + Math.floor(pop / 40) && pop >= 14) want('fire_station', 1.4, 'plot');
+    const healing = have('healers_hut') + have('infirmary') + have('hospital');
+    if (tier >= 4 && have('hospital') < 1 + Math.floor(pop / 40) && pop >= 18) want('hospital', 2, 'plot');
+    else if (tier >= 2 && tier < 4 && have('infirmary') < 1 + Math.floor(pop / 30) && pop >= 12) want('infirmary', 1.8, 'plot');
+    else if (healing < 1 && pop >= 6) want('healers_hut', 1.6, 'plot');
   }
   if (st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
   return list;

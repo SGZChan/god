@@ -5,7 +5,7 @@ import { initTown, tickTown, foundHamlet, queueRoad, roadKindFor, eraTier, retir
 import { settlementsOf, getSettlement, nearestSettlement, createSettlement, findHamletSite, builtSomewhere, buildingsOf, foodCapOf } from './settlements.js';
 import { sapientOptions, tickSettlement, seasonOf } from './jobs.js';
 import { syncFood, prosperityOf, FOOD_CAP as ECON_FOOD_CAP, take, add } from './economy.js';
-import { refreshClans, ensureClan, createClan, pickSplinter, CLAN_SPLIT_SIZE, getClan } from './clans.js';
+import { refreshClans, ensureClan, createClan, pickSplinter, CLAN_SPLIT_SIZE, CROWDED_SPLIT_SIZE, getClan } from './clans.js';
 import { bondFounders, assignHomes, adoptOrphans, feedChildren, clearDeadMates, householdConceptions } from './families.js';
 import { revealAround, syncDiscoveries, isExplored, isDiscovered } from './exploration.js';
 import { BUILDING_TYPES } from '../world/buildings.js';
@@ -14,6 +14,8 @@ import { tickSpaceflight } from './spaceflight.js';
 import { tickExpansion, covetedDeposit } from './expansion.js';
 import { tickLogistics } from './logistics.js';
 import { tickEconomy } from './markets.js';
+import { tickDeathcare } from './deathcare.js';
+import { tickUpkeep } from './upkeep.js';
 import { tickStatecraft, warMotive, noteWarEnd } from './statecraft.js';
 
 export const INITIAL_CITIZENS = 6;
@@ -25,7 +27,7 @@ export const FAMINE_DEATH_INTERVAL = 3; // simulated seconds between abstract fa
 export const MIN_WAR_DURATION = 20;     // simulated seconds before a war can end by surrender
 export const MAX_WAR_DURATION = 180;    // simulated seconds before war weariness ends it
 export const TRUCE_DURATION = 120;      // simulated seconds of peace enforced after a war
-export const MAX_SETTLEMENTS = 14;      // per civilization
+export const MAX_SETTLEMENTS = 20;      // per civilization
 export const ROAD_TRAFFIC = 26;         // footsteps on a tile before it is worn into a dirt road
 
 export const GOVERNMENTS = [
@@ -614,6 +616,12 @@ export class SocietyManager {
     // money, taxes, prices and trade between peoples (markets.js)
     tickEconomy(this, civ, dt);
 
+    // funerals, burial, the sickness of unburied dead (deathcare.js)
+    tickDeathcare(this, civ, dt);
+
+    // wear and tear; builders mend and clear (upkeep.js)
+    tickUpkeep(this, civ, dt);
+
     // rulers, legitimacy, war weariness, revolts (statecraft.js)
     tickStatecraft(this, civ, dt);
   }
@@ -622,12 +630,15 @@ export class SocietyManager {
   splitClans(civ) {
     if (civ.settlements.length >= MAX_SETTLEMENTS || !civ.isAlive) return false;
     // do not fragment a small people into ever smaller hamlets: about ten citizens per settlement are needed
-    if (civ.citizens < 16 * civ.settlements.length) return false;
+    if (civ.citizens < 11 * civ.settlements.length) return false;
     for (const clan of civ.clans) {
-      if (clan.memberIds.length < CLAN_SPLIT_SIZE || (clan.splitCd || 0) > civ.clock) continue;
-      const parent = getSettlement(civ, clan.settlementId) || nearestSettlement(civ, this.terrain.home.x, this.terrain.home.y);
+      const home = getSettlement(civ, clan.settlementId);
+      const crowded = home && (home.population || 0) >= 18; // an overcrowded town sends people out sooner
+      const need = crowded ? CROWDED_SPLIT_SIZE : CLAN_SPLIT_SIZE;
+      if (clan.memberIds.length < need || (clan.splitCd || 0) > civ.clock) continue;
+      const parent = home || nearestSettlement(civ, this.terrain.home.x, this.terrain.home.y);
       if (!parent || !parent.town.ready) { clan.splitCd = civ.clock + 30; continue; }
-      const group = pickSplinter(clan, this.ecosystem.entities);
+      const group = pickSplinter(clan, this.ecosystem.entities, need);
       if (!group.length) { clan.splitCd = civ.clock + 30; continue; }
       const s = group[0].stats;
       const comfortable = t => t >= s.idealTemp - s.coldTolerance + 0.02 && t <= s.idealTemp + s.heatTolerance - 0.02;

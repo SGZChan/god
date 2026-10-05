@@ -14,7 +14,7 @@ import { getClan, createClan, pickSplinter } from './clans.js';
 export const EXPANSION_TICK = 5;      // simulated seconds between expansion decisions of one civilization
 export const OUTPOST_REACH = 22;      // a deposit farther than this from every settlement is worth an outpost
 const OUTPOST_COOLDOWN = 60;
-const MAX_SETTLEMENTS = 14;
+const MAX_SETTLEMENTS = 20;
 
 // Ores of the next two ages, and stone and clay once the Stone Age is over
 export function wantedResources(civ) {

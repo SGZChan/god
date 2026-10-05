@@ -68,6 +68,11 @@ const LIST = [
   T('tavern', 'Tavern', 'civic', 3, 3, 2, { wood: 18, stone: 8 }, 80, 4, { health: 140, ext: 22, icon: '🍺' }),
   T('library', 'Library & School', 'civic', 4, 3, 3, { stone: 26, wood: 10 }, 150, 6, { health: 220, ext: 30, icon: '📚', door: { x: 1, y: 2 } }),
   T('barracks', 'Barracks', 'defense', 4, 3, 3, { stone: 24, wood: 12, iron: 4 }, 140, 12, { health: 280, ext: 24, icon: '⚔️', door: { x: 1, y: 2 } }),
+  T('fire_station', 'Fire Brigade House', 'civic', 3, 3, 2, { stone: 16, wood: 8 }, 90, 4, { health: 180, ext: 28, icon: '🚒', door: { x: 1, y: 2 } }),
+  T('barrow', 'Burial Mound', 'religious', 3, 2, 0, { stone: 6, wood: 2 }, 40, 0, { health: 120, ext: 16, icon: '⚰️', door: { x: 1, y: 1 } }),
+  T('healers_hut', "Healer's Hut", 'civic', 2, 2, 0, { wood: 6, fibre: 4 }, 30, 3, { health: 60, ext: 20, icon: '🌿', door: { x: 0, y: 1 } }),
+  T('infirmary', 'Infirmary', 'civic', 4, 3, 2, { stone: 20, wood: 8 }, 120, 6, { health: 200, ext: 28, icon: '🏥', door: { x: 1, y: 2 } }),
+  T('hospital', 'Hospital', 'civic', 5, 3, 4, { stone: 24, clay: 8, iron: 6 }, 220, 16, { health: 320, ext: 36, icon: '🏥', door: { x: 2, y: 2 } }),
   T('graveyard', 'Graveyard', 'religious', 3, 3, 1, { stone: 6, wood: 4 }, 30, 0, { solid: false, door: null, health: 80, ext: 14, icon: '🪦' }),
 
   // ---------- waterfront and power ----------

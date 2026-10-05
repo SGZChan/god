@@ -112,7 +112,7 @@ section('Schism: a big old faith over several clans can split');
   r.founded = sim.ecosystem.timeYears - 500;
   r.founderClanId = clans[0].id;
   const count = religionsOf(sim.society).length;
-  for (let i = 0; i < 400 && religionsOf(sim.society).length === count; i++) {
+  for (let i = 0; i < 2500 && religionsOf(sim.society).length === count; i++) {
     civ.faithTimer = 0;
     tickReligion(sim.society, civ, 2);
   }

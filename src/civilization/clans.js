@@ -10,7 +10,8 @@
 import { random } from '../simulation/random.js';
 import { makeName } from '../life/names.js';
 
-export const CLAN_SPLIT_SIZE = 14;
+export const CLAN_SPLIT_SIZE = 11;
+export const CROWDED_SPLIT_SIZE = 7;   // a clan in a crowded town (18+ people) splits sooner
 export const CLAN_COLORS = ['#e11d48', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#6366f1', '#a855f7', '#ec4899', '#84cc16', '#f43f5e', '#0ea5e9'];
 
 function nextSeq(civ, key) {
@@ -107,9 +108,9 @@ export function refreshClans(civ, entities) {
 
 // Members of the clan who should leave to found a hamlet: whole households (couples with their dependent children)
 // until about half the clan is chosen. Returns the entities, or [] when the clan cannot split sensibly.
-export function pickSplinter(clan, entities) {
+export function pickSplinter(clan, entities, minSize = CLAN_SPLIT_SIZE) {
   const members = entities.filter(e => e.alive && e.clanId === clan.id);
-  if (members.length < CLAN_SPLIT_SIZE) return [];
+  if (members.length < minSize) return [];
   const byId = new Map(members.map(e => [e.id, e]));
   const chosen = new Set();
   const target = Math.floor(members.length / 2);

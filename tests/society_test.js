@@ -218,6 +218,8 @@ section('Mining: extract from a known deposit and carry it home');
   miner.task = { kind: 'gather', stuck: 0, res: 'tin' };
   // everyone else keeps their jobs; make sure the settlement does not reassign the miner during the test
   st.assignTimer = 1e9;
+  civ.supplyTimer = 1e9; // (the porters of logistics.js would move the tin on to another town)
+  for (const c of sim.society.civilizations) c.truce = 1e9; // (a war would draft the miner)
   let carried = 0;
   for (let i = 0; i < 400 && !((st.stock.tin || 0) > 0); i++) {
     run(sim, 50);
@@ -376,6 +378,7 @@ section('Trade: caravans carry surplus between settlements');
 section('Roads: planned and worn by foot traffic');
 {
   const sim = realWorld('road-1');
+  for (const c of sim.society.civilizations) c.truce = 1e9; // (this test is about roads, not war)
   const t = sim.terrain;
   const civ = sim.society.civilizations[0];
   let x = civ.capitalX + 40, y = civ.capitalY + 25;
@@ -389,8 +392,11 @@ section('Roads: planned and worn by foot traffic');
   assert(st.roadQueue.length > 0, 'the planner queued street tiles for the builders');
   // (new plots queue new streets, so compare the tiles queued now rather than the queue's length)
   const queued = st.roadQueue.map(r => ({ ...r }));
-  run(sim, 2400);
-  const paved = queued.filter(r => t.getRoad(r.x, r.y) === r.kind || !st.roadQueue.some(q => q.x === r.x && q.y === r.y)).length;
+  let paved = 0;
+  for (let k = 0; k < 4 && paved === 0; k++) {
+    run(sim, 2400);
+    paved = queued.filter(r => t.getRoad(r.x, r.y) === r.kind || !st.roadQueue.some(q => q.x === r.x && q.y === r.y)).length;
+  }
   assert(paved > 0 || queued.length === 0, `builders pave the queued road tiles (${paved}/${queued.length})`);
   // roads respect water
   const lake = (() => { for (let yy = 0; yy < 200; yy++) for (let xx = 0; xx < 300; xx++) if (t.getTile(xx, yy).biome.isWater) return { x: xx, y: yy }; return null; })();

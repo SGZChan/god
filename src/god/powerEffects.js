@@ -77,8 +77,11 @@ const reclassify = (fx, tile) => {
   tile.biome = classifyBiome(tile.elevation, tile.temperature, tile.moisture, fx.terrain.planetType);
 };
 
+// (a tile doused by firefighters cannot burn for a while: civilization/firefighting.js sets tile.wetT in game years)
+let NOW = 0;
 function flammability(tile) {
   if (!tile || tile.biome.isWater) return 0;
+  if (tile.wetT && tile.wetT > NOW) return 0;
   const id = tile.biome.id;
   if (id === 'GLACIAL_ICE' || id === 'VOLCANIC' || id === 'DESERT' || tile.moisture > 0.92) return 0;
   let f = (tile.flora / 100) * (1.15 - tile.moisture * 0.5);
@@ -845,6 +848,7 @@ export const HANDLERS = {
 
   wildfire: {
     tick(e, fx, dt) {
+      NOW = fx.ecosystem.timeYears;
       if (!every(e, 'acc', 0.5, dt)) return;
       const t = fx.terrain;
       const keys = new Set(e.cells.map(c => key(c[0], c[1])));
