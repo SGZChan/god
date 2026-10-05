@@ -1348,6 +1348,7 @@ class GameApp {
 
     // 4. Render Surface if active
     if (this.currentView === 'SURFACE' && this.activeSim) {
+      this.activeSim.renderer.timeSpeed = this.timeSpeed;
       this.activeSim.renderer.render(dt);
       this.minimap.update(dt);
     }

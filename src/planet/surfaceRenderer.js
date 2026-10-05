@@ -8,7 +8,7 @@ const JOB_TOOLS = Object.fromEntries(Object.entries(JOB_INFO).map(([k, v]) => [k
 import { getResourceIcon, getTreeSprite, getStumpSprite } from '../art/resourceIcons.js';
 import { getOverview, LodBlocks } from '../world/overview.js';
 import { BuildingRenderer } from '../art/buildingRenderer.js';
-import { timeOfDay, daylight } from '../simulation/dayCycle.js';
+import { timeOfDay, daylight, DAY_SECONDS } from '../simulation/dayCycle.js';
 
 export const MIN_ZOOM = 0.04; // zoomed all the way out you see a continent (a few thousand tiles across)
 export const MAX_ZOOM = 6.0;
@@ -301,6 +301,13 @@ export class SurfaceRenderer {
   }
 
   // Draws `char` centred on (x, y), like fillText with middle/center alignment.
+  // 1 when a day lasts long enough on screen to watch (about 10 s or more), 0 when it would flicker (1 s or less)
+  dayFade() {
+    const speed = this.timeSpeed || 1;
+    const seconds = DAY_SECONDS / Math.max(1, speed);
+    return Math.max(0, Math.min(1, (seconds - 1) / 9));
+  }
+
   drawGlyph(ctx, char, fontPx, x, y) {
     const glyph = this.getGlyph(char, fontPx);
     ctx.drawImage(glyph.canvas, x - glyph.size / 2, y - glyph.size / 2, glyph.size, glyph.size);
@@ -679,7 +686,16 @@ export class SurfaceRenderer {
       // Entity body: a pixel-art sprite built from the creature's genes, walking and facing where it goes
       const spriteH = ts * 1.5 * ent.visualScale;
       const spriteW = spriteH * (SPRITE_W / SPRITE_H);
-      const walking = ent.path.length > 0;
+      // asleep: people indoors are out of sight (a drifting z over their house), people sleeping rough lie down
+      const asleep = ent.isSapient && ent.state === 'SLEEP' && this.dayFade() > 0.5;
+      if (asleep) {
+        const home = ent.homeId ? this.terrain.getBuilding(ent.homeId) : null;
+        if (home && Math.hypot(ent.x - (home.x + home.w / 2), ent.y - (home.y + home.h)) < 5) {
+          this.drawGlyph(ctx, '💤', Math.floor(ts * 0.7), (home.x + home.w / 2) * ts, (home.y + 0.4) * ts + Math.sin(this.waterAnimTime * 2 + ent.homeX) * ts * 0.12);
+          continue;
+        }
+      }
+      const walking = !asleep && ent.path.length > 0;
       const frame = walking ? (Math.floor(this.waterAnimTime * 6 + ent.homeX) & 1) : 0;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
       ctx.beginPath();
@@ -687,6 +703,7 @@ export class SurfaceRenderer {
       ctx.fill();
       ctx.save();
       ctx.imageSmoothingEnabled = false;
+      if (asleep) { ctx.translate(px, py); ctx.rotate(Math.PI / 2 * (ent.facing < 0 ? -1 : 1)); ctx.translate(-px, -py + spriteH * 0.25); }
       if (ent.facing < 0) {
         ctx.translate(px, 0);
         ctx.scale(-1, 1);
@@ -705,6 +722,8 @@ export class SurfaceRenderer {
       }
       ctx.drawImage(getCreatureCanvas(ent.traits, frame, extras), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
       ctx.restore();
+
+      if (asleep) this.drawGlyph(ctx, '💤', Math.floor(ts * 0.6), px, py - spriteH * 0.7 + Math.sin(this.waterAnimTime * 2 + ent.homeX) * ts * 0.1);
 
       // goods on the carrier's back: a small bundle in the colour of what it carries (wood, stone, grain...)
       if (ent.isSapient && ent.inventory) {
@@ -762,7 +781,9 @@ export class SurfaceRenderer {
     ctx.globalAlpha = 1.0;
 
     // 5. Night: the world darkens; windows, hearths and torches glow (simulation/dayCycle.js)
-    const light = daylight(timeOfDay(this.ecosystem.timeYears));
+    // (one day is DAY_SECONDS of simulated time: at high speeds it would flash by, so the cycle fades to steady daylight)
+    const fade = this.dayFade();
+    const light = 1 - (1 - daylight(timeOfDay(this.ecosystem.timeYears))) * fade;
     if (light < 0.98) {
       const dark = (1 - light) * 0.48;
       const x0 = -this.camera.x / this.camera.zoom;
