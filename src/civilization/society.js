@@ -13,6 +13,7 @@ import { tickReligion } from './religion.js';
 import { tickSpaceflight } from './spaceflight.js';
 import { tickExpansion, covetedDeposit } from './expansion.js';
 import { tickLogistics } from './logistics.js';
+import { tickEconomy } from './markets.js';
 import { tickStatecraft, warMotive, noteWarEnd } from './statecraft.js';
 
 export const INITIAL_CITIZENS = 6;
@@ -609,6 +610,9 @@ export class SocietyManager {
 
     // supplies between the towns; ghost towns are abandoned (logistics.js)
     tickLogistics(this, civ, dt);
+
+    // money, taxes, prices and trade between peoples (markets.js)
+    tickEconomy(this, civ, dt);
 
     // rulers, legitimacy, war weariness, revolts (statecraft.js)
     tickStatecraft(this, civ, dt);

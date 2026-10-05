@@ -184,3 +184,9 @@ chooses sites).
 - State dynamics (`civilization/statecraft.js`): rulers by government custom, succession crises, legitimacy, unrest, war motives (resources, vengeance, faith, ambition, rally-round-the-flag), war weariness, revolts that found new civilizations, coups, ranks (Tribe to Empire).
 - Dev tools: `scripts/townmap.mjs` (ASCII town map), `scripts/poptrace.mjs` (population and events over time).
 - Known gaps: wall rings complete slowly when wood is scarce; palisades are not upgraded to stone; era progress still depends on tin discovery and smithy supply.
+
+## Progress: economy (`civilization/markets.js`)
+- Money follows the ages (barter, bronze ingots, silver drachmae, gold florins, banknotes, credits); Stone Age peoples pay tribute in goods.
+- Prices come from scarcity and money supply; GDP is the value of what is produced; the state taxes it (rate by government, markets widen the base; heavy taxes cost legitimacy).
+- The state pays its army (unpaid soldiers cost legitimacy) and buys missing site materials from foreign merchants at a premium.
+- Peoples at peace trade surplus goods for coin; trading partners are less likely to go to war; routes are shown in the overview. `scripts/econtrace.mjs` prints the books.

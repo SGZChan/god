@@ -9,6 +9,7 @@ import { JOB_INFO, seasonOf, SEASON_NAMES } from '../civilization/jobs.js';
 import { exploredFraction } from '../civilization/exploration.js';
 import { housingCapacityOfCiv } from '../civilization/settlements.js';
 import { titleOf, rankOf } from '../civilization/statecraft.js';
+import { currencyOf } from '../civilization/markets.js';
 import { religionsOf, getReligion, deityLabel, DOMAINS } from '../civilization/religion.js';
 
 export function civStatus(civ) {
@@ -81,6 +82,7 @@ export function summarizeWorld(sim) {
       progress: eraProgress(civ),
       faith: getReligion(sim.society, civ.faithId) ? getReligion(sim.society, civ.faithId).name : null,
       rank: rankOf(civ),
+      economy: { currency: currencyOf(civ), treasury: Math.round(civ.treasury || 0), gdp: Math.round(civ.gdp || 0), tax: Math.round((civ.taxRate || 0) * 100), routes: Object.keys(civ.tradeRoutes || {}).length, prices: Math.round((civ.priceLevel || 1) * 100) },
       ruler: (() => { const r = civ.rulerId ? sim.ecosystem.byId.get(civ.rulerId) : null; return r && r.alive ? `${titleOf(civ)} ${r.name}` : null; })(),
       legitimacy: Math.round(civ.legitimacy === undefined ? 70 : civ.legitimacy),
       unrest: Math.round((civ.unrest || 0) * 100),
@@ -170,6 +172,8 @@ export class OverviewPanel {
       if (civ.status.kind === 'war') card.appendChild(el('div', 'civ-meta', civ.status.label));
 
       card.appendChild(el('div', 'civ-meta', `${civ.rank} • ${civ.government} • ${civ.era}${civ.faith ? ` • ${civ.faith}` : ''}`));
+      const ec = civ.economy;
+      card.appendChild(el('div', 'civ-meta', ec.currency.money ? `💰 ${ec.treasury} ${ec.currency.unit}s • GDP ${ec.gdp} • Tax ${ec.tax}% • Prices ${ec.prices}% • ${ec.routes} trade partner${ec.routes === 1 ? '' : 's'}` : `🪙 ${ec.currency.name}: tribute in goods • GDP ${ec.gdp}`));
       card.appendChild(el('div', 'civ-meta', `${civ.ruler ? `👑 ${civ.ruler} • ` : ''}Legitimacy ${civ.legitimacy}% • Unrest ${civ.unrest}%${civ.weariness > 15 ? ` • War-weary ${civ.weariness}%` : ''}`));
       if (civ.colonyOf || civ.ships) card.appendChild(el('div', 'civ-meta', [civ.colonyOf ? `Colony of ${civ.colonyOf}` : '', civ.ships ? `🚀 ${civ.ships} ship${civ.ships === 1 ? '' : 's'} launched` : ''].filter(Boolean).join(' • ')));
 

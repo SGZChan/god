@@ -131,6 +131,8 @@ export function warMotive(civ, other, terrain) {
   if (civ.legitimacy < 38 && ratio >= 1) motives.push({ reason: `A rally against ${other.name} to unite a restless people`, score: 0.1 });
   if (!motives.length) return null;
   motives.sort((a, b) => b.score - a.score);
+  // trading partners have much to lose from a war
+  if (civ.tradeRoutes && civ.tradeRoutes[other.id]) motives[0].score *= 0.4;
   return motives[0];
 }
 
@@ -258,7 +260,7 @@ export function tickStatecraft(society, civ, dt) {
   const famine = civ.prosperity < 0.85 ? (0.85 - civ.prosperity) * 40 : 0;
   const overreach = Math.max(0, towns.length - (2 + (civ.citizens || 0) / 16));
   const sharedFaith = civ.faithId ? 6 : 0;
-  const target = 58 + (civ.prosperity - 1) * 20 - famine - (civ.unrest || 0) * 20 - civ.weariness * 0.25 - overreach * 5 + sharedFaith + (civ.era && civ.era.id !== 'STONE_AGE' ? 4 : 0);
+  const target = 58 + (civ.prosperity - 1) * 20 - famine - (civ.unrest || 0) * 20 - civ.weariness * 0.25 - overreach * 5 - (civ.taxRate || 0) * 40 + Math.min(6, Object.keys(civ.tradeRoutes || {}).length * 2) + sharedFaith + (civ.era && civ.era.id !== 'STONE_AGE' ? 4 : 0);
   civ.legitimacy = clamp(civ.legitimacy + (clamp(target, 0, 100) - civ.legitimacy) * 0.06, 0, 100);
   // unrest follows legitimacy and hunger; the guards' work (entity.js) pushes it back down
   const wantUnrest = clamp((1 - civ.legitimacy / 100) * 0.8 + famine / 80, 0, 1);
