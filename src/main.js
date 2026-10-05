@@ -17,6 +17,7 @@ import { FixedStepper, runSimulationSteps, SIM_STEP } from './simulation/fixedSt
 import { random, setActiveRng, withRng } from './simulation/random.js';
 import { createPlanetWorld } from './simulation/world.js';
 import { SaveError, serializeGame, restoreSim, parseSave } from './persistence/saveGame.js';
+import { SaveStore } from './persistence/saveStore.js';
 import { foundColony } from './civilization/spaceflight.js';
 import { timeOfDay, partOfDay, isNight } from './simulation/dayCycle.js';
 
@@ -105,6 +106,7 @@ class GameApp {
     this.initUI();
     this.initWorkshop();
     this.initGuide();
+    this.store = new SaveStore({ legacyKey: SAVE_KEY });
     this.initPersistence();
     this.initMenu();
     this.initOverview();
@@ -690,8 +692,12 @@ class GameApp {
     loadItem.addEventListener('click', () => {
       sounds.playUIClick();
       if (window.confirm('Load the last saved universe? Progress since that save will be lost.')) {
-        this.loadFromText(localStorage.getItem(SAVE_KEY));
+        this.store.load().then(text => this.loadFromText(text));
       }
+    });
+    document.getElementById('menu-location').addEventListener('click', () => {
+      sounds.playUIClick();
+      this.openSaveLocation();
     });
     document.getElementById('menu-export').addEventListener('click', () => {
       sounds.playUIClick();
@@ -709,14 +715,6 @@ class GameApp {
   }
 
   // ---------- Save / load ----------
-
-  hasSave() {
-    try {
-      return Boolean(localStorage.getItem(SAVE_KEY));
-    } catch {
-      return false;
-    }
-  }
 
   buildSaveText() {
     // ships launched since the last frame are put in flight first, so their crews are saved somewhere
@@ -745,20 +743,60 @@ class GameApp {
     return JSON.stringify(save);
   }
 
-  saveGame({ announce = false } = {}) {
+  // Saves to the chosen place (see persistence/saveStore.js). Resolves to true when the save was written.
+  async saveGame({ announce = false } = {}) {
+    if (this.saving) return false;
+    this.saving = true;
     try {
-      localStorage.setItem(SAVE_KEY, this.buildSaveText());
-      if (announce) this.notifications.push('💾 Universe saved.', 'info', true);
+      const { where, note } = await this.store.save(this.buildSaveText());
+      if (announce) {
+        const label = where === 'file' ? 'to the file on this device' : where === 'cloud' ? 'to the cloud' : 'in this browser';
+        this.notifications.push(`💾 Universe saved ${label}.`, 'info', true);
+      }
+      if (note && !this.warnedSave) { this.warnedSave = true; this.notifications.push(`⚠️ ${note}`, 'info', true); }
+      if (!note) this.warnedSave = false;
       return true;
     } catch (err) {
       const full = err && err.name === 'QuotaExceededError';
       this.notifications.push(
-        full ? '⚠️ Browser storage is full. Use Export to keep this universe.' : `⚠️ Could not save: ${err.message}`,
+        full ? '⚠️ Storage is full. Use Menu > Save location to save to a file on this device.' : `⚠️ Could not save: ${err.message}`,
         'info',
         true
       );
       return false;
+    } finally {
+      this.saving = false;
     }
+  }
+
+  // Menu > Save location: browser database, a file on this device, or the cloud (Firebase)
+  openSaveLocation() {
+    const modal = document.getElementById('location-modal');
+    const status = document.getElementById('location-status');
+    const refresh = async () => {
+      status.textContent = `Autosaving to: ${this.store.describe()}`;
+      document.getElementById('loc-file').disabled = !this.store.supportsFile;
+      document.getElementById('loc-file-note').textContent = this.store.supportsFile ? '' : 'This browser cannot write files directly (use Chrome, Edge or Opera); Export / Import still work.';
+      document.getElementById('loc-cloud').hidden = !this.store.supportsCloud;
+      document.getElementById('loc-cloud-note').hidden = this.store.supportsCloud;
+      document.getElementById('loc-reconnect').hidden = !(this.store.mode === 'file' && this.store.fileHandle);
+      const user = this.store.cloud.user;
+      document.getElementById('loc-signin').textContent = user ? `Sign out (${user.email || user.displayName})` : 'Sign in with Google';
+    };
+    if (!this.locationWired) {
+      this.locationWired = true;
+      const act = async (fn) => { try { await fn(); } catch (err) { if (err && err.name !== 'AbortError') this.notifications.push(`⚠️ ${err.message}`, 'info', true); } await refresh(); };
+      document.getElementById('loc-browser').addEventListener('click', () => act(async () => { await this.store.setMode('browser'); await this.saveGame({ announce: true }); }));
+      document.getElementById('loc-file').addEventListener('click', () => act(async () => { await this.store.chooseFile(); await this.saveGame({ announce: true }); }));
+      document.getElementById('loc-reconnect').addEventListener('click', () => act(async () => { if (await this.store.reconnectFile()) await this.saveGame({ announce: true }); }));
+      document.getElementById('loc-cloud').addEventListener('click', () => act(async () => { await this.store.setMode('cloud'); }));
+      document.getElementById('loc-signin').addEventListener('click', () => act(async () => {
+        if (this.store.cloud.user) await this.store.cloud.signOut(); else { await this.store.cloud.signIn(); await this.store.setMode('cloud'); await this.saveGame({ announce: true }); }
+      }));
+      document.getElementById('btn-location-close').addEventListener('click', () => modal.classList.add('hidden'));
+    }
+    modal.classList.remove('hidden');
+    refresh();
   }
 
   exportSave() {
@@ -823,7 +861,7 @@ class GameApp {
 
   initPersistence() {
     window.game = this; // handy for debugging and automated checks
-
+    this.autosaveEnabled = false; // until the saved universe (if any) has been dealt with
     const modal = document.getElementById('continue-modal');
     const info = document.getElementById('continue-info');
     const finish = () => {
@@ -831,21 +869,24 @@ class GameApp {
       this.autosaveEnabled = true;
     };
 
-    // A saved universe waits for the player's choice, and autosave stays off until then
-    if (this.hasSave()) {
-      this.autosaveEnabled = false;
-      try {
-        const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
-        info.textContent = `Seed "${saved.seed}" • saved ${new Date(saved.savedAt).toLocaleString()}`;
-      } catch {
-        info.textContent = 'A saved universe was found.';
+    (async () => {
+      await this.store.init();
+      if (this.store.cloud.configured) await this.store.cloud.restore();
+      // A saved universe waits for the player's choice, and autosave stays off until then
+      const header = await this.store.peek();
+      if (header) {
+        info.textContent = `Seed "${header.seed}" • saved ${new Date(header.savedAt).toLocaleString()} • ${this.store.describe()}`;
+        modal.classList.remove('hidden');
+      } else {
+        finish();
       }
-      modal.classList.remove('hidden');
-    }
+    })().catch(() => finish());
 
-    document.getElementById('btn-continue-save').addEventListener('click', () => {
+    document.getElementById('btn-continue-save').addEventListener('click', async () => {
       sounds.playUIClick();
-      this.loadFromText(localStorage.getItem(SAVE_KEY));
+      // (a file on the device needs a click before the browser lets us read or write it again)
+      if (this.store.mode === 'file') await this.store.reconnectFile().catch(() => false);
+      this.loadFromText(await this.store.load());
       finish();
     });
     document.getElementById('btn-discard-save').addEventListener('click', () => {
@@ -860,7 +901,7 @@ class GameApp {
       if (document.hidden && this.autosaveEnabled) this.saveGame();
     });
     window.addEventListener('beforeunload', () => {
-      if (this.autosaveEnabled) this.saveGame();
+      if (this.autosaveEnabled) this.saveGame(); // (best effort: the browser may end the page first)
     });
   }
 
@@ -1402,3 +1443,8 @@ class GameApp {
 window.addEventListener('DOMContentLoaded', () => {
   new GameApp();
 });
+
+// Offline play after the first visit (production builds only; see public/sw.js)
+if ('serviceWorker' in navigator && import.meta.env && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}

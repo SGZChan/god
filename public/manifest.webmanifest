@@ -1,0 +1,10 @@
+{
+  "name": "Genesis & Cosmos",
+  "short_name": "Genesis",
+  "description": "A god simulation and life evolution game.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050b18",
+  "theme_color": "#050b18",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

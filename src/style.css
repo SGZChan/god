@@ -2693,3 +2693,4 @@ body:not([data-view="SURFACE"]) .skip-btn { opacity: 0.85; }
 @media (max-width: 640px) { .world-body { grid-template-columns: 1fr; padding: 14px; } .pyr-row { grid-template-columns: 120px 1fr 40px; } }
 .modal-close { background: transparent; border: 0; color: var(--text-secondary, #94a3b8); font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
 .modal-close:hover { color: #f8fafc; }
+button[hidden], p[hidden] { display: none !important; }
