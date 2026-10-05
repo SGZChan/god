@@ -6,7 +6,7 @@
 import { random } from '../simulation/random.js';
 
 // Number of art variants for each body-plan gene (the sprite kit must provide at least this many).
-export const PART_COUNTS = { body: 5, head: 6, legs: 5, ears: 5, tail: 5, horns: 5, wings: 4, pattern: 5 };
+export const PART_COUNTS = { body: 9, head: 12, legs: 7, ears: 7, tail: 7, horns: 7, wings: 6, pattern: 5 };
 export const BODY_GENES = Object.keys(PART_COUNTS);
 export const COLOR_GENES = ['hue', 'sat', 'light', 'hue2', 'eyeHue'];
 export const TRAIT_GENES = [
@@ -57,6 +57,8 @@ export class Genome {
 
   static drawAllele(gene, spec) {
     const isPart = gene in PART_COUNTS;
+    // { oneOf: [...] } picks one of a list (e.g. the body plans that suit animals, not people)
+    if (spec && spec.oneOf) return spec.oneOf[Math.floor(random() * spec.oneOf.length)];
     if (spec === undefined) return isPart ? Math.floor(random() * PART_COUNTS[gene]) : random();
     if (Array.isArray(spec)) {
       const [lo, hi] = spec;
@@ -95,9 +97,29 @@ export class Genome {
   }
 }
 
-function mutateAllele(gene, allele, rate, strength) {
+// Body-plan families. A mutation swaps a part for another of the same family, so a wolf does not grow a human face and
+// a person does not grow fins: people (sapient body plans), swimmers (fish) and the rest of the animals.
+export const PART_FAMILIES = {
+  people: { head: [6, 7, 8, 11], body: [2, 5], legs: [1], ears: [0, 1, 5, 6], tail: [0, 4, 6], horns: [0, 1, 2], wings: [0] },
+  swimmer: { head: [10, 3], body: [6], legs: [6, 0], ears: [0, 4], tail: [5], horns: [0, 3], wings: [0] },
+  animal: { head: [0, 1, 2, 3, 4, 5, 8, 9], body: [0, 1, 2, 3, 4, 7, 8], legs: [0, 1, 2, 3, 4, 5], ears: [0, 1, 2, 3, 4, 5], tail: [0, 1, 2, 3, 4, 6], horns: [0, 1, 2, 3, 4, 5, 6], wings: [0, 1, 2, 3, 4, 5] }
+};
+
+// The family of a whole creature, from its body and head
+export function bodyFamily(genome) {
+  const body = Math.min(genome.alleles.body[0], genome.alleles.body[1]);
+  const head = Math.min(genome.alleles.head[0], genome.alleles.head[1]);
+  if (body === 6) return PART_FAMILIES.swimmer;
+  if (body === 5 || head === 6 || head === 7 || head === 11) return PART_FAMILIES.people;
+  return PART_FAMILIES.animal;
+}
+
+function mutateAllele(gene, allele, rate, strength, family = PART_FAMILIES.animal) {
   if (gene in PART_COUNTS) {
-    return random() < PART_MUTATION_RATE ? Math.floor(random() * PART_COUNTS[gene]) : allele;
+    if (random() >= PART_MUTATION_RATE) return allele;
+    const options = family[gene] || null;
+    if (!options || !options.includes(allele)) return allele; // a part outside its family stays as it is
+    return options[Math.floor(random() * options.length)];
   }
   return random() < rate ? clamp01(allele + noise() * strength) : allele;
 }
@@ -105,12 +127,14 @@ function mutateAllele(gene, allele, rate, strength) {
 // A child's genome: one random allele from each parent per gene, then mutation.
 export function recombine(mother, father, { mutationRate = MUTATION_RATE, strength = MUTATION_STRENGTH } = {}) {
   const alleles = {};
+  const famM = bodyFamily(mother);
+  const famF = bodyFamily(father);
   for (const gene of ALL_GENES) {
     const fromMother = mother.alleles[gene][random() < 0.5 ? 0 : 1];
     const fromFather = father.alleles[gene][random() < 0.5 ? 0 : 1];
     alleles[gene] = [
-      mutateAllele(gene, fromMother, mutationRate, strength),
-      mutateAllele(gene, fromFather, mutationRate, strength)
+      mutateAllele(gene, fromMother, mutationRate, strength, famM),
+      mutateAllele(gene, fromFather, mutationRate, strength, famF)
     ];
   }
   return new Genome(alleles);

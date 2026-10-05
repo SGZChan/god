@@ -16,7 +16,9 @@ const CENSUS_INTERVAL = 3;     // simulated seconds between species censuses
 // tail, horns, wings, pattern) and colours are random combinations, traits are drawn from a range that
 // suits the kind of life.
 const SAPIENT_GENES = {
-  intelligence: [0.82, 0.95], legs: 1, wings: 0, body: [0, 2], size: [0.35, 0.55], speed: [0.35, 0.55],
+  intelligence: [0.82, 0.95], legs: 1, wings: 0,
+  // each planet's people look like people, beastfolk, elf-ears or dragonkin: a random mix of the people body plans
+  head: { oneOf: [6, 7, 8, 11] }, body: { oneOf: [2, 5] }, ears: { oneOf: [0, 1, 5, 6] }, tail: { oneOf: [0, 4, 6] }, horns: { oneOf: [0, 0, 1, 2] }, size: [0.35, 0.55], speed: [0.35, 0.55],
   herbivory: [0.5, 0.7], carnivory: [0.3, 0.5], aggression: [0.2, 0.45], sociality: [0.7, 0.95],
   lifespan: [0.7, 0.85], fertility: [0.4, 0.6], perception: [0.4, 0.6], prefTemp: [0.42, 0.58],
   coldTol: [0.45, 0.7], heatTol: [0.45, 0.7], metabolism: [0.4, 0.6]
@@ -36,6 +38,10 @@ const OMNIVORE_GENES = {
   lifespan: [0.1, 0.3], sociality: [0.4, 0.7], aggression: [0.2, 0.4], intelligence: [0.2, 0.4],
   perception: [0.5, 0.8], prefTemp: [0.4, 0.6], coldTol: [0.4, 0.8], heatTol: [0.4, 0.8], metabolism: [0.4, 0.8]
 };
+// Fish-like river folk: amphibious omnivores with the swimmer body plan
+const AMPHIBIAN_GENES = {
+  ...OMNIVORE_GENES, head: 10, body: 6, legs: { oneOf: [6, 0] }, ears: 0, tail: 5, wings: 0, horns: 0, size: [0.15, 0.4]
+};
 const FOUNDER_PLANS = [
   { genes: SAPIENT_GENES, sapient: true, count: 0 }, // the civilizations raise the sapient founders themselves
   // Each herbivore prefers a different climate band, so they do not all compete for the same ground
@@ -44,7 +50,8 @@ const FOUNDER_PLANS = [
   { genes: { ...HERBIVORE_GENES, prefTemp: [0.58, 0.7] }, count: 14 },
   { genes: PREDATOR_GENES, count: 14 },
   { genes: PREDATOR_GENES, count: 14 },
-  { genes: OMNIVORE_GENES, count: 10 }
+  { genes: OMNIVORE_GENES, count: 10 },
+  { genes: AMPHIBIAN_GENES, count: 10 }
 ];
 
 export class Ecosystem {

@@ -343,8 +343,12 @@ section('Clans split and found hamlets');
   assert(daughter && daughter.parentClanId === clan.id && daughter.settlementId === hamlet.id, 'the daughter clan remembers its parent clan');
   assert(own(sim, civ).some(b => b.settlementId === hamlet.id && b.progress < 1), 'the hamlet starts as construction sites');
   assert(hamlet.roadQueue.length + st.roadQueue.length > 5, 'a road between the settlements is planned');
-  run(sim, 1500);
-  assert(migrants.some(e => Math.hypot(e.x - hamlet.x, e.y - hamlet.y) < 12), 'the settlers walked to the new site');
+  let arrived = false;
+  for (let i = 0; i < 30 && !arrived; i++) {
+    run(sim, 50);
+    arrived = migrants.some(e => Math.hypot(e.x - hamlet.x, e.y - hamlet.y) < 12);
+  }
+  assert(arrived, 'the settlers walked to the new site');
 }
 
 section('Trade: caravans carry surplus between settlements');

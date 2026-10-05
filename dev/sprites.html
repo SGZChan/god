@@ -19,7 +19,7 @@
   <script type="module">
     import { SeededRNG } from '/src/cosmos/seed.js';
     import { setActiveRng } from '/src/simulation/random.js';
-    import { Genome, PART_COUNTS } from '/src/life/genome.js';
+    import { Genome, PART_COUNTS, recombine } from '/src/life/genome.js';
     import { getCreatureCanvas } from '/src/art/creatureSprite.js';
 
     const SCALE = 6;
@@ -44,6 +44,25 @@
       parent.appendChild(cell);
     }
 
+    // the founding body plans: people, fish folk, and hybrids of two kinds (a child takes each part from either parent)
+    const mk = parts => Genome.pure({ ...parts, hue: 0.08, sat: 0.6, light: 0.5, hue2: 0.3, eyeHue: 0.6 });
+    const kinds = {
+      human: mk({ body: 5, head: 6, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0 }),
+      elf: mk({ body: 5, head: 7, legs: 1, ears: 6, tail: 0, horns: 0, wings: 0, pattern: 1 }),
+      beastfolk: mk({ body: 2, head: 8, legs: 1, ears: 5, tail: 6, horns: 0, wings: 0, pattern: 2 }),
+      dragonkin: mk({ body: 5, head: 11, legs: 1, ears: 0, tail: 4, horns: 2, wings: 0, pattern: 3 }),
+      fishfolk: mk({ body: 6, head: 10, legs: 6, ears: 0, tail: 5, horns: 0, wings: 0, pattern: 0 }),
+      wolf: mk({ body: 0, head: 1, legs: 0, ears: 1, tail: 1, horns: 0, wings: 0, pattern: 0 })
+    };
+    const peopleRow = document.createElement('div');
+    peopleRow.className = 'row';
+    document.getElementById('random').before(peopleRow);
+    for (const g of Object.values(kinds)) show(peopleRow, g.phenotype());
+    const hybrids = document.createElement('div');
+    hybrids.className = 'row';
+    document.getElementById('random').before(hybrids);
+    const names = Object.keys(kinds);
+    for (let i = 0; i < 12; i++) show(hybrids, recombine(kinds[names[i % 6]], kinds[names[(i + 1 + (i >> 1)) % 6]]).phenotype());
     for (let i = 0; i < 24; i++) show(document.getElementById('random'), Genome.random().phenotype());
 
     const base = Genome.pure({ body: 0, head: 0, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0, hue: 0.08, sat: 0.7, light: 0.5, hue2: 0.3, eyeHue: 0.6 }).phenotype();

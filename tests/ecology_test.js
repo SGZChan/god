@@ -26,7 +26,7 @@ section('Founders: a planet starts with random species, both sexes, no free spaw
 {
   const w = defaultWorld();
   const kinds = w.ecosystem.speciesCatalog.map(s => s.type);
-  assert(w.ecosystem.speciesCatalog.length === 7, 'seven founder species');
+  assert(w.ecosystem.speciesCatalog.length === 8, 'eight founder species');
   assert(kinds.filter(k => k === 'humanoid').length === 1 && kinds.filter(k => k === 'predator').length === 2, 'one sapient, two predator species');
   assert(kinds.filter(k => k === 'herbivore').length === 3 && kinds.includes('omnivore'), 'three herbivore species and an omnivore');
   const looks = new Set(w.ecosystem.speciesCatalog.map(s => ['body', 'head', 'legs', 'ears', 'tail', 'horns', 'wings', 'pattern'].map(g => s.centroid[g]).join('')));

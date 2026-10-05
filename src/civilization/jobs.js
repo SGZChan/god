@@ -97,6 +97,11 @@ function failTask(ent, c, why) {
 }
 
 // Walks towards tile (x, y); true once within `reach` of its centre. Gives up (false + t.failed) when the path keeps failing.
+// settlers on their way to a new hamlet keep walking whatever job they are given on the road
+function migrating(e) {
+  return Boolean(e.task && e.task.kind === 'migrate');
+}
+
 function walkTo(ent, c, x, y, reach = 1.2) {
   const dx = ent.x - (x + 0.5);
   const dy = ent.y - (y + 0.5);
@@ -289,7 +294,7 @@ function assignJobs(c, st, members) {
       const e = cands[i];
       poolSet.delete(e);
       remaining--;
-      if (e.job !== job) { e.job = job; e.task = null; say(e, 'Starting a new job'); }
+      if (e.job !== job) { e.job = job; if (!migrating(e)) e.task = null; say(e, 'Starting a new job'); }
       given.set(e.id, job);
     }
   }
@@ -303,12 +308,12 @@ function assignJobs(c, st, members) {
   for (const e of poolSet) {
     let job = leftoverJobs[li++ % leftoverJobs.length];
     if (st.blocked && st.blocked[job] > (c.civ.clock || 0)) job = 'builder';
-    if (e.job !== job) { e.job = job; e.task = null; }
+    if (e.job !== job) { e.job = job; if (!migrating(e)) e.task = null; }
   }
   // the clan leader of the settlement carries the title in larger towns
   if (adults.length >= 12) {
     const leaderEnt = adults.find(e => c.civ.clans && c.civ.clans.some(cl => cl.leaderId === e.id && cl.settlementId === st.id)) || null;
-    if (leaderEnt && leaderEnt.job !== 'leader') { leaderEnt.job = 'leader'; leaderEnt.task = null; }
+    if (leaderEnt && leaderEnt.job !== 'leader') { leaderEnt.job = 'leader'; if (!migrating(leaderEnt)) leaderEnt.task = null; }
   }
   const jobs = {};
   for (const e of adults) if (e.job) jobs[e.job] = (jobs[e.job] || 0) + 1;
