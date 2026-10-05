@@ -18,7 +18,7 @@ const CENSUS_INTERVAL = 3;     // simulated seconds between species censuses
 const SAPIENT_GENES = {
   intelligence: [0.82, 0.95], legs: 1, wings: 0,
   // each planet's people look like people, beastfolk, elf-ears or dragonkin: a random mix of the people body plans
-  head: { oneOf: [6, 7, 8, 11] }, body: { oneOf: [2, 5] }, ears: { oneOf: [0, 1, 5, 6] }, tail: { oneOf: [0, 4, 6] }, horns: { oneOf: [0, 0, 1, 2] }, size: [0.35, 0.55], speed: [0.35, 0.55],
+  head: { oneOf: [6, 7, 8, 11, 12, 13, 19] }, body: { oneOf: [2, 5, 5, 9, 10] }, ears: { oneOf: [0, 1, 5, 6, 8] }, tail: { oneOf: [0, 4, 6] }, horns: { oneOf: [0, 0, 1, 2, 7] }, size: [0.35, 0.55], speed: [0.35, 0.55],
   herbivory: [0.5, 0.7], carnivory: [0.3, 0.5], aggression: [0.2, 0.45], sociality: [0.7, 0.95],
   lifespan: [0.7, 0.85], fertility: [0.4, 0.6], perception: [0.4, 0.6], prefTemp: [0.42, 0.58],
   coldTol: [0.45, 0.7], heatTol: [0.45, 0.7], metabolism: [0.4, 0.6]
@@ -42,6 +42,14 @@ const OMNIVORE_GENES = {
 const AMPHIBIAN_GENES = {
   ...OMNIVORE_GENES, head: 10, body: 6, legs: { oneOf: [6, 0] }, ears: 0, tail: 5, wings: 0, horns: 0, size: [0.15, 0.4]
 };
+// Wildlife with their own look. Deer and rabbits graze, bears eat anything; the 'alien' beasts carry a mutation from the start
+const DEER_GENES = { ...HERBIVORE_GENES, head: 14, body: { oneOf: [1, 4] }, legs: 7, ears: 5, tail: 1, horns: { oneOf: [5, 5, 0] }, wings: 0, size: [0.4, 0.7], speed: [0.65, 0.9], prefTemp: [0.35, 0.55] };
+const RABBIT_GENES = { ...HERBIVORE_GENES, head: 15, body: 0, legs: 2, ears: 7, tail: { oneOf: [1, 7] }, horns: 0, wings: 0, size: [0.08, 0.22], fertility: [0.8, 1], lifespan: [0.1, 0.25] };
+const BEAR_GENES = { ...OMNIVORE_GENES, head: 16, body: 2, legs: 2, ears: 2, tail: 1, horns: 0, wings: 0, size: [0.6, 0.9], aggression: [0.4, 0.7], fertility: [0.3, 0.5], lifespan: [0.4, 0.6] };
+const ALIEN_GENES = {
+  ...OMNIVORE_GENES, head: { oneOf: [17, 18] }, body: { oneOf: [11, 12] }, legs: { oneOf: [7, 8] }, ears: 0, tail: { oneOf: [0, 8] }, horns: { oneOf: [0, 4] },
+  wings: { oneOf: [0, 6] }, mutation: { oneOf: [1, 2, 3, 4, 5, 6, 7] }, size: [0.2, 0.5], intelligence: [0.3, 0.5]
+};
 const FOUNDER_PLANS = [
   { genes: SAPIENT_GENES, sapient: true, count: 0 }, // the civilizations raise the sapient founders themselves
   // Each herbivore prefers a different climate band, so they do not all compete for the same ground
@@ -51,7 +59,11 @@ const FOUNDER_PLANS = [
   { genes: PREDATOR_GENES, count: 14 },
   { genes: PREDATOR_GENES, count: 14 },
   { genes: OMNIVORE_GENES, count: 10 },
-  { genes: AMPHIBIAN_GENES, count: 10 }
+  { genes: AMPHIBIAN_GENES, count: 10 },
+  { genes: DEER_GENES, count: 14 },
+  { genes: RABBIT_GENES, count: 16 },
+  { genes: BEAR_GENES, count: 8 },
+  { genes: ALIEN_GENES, count: 8 }
 ];
 
 export class Ecosystem {

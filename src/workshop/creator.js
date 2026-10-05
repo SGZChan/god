@@ -51,7 +51,7 @@ const setPath = (obj, path, value) => {
 // A random body plan and colouring (UI randomness only: it must not consume the simulation's seeded stream)
 function randomLook() {
   const look = {};
-  for (const gene of BODY_GENES) look[gene] = Math.floor(Math.random() * PART_COUNTS[gene]);
+  for (const gene of BODY_GENES) look[gene] = gene === "mutation" ? (Math.random() < 0.8 ? 0 : 1 + Math.floor(Math.random() * (PART_COUNTS.mutation - 1))) : Math.floor(Math.random() * PART_COUNTS[gene]);
   for (const gene of COLOR_GENES) look[gene] = Math.random();
   return look;
 }

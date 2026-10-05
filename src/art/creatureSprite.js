@@ -1,7 +1,7 @@
 // Builds creature sprites from genes. composeSprite() is pure (it returns rows of palette letters) so it
 // can be tested without a browser; the helpers below turn a sprite into a canvas or data URL.
 import { PART_COUNTS } from '../life/genome.js';
-import { HEADS, BODIES, LEGS, EARS, HORNS, WINGS, TAILS } from './creatureParts.js';
+import { HEADS, BODIES, LEGS, EARS, HORNS, WINGS, TAILS, MUTATIONS } from './creatureParts.js';
 
 export const SPRITE_W = 20;
 export const SPRITE_H = 20;
@@ -83,6 +83,13 @@ export function composeSprite(traits, frame = 0) {
   blit(grid, TAILS[part('tail')], 16, 11 + bob, { underlay: true });
 
   applyPattern(grid, part('pattern'), Math.floor(traits.hue * 1000) + part('body') * 7);
+  // alien mutations are painted last, over everything
+  const mutation = part('mutation');
+  if (mutation > 0) {
+    for (const [x, y, ch] of MUTATIONS[mutation](bob, frame)) {
+      if (x >= 0 && x < SPRITE_W && y >= 0 && y < SPRITE_H && (mutation !== 7 || grid[y][x] !== '.')) grid[y][x] = ch;
+    }
+  }
   return grid.map(row => row.join(''));
 }
 
@@ -163,7 +170,9 @@ export function paletteFor(traits) {
     e: hslToHex(traits.eyeHue, 0.7, 0.18),
     w: '#f8fafc',
     h: '#e9dfc2',
-    k: '#1c1822'
+    k: '#1c1822',
+    g: hslToHex(traits.eyeHue + 0.5, 0.95, 0.62),
+    a: hslToHex(traits.hue2, 0.45, 0.3)
   };
 }
 

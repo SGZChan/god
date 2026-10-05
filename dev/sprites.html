@@ -52,8 +52,25 @@
       beastfolk: mk({ body: 2, head: 8, legs: 1, ears: 5, tail: 6, horns: 0, wings: 0, pattern: 2 }),
       dragonkin: mk({ body: 5, head: 11, legs: 1, ears: 0, tail: 4, horns: 2, wings: 0, pattern: 3 }),
       fishfolk: mk({ body: 6, head: 10, legs: 6, ears: 0, tail: 5, horns: 0, wings: 0, pattern: 0 }),
-      wolf: mk({ body: 0, head: 1, legs: 0, ears: 1, tail: 1, horns: 0, wings: 0, pattern: 0 })
+      wolf: mk({ body: 0, head: 1, legs: 0, ears: 1, tail: 1, horns: 0, wings: 0, pattern: 0 }),
+      dwarf: mk({ body: 9, head: 12, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0 }),
+      orc: mk({ body: 2, head: 13, legs: 1, ears: 8, tail: 0, horns: 0, wings: 0, pattern: 0 }),
+      goblin: mk({ body: 5, head: 19, legs: 1, ears: 8, tail: 0, horns: 0, wings: 0, pattern: 0 }),
+      mage: mk({ body: 10, head: 11, legs: 1, ears: 6, tail: 0, horns: 0, wings: 0, pattern: 0 }),
+      angel: mk({ body: 5, head: 6, legs: 1, ears: 0, tail: 0, horns: 0, wings: 7, pattern: 0 }),
+      deer: mk({ body: 1, head: 14, legs: 7, ears: 5, tail: 1, horns: 5, wings: 0, pattern: 2 }),
+      rabbit: mk({ body: 0, head: 15, legs: 2, ears: 7, tail: 1, horns: 0, wings: 0, pattern: 0 }),
+      bear: mk({ body: 2, head: 16, legs: 2, ears: 2, tail: 1, horns: 0, wings: 0, pattern: 0 }),
+      beetle: mk({ body: 8, head: 17, legs: 8, ears: 0, tail: 0, horns: 4, wings: 6, pattern: 0 }),
+      grey: mk({ body: 12, head: 18, legs: 7, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 1 }),
+      scorpion: mk({ body: 11, head: 17, legs: 8, ears: 0, tail: 8, horns: 0, wings: 0, pattern: 0 }),
+      ramfolk: mk({ body: 2, head: 7, legs: 4, ears: 5, tail: 7, horns: 7, wings: 0, pattern: 0 })
     };
+    const alien = n => Genome.pure({ body: 4, head: 0, legs: 2, ears: 0, tail: 1, horns: 0, wings: 0, pattern: 0, mutation: n, hue: 0.4, sat: 0.6, light: 0.5, hue2: 0.7, eyeHue: 0.9 });
+    const mutantsRow = document.createElement('div');
+    mutantsRow.className = 'row';
+    document.getElementById('random').before(mutantsRow);
+    for (let n = 1; n < 8; n++) show(mutantsRow, alien(n).phenotype());
     const peopleRow = document.createElement('div');
     peopleRow.className = 'row';
     document.getElementById('random').before(peopleRow);
@@ -62,7 +79,7 @@
     hybrids.className = 'row';
     document.getElementById('random').before(hybrids);
     const names = Object.keys(kinds);
-    for (let i = 0; i < 12; i++) show(hybrids, recombine(kinds[names[i % 6]], kinds[names[(i + 1 + (i >> 1)) % 6]]).phenotype());
+    for (let i = 0; i < 14; i++) show(hybrids, recombine(kinds[names[i % names.length]], kinds[names[(i + 1 + (i >> 1)) % names.length]]).phenotype());
     for (let i = 0; i < 24; i++) show(document.getElementById('random'), Genome.random().phenotype());
 
     const base = Genome.pure({ body: 0, head: 0, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0, hue: 0.08, sat: 0.7, light: 0.5, hue2: 0.3, eyeHue: 0.6 }).phenotype();

@@ -6,7 +6,7 @@
 import { random } from '../simulation/random.js';
 
 // Number of art variants for each body-plan gene (the sprite kit must provide at least this many).
-export const PART_COUNTS = { body: 9, head: 12, legs: 7, ears: 7, tail: 7, horns: 7, wings: 6, pattern: 5 };
+export const PART_COUNTS = { body: 13, head: 20, legs: 9, ears: 9, tail: 9, horns: 8, wings: 8, pattern: 5, mutation: 8 };
 export const BODY_GENES = Object.keys(PART_COUNTS);
 export const COLOR_GENES = ['hue', 'sat', 'light', 'hue2', 'eyeHue'];
 export const TRAIT_GENES = [
@@ -17,6 +17,7 @@ export const ALL_GENES = [...BODY_GENES, ...COLOR_GENES, ...TRAIT_GENES];
 
 export const MUTATION_RATE = 0.08;     // chance that an inherited allele mutates
 export const MUTATION_STRENGTH = 0.12; // typical size of a numeric mutation
+export const ALIEN_MUTATION_RATE = 0.004; // chance per inherited allele of an alien mutation
 export const PART_MUTATION_RATE = 0.015; // chance a body-plan allele switches to another variant
 
 const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -59,6 +60,7 @@ export class Genome {
     const isPart = gene in PART_COUNTS;
     // { oneOf: [...] } picks one of a list (e.g. the body plans that suit animals, not people)
     if (spec && spec.oneOf) return spec.oneOf[Math.floor(random() * spec.oneOf.length)];
+    if (spec === undefined && gene === 'mutation') return 0; // alien mutations are never part of a fresh species
     if (spec === undefined) return isPart ? Math.floor(random() * PART_COUNTS[gene]) : random();
     if (Array.isArray(spec)) {
       const [lo, hi] = spec;
@@ -78,7 +80,7 @@ export class Genome {
 
   static fromJSON(data) {
     const alleles = {};
-    for (const gene of ALL_GENES) alleles[gene] = [...data[gene]];
+    for (const gene of ALL_GENES) alleles[gene] = data[gene] ? [...data[gene]] : [0, 0]; // (old saves have no mutation gene)
     return new Genome(alleles);
   }
 
@@ -91,7 +93,8 @@ export class Genome {
     const traits = {};
     for (const gene of ALL_GENES) {
       const [a, b] = this.alleles[gene];
-      traits[gene] = gene in PART_COUNTS ? Math.min(a, b) : (a + b) / 2;
+      // body-plan genes show the lower-numbered allele (recessive variants); an alien mutation is dominant
+      traits[gene] = gene === 'mutation' ? Math.max(a, b) : gene in PART_COUNTS ? Math.min(a, b) : (a + b) / 2;
     }
     return traits;
   }
@@ -100,9 +103,9 @@ export class Genome {
 // Body-plan families. A mutation swaps a part for another of the same family, so a wolf does not grow a human face and
 // a person does not grow fins: people (sapient body plans), swimmers (fish) and the rest of the animals.
 export const PART_FAMILIES = {
-  people: { head: [6, 7, 8, 11], body: [2, 5], legs: [1], ears: [0, 1, 5, 6], tail: [0, 4, 6], horns: [0, 1, 2], wings: [0] },
+  people: { head: [6, 7, 8, 11, 12, 13, 19], body: [2, 5, 9, 10], legs: [1], ears: [0, 1, 5, 6, 8], tail: [0, 4, 6], horns: [0, 1, 2, 7], wings: [0] },
   swimmer: { head: [10, 3], body: [6], legs: [6, 0], ears: [0, 4], tail: [5], horns: [0, 3], wings: [0] },
-  animal: { head: [0, 1, 2, 3, 4, 5, 8, 9], body: [0, 1, 2, 3, 4, 7, 8], legs: [0, 1, 2, 3, 4, 5], ears: [0, 1, 2, 3, 4, 5], tail: [0, 1, 2, 3, 4, 6], horns: [0, 1, 2, 3, 4, 5, 6], wings: [0, 1, 2, 3, 4, 5] }
+  animal: { head: [0, 1, 2, 3, 4, 5, 8, 9, 14, 15, 16, 17, 18], body: [0, 1, 2, 3, 4, 7, 8, 11, 12], legs: [0, 1, 2, 3, 4, 5, 7, 8], ears: [0, 1, 2, 3, 4, 5, 7, 8], tail: [0, 1, 2, 3, 4, 6, 7, 8], horns: [0, 1, 2, 3, 4, 5, 6, 7], wings: [0, 1, 2, 3, 4, 5, 6, 7] }
 };
 
 // The family of a whole creature, from its body and head
@@ -110,11 +113,16 @@ export function bodyFamily(genome) {
   const body = Math.min(genome.alleles.body[0], genome.alleles.body[1]);
   const head = Math.min(genome.alleles.head[0], genome.alleles.head[1]);
   if (body === 6) return PART_FAMILIES.swimmer;
-  if (body === 5 || head === 6 || head === 7 || head === 11) return PART_FAMILIES.people;
+  if (body === 5 || body === 9 || body === 10 || [6, 7, 11, 12, 13, 19].includes(head)) return PART_FAMILIES.people;
   return PART_FAMILIES.animal;
 }
 
 function mutateAllele(gene, allele, rate, strength, family = PART_FAMILIES.animal) {
+  if (gene === 'mutation') {
+    // rare: a creature of any family may sprout an alien trait (or lose it again)
+    if (random() >= ALIEN_MUTATION_RATE) return allele;
+    return allele === 0 || random() < 0.2 ? 1 + Math.floor(random() * (PART_COUNTS.mutation - 1)) : 0;
+  }
   if (gene in PART_COUNTS) {
     if (random() >= PART_MUTATION_RATE) return allele;
     const options = family[gene] || null;
