@@ -232,7 +232,7 @@ function ringPlot(terrain, civ, st, type, instant) {
 // ---------- walls ----------
 // A walled town: a rectangle round the built-up streets with a gate in the middle of each side and towers at the
 // corners (stone walls from the classical age on, a wooden palisade before). Pieces are planned a few at a time.
-const WALL_MIN_POP = 16;
+const WALL_MIN_POP = 26;
 
 function planWall(civ, terrain, st, tier) {
   const town = st.town;
@@ -441,7 +441,7 @@ export function wishes(civ, terrain, st, n, tier, cn) {
     if (st.capital && have('cathedral') < 1 && pop >= 24) want('cathedral', 1.2);
   }
   // a town of size walls itself (once it has a street grid worth defending): the plan is drawn once, the pieces follow
-  if (tier >= 1 && tier <= 3 && pop >= WALL_MIN_POP && (st.capital || pop >= 24)) {
+  if (tier >= 1 && tier <= 3 && pop >= WALL_MIN_POP && (st.capital || pop >= 36)) {
     if (!st.wall) planWall(civ, terrain, st, tier);
     if (st.wall.pieces.length && affordable(civ, terrain, st, st.wall.pieces[0].type)) list.push({ type: st.wall.kind === 'stone' ? 'stone_wall' : 'palisade', weight: 2.2, kind: 'wall' });
   }
@@ -616,8 +616,22 @@ export const RENOVATE_INTERVAL = 6; // simulated seconds between two renovations
 
 // Now and then one building of an earlier age is renovated in the style of the current age (new walls, roof, trim),
 // so a town changes its look gradually as its people move from age to age. Returns the renovated building or null.
+// A wooden palisade is rebuilt in stone, one piece at a time, once the age of stone walls has come.
+function upgradeWallPiece(civ, terrain, st) {
+  const up = { palisade: 'stone_wall', palisade_gate: 'stone_gate' };
+  for (const b of buildingsOf(terrain, st)) {
+    const to = up[b.type];
+    if (!to || b.progress < 1 || !affordable(civ, terrain, st, to) || (st.stock.stone || 0) < 5) continue;
+    const { x, y } = b;
+    terrain.removeBuilding(b.id, { ruins: false });
+    return placeAt(terrain, civ, st, to, x, y, false);
+  }
+  return null;
+}
+
 export function renovateOne(civ, terrain, st) {
   const tier = eraTier(civ);
+  if (tier >= 2 && st.wall && openSites(terrain, st).filter(b => BUILDING_TYPES[b.type].connects).length < 3 && upgradeWallPiece(civ, terrain, st)) return null;
   let pick = null;
   for (const b of buildingsOf(terrain, st)) {
     if (b.progress < 1 || b.type === 'ruins' || eraOfBuilding(b) >= tier) continue;

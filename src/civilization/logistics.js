@@ -4,13 +4,13 @@
 //
 //   tickLogistics(society, civ, dt)   every SUPPLY_TICK simulated seconds
 import { RECIPES, take, add } from './economy.js';
-import { settlementsOf, countBuilt, buildingsOf } from './settlements.js';
+import { settlementsOf, countBuilt, buildingsOf, openSites } from './settlements.js';
 import { eraTier } from './townPlanner.js';
-import { BUILDING_TYPES } from '../world/buildings.js';
+import { BUILDING_TYPES, missingMaterials } from '../world/buildings.js';
 
 export const SUPPLY_TICK = 12;
 const BATCH = 4;           // units of one material carried per trip
-const KEEP = 2;            // a donor never gives away its last units
+const KEEP = 1;            // a donor never gives away its last units
 const ABANDON_AFTER = 90;  // simulated seconds without a single resident
 
 export function tickLogistics(society, civ, dt) {
@@ -22,6 +22,21 @@ export function tickLogistics(society, civ, dt) {
   if (all.length < 2) return;
   const tier = eraTier(civ);
   const terrain = society.terrain;
+  // construction sites short of a material the town lacks (clay, ore, stone far from home) get a batch from a richer town
+  for (const st of all) {
+    if (!st.population) continue;
+    for (const site of openSites(terrain, st)) {
+      for (const [k, n] of Object.entries(missingMaterials(site))) {
+        if (n < 1 || (st.stock[k] || 0) >= Math.min(n, BATCH)) continue;
+        let donor = null;
+        for (const o of all) {
+          if (o === st || (o.stock[k] || 0) <= KEEP + 2) continue;
+          if (!donor || o.stock[k] > donor.stock[k]) donor = o;
+        }
+        if (donor) add(st.stock, k, take(donor.stock, k, Math.min(BATCH, n, donor.stock[k] - KEEP)));
+      }
+    }
+  }
   for (const rec of RECIPES) {
     if (!rec.at || rec.tier > tier + 1) continue;
     for (const st of all) {
@@ -31,7 +46,7 @@ export function tickLogistics(society, civ, dt) {
         // the town with the most of it (that is not itself short) sends a batch
         let donor = null;
         for (const o of all) {
-          if (o === st || (o.stock[k] || 0) <= KEEP + 1) continue;
+          if (o === st || (o.stock[k] || 0) <= KEEP) continue;
           if (!donor || o.stock[k] > donor.stock[k]) donor = o;
         }
         if (!donor) continue;

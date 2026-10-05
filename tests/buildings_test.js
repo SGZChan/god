@@ -266,9 +266,9 @@ section('Town planner: sparse, sensible, buildable layouts');
   assert(civ.settlements[0].roadQueue.some(r => r.y === front.y), 'the main street is queued for the builders (nothing is paved for free)');
   assert(own(civ).every(b => b.progress < 1), 'a new settlement starts with construction sites only: the people build everything');
   assert(own(civ).length >= 3 && own(civ).length < 12, `a new town is a handful of buildings (${own(civ).length}), not one per tile`);
-  civ.citizens = 24;
-  civ.settlements[0].population = 24;
-  civ.settlements[0].adults = 20;
+  civ.citizens = 30;
+  civ.settlements[0].population = 30;
+  civ.settlements[0].adults = 26;
   civ.settlements[0].stock = { wood: 999, stone: 999, fibre: 999, clay: 999, iron: 999, coal: 999 }; // a flat test world has no deposits to mine
   civ.techPoints = 900;
   civ.era = getEraForPoints(900);
