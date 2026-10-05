@@ -8,6 +8,7 @@ import { PowerPalette, bindGodMenu, loadGodSettings } from './ui/powerPalette.js
 import { InspectorPanel } from './ui/inspector.js';
 import { CreationWorkshop } from './workshop/creator.js';
 import { catchUpEngine } from './simulation/catchUpEngine.js';
+import { skipTime } from './simulation/timeSkip.js';
 import { NotificationManager } from './ui/notificationManager.js';
 import { OverviewPanel, WorldTab, summarizeWorld } from './ui/overviewPanel.js';
 import { Minimap } from './ui/minimap.js';
@@ -1213,35 +1214,42 @@ class GameApp {
     });
   }
 
-  // Skips `years` on the active planet at once: no progress screen and no fast-forwarding. The planet's peoples and
-  // wildlife are advanced by the catch-up engine (simulation/catchUpEngine.js, the same one other planets use when you
-  // return to them), and the universe's clock moves on, so every other planet and system catches up when visited.
-  skipYears(years) {
-    if (!this.activeSim || this.activeSim.planet.isConsumed || !(years > 0)) return 0;
+  // Skips `years` on the active planet: the planet lives through them (simulation/timeSkip.js: aging, births and deaths,
+  // wildlife, building, exploring and the rise of ages), without the slow walking about. The page stays usable meanwhile;
+  // the universe's clock moves on, so the other planets and systems catch up when you visit them.
+  async skipYears(years) {
+    if (this.skipping || !this.activeSim || this.activeSim.planet.isConsumed || !(years > 0)) return 0;
     const sim = this.activeSim;
-    const peopleBefore = sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length;
-    const civsBefore = new Map(sim.society.civilizations.filter(c => c.isAlive).map(c => [c.id, { era: c.era.name, settlements: (c.settlements || []).length }]));
+    const button = document.getElementById('btn-skip');
+    const label = button && button.querySelector('span');
+    const normal = label ? label.textContent : '';
+    this.skipping = true;
+    const savedSpeed = this.timeSpeed;
+    this.timeSpeed = 0; // the normal loop must not run the planet at the same time
+    if (button) button.disabled = true;
     setActiveRng(sim.rng);
-    // (the planet is first brought up to the present, then carried forward)
+    // (the planet is first brought up to the present: it may be behind the universe's clock)
     this.cosmicTimeAge += years * 0.001;
-    const owed = (this.cosmicTimeAge - sim.lastActiveCosmicAge) * 1000;
-    const report = catchUpEngine.fastForwardPlanet(sim, owed, sim.rng);
-    sim.simSeconds += years * 4;
+    const owed = Math.max(0, (this.cosmicTimeAge - sim.lastActiveCosmicAge) * 1000);
+    let report;
+    try {
+      report = await skipTime(sim, Math.max(1, Math.round(owed)), {
+        onSlice: (done, all) => { if (label) label.textContent = `${Math.floor(done / all * 100)}%`; }
+      });
+    } finally {
+      if (label) label.textContent = normal;
+      if (button) button.disabled = false;
+      this.timeSpeed = savedSpeed;
+      this.skipping = false;
+    }
+    sim.simSeconds += owed * 4;
     sim.lastActiveCosmicAge = this.cosmicTimeAge;
     this.stepper.reset();
     this.tickVoyages();
     this.pruneActiveTerrain();
-
-    const notes = [];
-    for (const civ of sim.society.civilizations) {
-      const before = civsBefore.get(civ.id);
-      if (!before) { if (civ.isAlive) notes.push(`${civ.name} arose`); continue; }
-      if (!civ.isAlive) { notes.push(`${civ.name} fell`); continue; }
-      if (civ.era.name !== before.era) notes.push(`${civ.name} entered the ${civ.era.name}`);
-    }
-    if (report) notes.push(...report.ecoEvents.slice(0, 2));
-    const peopleNow = sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length;
-    const summary = `⏩ ${years} years passed on ${sim.planet.name}: ${peopleBefore} → ${peopleNow} people${notes.length ? '. ' + notes.slice(0, 4).join('; ') : ''}.`;
+    const notes = [...report.civEvents.slice(0, 4), ...report.ecoEvents.slice(0, 1)];
+    if (report.champions.length) notes.push(`${[...new Set(report.champions)].join(', ')} grew old`);
+    const summary = `⏩ ${Math.round(owed)} years passed on ${sim.planet.name}: ${report.peopleBefore} → ${report.peopleNow} people (${report.births} born, ${report.deaths} died, ${report.built} buildings raised)${notes.length ? '. ' + notes.join('; ') : ''}.`;
     this.logTo(sim, summary);
     this.notifications.push(summary, 'info', true);
     this.updateFocusCard();
