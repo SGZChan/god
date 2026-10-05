@@ -130,7 +130,7 @@ export function housingCapacityOfCiv(terrain, civ) {
 export function popCap(terrain, civ) {
   const sites = [];
   for (const st of settlementsOf(civ)) for (const b of openSites(terrain, st)) if (BUILDING_TYPES[b.type].category === 'housing') sites.push(b);
-  return Math.round(8 + housingCapacityOfCiv(terrain, civ) * 1.5 + sites.length * 1.5);
+  return Math.round(12 + housingCapacityOfCiv(terrain, civ) * 1.6 + sites.length * 1.5);
 }
 
 // A founding spot for a new hamlet within reach of `from` (a settlement): explored, open, buildable land that is not

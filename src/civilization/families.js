@@ -149,11 +149,13 @@ export function feedChildren(terrain, st, members) {
 export function householdConceptions(ecosystem, members, byId, chance = 0.4) {
   let n = 0;
   for (const mother of members) {
-    if (!mother.alive || mother.sex !== 'F' || !mother.mateId || !mother.homeId || mother.pregnancy) continue;
+    if (!mother.alive || mother.sex !== 'F' || !mother.mateId || mother.pregnancy) continue;
     const father = byId.get(mother.mateId);
     if (!father || !father.alive || father.sex !== 'M' || father.homeId !== mother.homeId) continue;
+    // a couple without a home still starts a family round the camp fire, only less often
+    const homed = Boolean(mother.homeId);
     if (!mother.readyToMate([]) || !father.readyToMate([])) continue;
-    if (random() > chance) continue;
+    if (random() > (homed ? chance : chance * 0.5)) continue;
     if (ecosystem.tryConceive(father, mother)) n++;
   }
   return n;

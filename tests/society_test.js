@@ -363,6 +363,7 @@ section('Trade: caravans carry surplus between settlements');
   a.stock = { wood: 200, stone: 100, grain: 50 };
   b.stock = { grain: 20 };
   a.assignTimer = 1e9; b.assignTimer = 1e9;
+  civ.supplyTimer = 1e9; // the porters of logistics.js would otherwise carry the wood before the trader does
   const trader = sim.ecosystem.entities.filter(e => e.alive && e.civilization === civ && e.isAdult).sort((a, b) => a.age - b.age)[0];
   trader.job = 'trader';
   trader.settlementId = a.id;
