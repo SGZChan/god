@@ -774,7 +774,7 @@ class GameApp {
     }
   }
 
-  // Menu > Save location: browser database, a file on this device, or your account (Supabase)
+  // Menu > Save location: browser database, a file on this device, or your Google account (Firebase)
   openSaveLocation() {
     const modal = document.getElementById('location-modal');
     const status = document.getElementById('location-status');
@@ -787,11 +787,9 @@ class GameApp {
       document.getElementById('loc-reconnect').hidden = !(this.store.mode === 'file' && this.store.fileHandle);
       const cloud = this.store.cloud;
       const user = cloud.user;
-      const email = document.getElementById('loc-signin');
-      const google = document.getElementById('loc-signin-google');
-      email.hidden = !cloud.configured || (!user && !cloud.providers.includes('email'));
-      google.hidden = !cloud.configured || Boolean(user) || !cloud.providers.includes('google');
-      email.textContent = user ? `Sign out (${user.email || 'account'})` : 'Sign in with email';
+      const signin = document.getElementById('loc-signin');
+      signin.hidden = !cloud.configured;
+      signin.textContent = user ? `Sign out (${user.email || user.displayName || 'account'})` : 'Sign in with Google';
     };
     if (!this.locationWired) {
       this.locationWired = true;
@@ -803,12 +801,10 @@ class GameApp {
       document.getElementById('loc-signin').addEventListener('click', () => act(async () => {
         const cloud = this.store.cloud;
         if (cloud.user) { await cloud.signOut(); await this.store.setMode('browser'); return; }
-        const email = (window.prompt('Your email address: a sign-in link will be sent to it (no password needed).') || '').trim();
-        if (!email) return;
-        await cloud.signIn('email', email);
-        this.notifications.push('📧 Check your email and click the link: you come back here signed in, and your universe is saved to your account.', 'info', true);
+        await cloud.signIn();
+        await this.store.setMode('cloud');
+        await this.saveGame({ announce: true });
       }));
-      document.getElementById('loc-signin-google').addEventListener('click', () => act(async () => { await this.store.cloud.signIn('google'); }));
       document.getElementById('btn-location-close').addEventListener('click', () => modal.classList.add('hidden'));
     }
     modal.classList.remove('hidden');
@@ -888,9 +884,7 @@ class GameApp {
     (async () => {
       await this.store.init();
       if (this.store.cloud.configured) {
-        const user = await this.store.cloud.restore();
-        // coming back from a sign-in link: from now on the universe is kept in the account
-        if (user && this.store.cloud.justSignedIn) await this.store.setMode('cloud');
+        await this.store.cloud.restore();
       }
       // A saved universe waits for the player's choice, and autosave stays off until then
       const header = await this.store.peek();
