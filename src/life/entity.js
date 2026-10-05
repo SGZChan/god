@@ -5,6 +5,7 @@ import { MATE_THRESHOLD } from './species.js';
 import { makeName } from './names.js';
 import { livestockAI } from '../civilization/livestock.js';
 import { makeCorpse, CORPSE_LIFE } from '../civilization/deathcare.js';
+import { isAquaticBody, aquaticAI } from './aquatic.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -133,9 +134,16 @@ export class Entity {
     return 'adult';
   }
 
+  // Swimmers (fish, sharks, whales) live only in water; see life/aquatic.js
+  get aquatic() {
+    return !this.isSapient && isAquaticBody(this.traits.body);
+  }
+
   // Body size on screen: babies are small and grow up
+  // (people are drawn at human scale: well under the height of a tree and a house; animals a little larger than people)
   get visualScale() {
-    return this.stats.sizeScale * (this.sizeMod || 1) * (0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears));
+    const kind = this.isMonster ? 1 : (this.isSapient ? 0.58 : 0.8);
+    return kind * this.stats.sizeScale * (this.sizeMod || 1) * (0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears));
   }
 
   get maxAge() {
@@ -257,6 +265,7 @@ export class Entity {
     let excess = t < ideal ? (ideal - t) - this.stats.coldTolerance : (t - ideal) - this.stats.heatTolerance;
     // A roof over one's head takes the edge off the weather: homeless people feel the full cold
     if (excess > 0 && this.homeId) excess = Math.max(0, excess - 0.06);
+    if (this.aquatic) excess *= 0.15; // the sea evens out the temperature
     this.thermalStress = Math.max(0, excess);
     if (excess > 0) {
       this.health -= excess * 12 * sim;
@@ -268,7 +277,13 @@ export class Entity {
       this.health = Math.min(this.maxHealth, this.health + sim * 1.2);
     }
 
-    if (curTile.biome.isWater) {
+    if (this.aquatic) {
+      // a swimmer on dry land suffocates; in the water it has all the air it needs
+      if (!curTile.biome.isWater) {
+        this.health -= sim * 9;
+        if (this.health <= 0) { this.die('Stranded on land'); return; }
+      }
+    } else if (curTile.biome.isWater) {
       // Deplete breath in deep water
       const drainRate = curTile.biome.id === 'DEEP_OCEAN' ? 22 : 12;
       this.breath = Math.max(0, this.breath - sim * drainRate);
@@ -391,6 +406,8 @@ export class Entity {
     if (this.isSapient && this.executeRoleAI(world)) return;
     // Livestock live in their pen (civilization/livestock.js)
     if (!this.isSapient && this.penId && livestockAI(this, world, random)) return;
+    // Swimmers have their own life in the water (life/aquatic.js)
+    if (this.aquatic && aquaticAI(this, world, random)) return;
 
     const options = [];
 
@@ -882,7 +899,7 @@ export class Entity {
     if (curTile.road) terrainCost *= curTile.road === 'cobble' ? 0.67 : (curTile.road === 'gravel' ? 0.74 : 0.82);
 
     // Extreme slowdown in water
-    if (curTile.biome.isWater) terrainCost *= 3.5;
+    if (curTile.biome.isWater && !this.aquatic) terrainCost *= 3.5;
 
     // Young creatures are slower; pregnant ones too
     const grown = 0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears);
@@ -893,6 +910,8 @@ export class Entity {
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
     const nx = this.x + (dx / dist) * Math.min(dist, moveDist);
     const ny = this.y + (dy / dist) * Math.min(dist, moveDist);
+    // swimmers never leave the water
+    if (this.aquatic && !terrain.getTile(Math.floor(nx), Math.floor(ny)).biome.isWater) { this.path = []; return; }
     // Walls block walking: a step into a solid building tile (not through a door) is refused and the path dropped
     const toStruct = terrain.getTile(Math.floor(nx), Math.floor(ny)).structure;
     // (only a creature already standing inside a solid footprint may move within it, to get out: the door tile is not solid,

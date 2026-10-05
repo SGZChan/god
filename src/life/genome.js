@@ -6,7 +6,7 @@
 import { random } from '../simulation/random.js';
 
 // Number of art variants for each body-plan gene (the sprite kit must provide at least this many).
-export const PART_COUNTS = { body: 13, head: 20, legs: 9, ears: 9, tail: 9, horns: 8, wings: 8, pattern: 5, mutation: 8 };
+export const PART_COUNTS = { body: 15, head: 23, legs: 9, ears: 9, tail: 11, horns: 9, wings: 8, pattern: 5, mutation: 8 };
 export const BODY_GENES = Object.keys(PART_COUNTS);
 export const COLOR_GENES = ['hue', 'sat', 'light', 'hue2', 'eyeHue'];
 export const TRAIT_GENES = [
@@ -104,7 +104,7 @@ export class Genome {
 // a person does not grow fins: people (sapient body plans), swimmers (fish) and the rest of the animals.
 export const PART_FAMILIES = {
   people: { head: [6, 7, 8, 11, 12, 13, 19], body: [2, 5, 9, 10], legs: [1], ears: [0, 1, 5, 6, 8], tail: [0, 4, 6], horns: [0, 1, 2, 7], wings: [0] },
-  swimmer: { head: [10, 3], body: [6], legs: [6, 0], ears: [0, 4], tail: [5], horns: [0, 3], wings: [0] },
+  swimmer: { head: [10, 3, 20, 21, 22], body: [6, 13, 14], legs: [6, 0], ears: [0, 4], tail: [5, 9, 10], horns: [0, 3, 8], wings: [0] },
   animal: { head: [0, 1, 2, 3, 4, 5, 8, 9, 14, 15, 16, 17, 18], body: [0, 1, 2, 3, 4, 7, 8, 11, 12], legs: [0, 1, 2, 3, 4, 5, 7, 8], ears: [0, 1, 2, 3, 4, 5, 7, 8], tail: [0, 1, 2, 3, 4, 6, 7, 8], horns: [0, 1, 2, 3, 4, 5, 6, 7], wings: [0, 1, 2, 3, 4, 5, 6, 7] }
 };
 
@@ -112,7 +112,7 @@ export const PART_FAMILIES = {
 export function bodyFamily(genome) {
   const body = Math.min(genome.alleles.body[0], genome.alleles.body[1]);
   const head = Math.min(genome.alleles.head[0], genome.alleles.head[1]);
-  if (body === 6) return PART_FAMILIES.swimmer;
+  if (body === 6 || body === 13 || body === 14) return PART_FAMILIES.swimmer;
   if (body === 5 || body === 9 || body === 10 || [6, 7, 11, 12, 13, 19].includes(head)) return PART_FAMILIES.people;
   return PART_FAMILIES.animal;
 }

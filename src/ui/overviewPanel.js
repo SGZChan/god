@@ -104,7 +104,9 @@ export function summarizeWorld(sim) {
     season: SEASON_NAMES[seasonOf(sim.ecosystem.timeYears)],
     wildlife: sim.ecosystem.speciesCatalog
       .filter(s => s.type !== 'humanoid' && (s.population > 0 || extinct.includes(s.name)))
-      .map(s => ({ id: s.id, symbol: s.symbol, traits: s.centroid, name: s.name, count: s.population, extinct: s.population === 0 }))
+      .map(s => ({ id: s.id, symbol: s.symbol, traits: s.centroid, name: s.name, count: s.population, extinct: s.population === 0, sea: [6, 13, 14].includes(Math.round(s.centroid.body)), hunter: s.centroid.carnivory > 0.6, size: s.centroid.size })),
+    ecology: sim.ecosystem.trophic || null,
+    people: sim.ecosystem.entities.filter(e => e.alive && e.isSapient).length
   };
 }
 
@@ -153,15 +155,40 @@ export class OverviewPanel {
     this.root.classList.toggle('hidden', !visible);
   }
 
-  // All text goes in through textContent, so names can never inject markup.
   render(model, events) {
-    const nodes = [];
+    this.body.replaceChildren(...buildOverview(model, events));
+  }
+}
 
-    nodes.push(el('div', 'ov-summary',
+// The pages of the world tab (and the docked overview shows them all, one after the other)
+export const WORLD_PAGES = [
+  { id: 'civs', label: '🏛️ Peoples' },
+  { id: 'faiths', label: '🕯️ Faiths' },
+  { id: 'wild', label: '🌿 Wildlife & sea' },
+  { id: 'events', label: '📜 Events' }
+];
+
+function pyramidBar(label, n, max, cls) {
+  const row = el('div', 'pyr-row');
+  const bar = el('div', 'pyr-bar');
+  const fill = el('div', `pyr-fill ${cls}`);
+  fill.style.width = `${Math.max(2, Math.round((n / Math.max(1, max)) * 100))}%`;
+  bar.appendChild(fill);
+  row.append(el('span', 'pyr-label', label), bar, el('span', 'pyr-n', String(n)));
+  return row;
+}
+
+// All text goes in through textContent, so names can never inject markup. `only`: one page id, or null for all.
+export function buildOverview(model, events, only = null) {
+  const show = id => !only || only === id;
+  const nodes = [];
+  {
+
+    if (show('civs')) nodes.push(el('div', 'ov-summary',
       `${model.planetName} • ${model.civs.length} civilization${model.civs.length === 1 ? '' : 's'}`
       + `${model.fallen ? ` (${model.fallen} fallen)` : ''} • ${model.creatures} creatures • ${model.season}`));
 
-    for (const civ of model.civs) {
+    if (show('civs')) for (const civ of model.civs) {
       const card = el('div', 'civ-card');
       card.style.setProperty('--civ', civ.color);
 
@@ -232,7 +259,7 @@ export class OverviewPanel {
       nodes.push(card);
     }
 
-    if (model.religions && model.religions.length) {
+    if (show('faiths') && model.religions && model.religions.length) {
       const section = el('div');
       section.appendChild(el('div', 'ov-title', 'Faiths'));
       for (const r of model.religions) {
@@ -253,32 +280,99 @@ export class OverviewPanel {
       nodes.push(section);
     }
 
-    if (model.wildlife.length) {
+    if (show('wild') && model.ecology) {
+      const t = model.ecology;
       const section = el('div');
-      section.appendChild(el('div', 'ov-title', 'Wildlife'));
-      const list = el('div', 'wild-list');
-      for (const animal of model.wildlife) {
-        const chip = el('span', `wild-chip${animal.extinct ? ' extinct' : ''}`);
-        chip.title = animal.extinct ? `${animal.name} (extinct)` : animal.name;
-        const portrait = document.createElement('img');
-        portrait.src = creatureDataURL(animal.traits);
-        portrait.alt = '';
-        portrait.style.cssText = 'width: 18px; height: 18px; image-rendering: pixelated;';
-        chip.append(portrait, document.createTextNode(animal.extinct ? 'extinct' : String(animal.count)));
-        list.appendChild(chip);
-      }
-      section.appendChild(list);
+      section.appendChild(el('div', 'ov-title', 'Food pyramid'));
+      section.appendChild(el('div', 'civ-meta', 'Many grazers feed few hunters; hunters breed only while there is prey.'));
+      const max = Math.max(t.landPrey, t.seaPrey, t.landHunters, t.seaHunters, model.people || 0, 1);
+      const land = el('div', 'pyr-block');
+      land.appendChild(el('div', 'pyr-head', '🌍 On land'));
+      land.appendChild(pyramidBar('People', model.people || 0, max, 'people'));
+      land.appendChild(pyramidBar('Hunters', t.landHunters, max, 'hunter'));
+      land.appendChild(pyramidBar('Grazers & small fry', t.landPrey, max, 'prey'));
+      const sea = el('div', 'pyr-block');
+      sea.appendChild(el('div', 'pyr-head', '🌊 In the sea'));
+      sea.appendChild(pyramidBar('Hunters (sharks, tuna)', t.seaHunters, max, 'hunter'));
+      sea.appendChild(pyramidBar('Plankton feeders & fish', t.seaPrey, max, 'prey'));
+      section.append(land, sea);
       nodes.push(section);
     }
 
-    const log = el('div');
-    log.appendChild(el('div', 'ov-title', 'Recent events'));
-    const items = el('ul', 'event-log');
-    if (events.length === 0) items.appendChild(el('li', '', 'Nothing has happened yet.'));
-    for (const text of events) items.appendChild(el('li', '', text));
-    log.appendChild(items);
-    nodes.push(log);
+    if (show('wild') && model.wildlife.length) {
+      for (const [title, list] of [['Land wildlife', model.wildlife.filter(a => !a.sea)], ['Marine life', model.wildlife.filter(a => a.sea)]]) {
+        if (!list.length) continue;
+        const section = el('div');
+        section.appendChild(el('div', 'ov-title', title));
+        const wrap = el('div', 'wild-list');
+        for (const animal of list) {
+          const chip = el('span', `wild-chip${animal.extinct ? ' extinct' : ''}`);
+          chip.title = animal.extinct ? `${animal.name} (extinct)` : `${animal.name}${animal.hunter ? ' (hunter)' : ''}`;
+          const portrait = document.createElement('img');
+          portrait.src = creatureDataURL(animal.traits);
+          portrait.alt = '';
+          portrait.style.cssText = 'width: 18px; height: 18px; image-rendering: pixelated;';
+          chip.append(portrait, document.createTextNode(animal.extinct ? 'extinct' : String(animal.count)));
+          wrap.appendChild(chip);
+        }
+        section.appendChild(wrap);
+        nodes.push(section);
+      }
+    }
 
-    this.body.replaceChildren(...nodes);
+    if (show('events')) {
+      const log = el('div');
+      log.appendChild(el('div', 'ov-title', 'Recent events'));
+      const items = el('ul', 'event-log');
+      if (events.length === 0) items.appendChild(el('li', '', 'Nothing has happened yet.'));
+      for (const text of events) items.appendChild(el('li', '', text));
+      log.appendChild(items);
+      nodes.push(log);
+    }
+  }
+  return nodes;
+}
+
+// The world tab: the overview as a full page you can open and read at leisure, one page at a time.
+export class WorldTab {
+  constructor(root, getData) {
+    this.root = root;
+    this.getData = getData;       // () => { model, events } for the active planet, or null
+    this.page = 'civs';
+    this.tabs = root.querySelector('.world-tabs');
+    this.body = root.querySelector('.world-body');
+    for (const p of WORLD_PAGES) {
+      const b = el('button', 'world-tab-btn', p.label);
+      b.dataset.page = p.id;
+      b.setAttribute('role', 'tab');
+      b.addEventListener('click', () => { this.page = p.id; this.render(); });
+      this.tabs.appendChild(b);
+    }
+    this.timer = null;
+  }
+
+  get isOpen() { return !this.root.classList.contains('hidden'); }
+
+  open(page) {
+    if (page) this.page = page;
+    this.root.classList.remove('hidden');
+    this.render();
+    clearInterval(this.timer);
+    this.timer = setInterval(() => { if (this.isOpen) this.render(true); else clearInterval(this.timer); }, 1000);
+  }
+
+  close() {
+    this.root.classList.add('hidden');
+    clearInterval(this.timer);
+  }
+
+  toggle() { if (this.isOpen) this.close(); else this.open(); }
+
+  render(keepScroll = false) {
+    const data = this.getData();
+    for (const b of this.tabs.children) { b.classList.toggle('active', b.dataset.page === this.page); b.setAttribute('aria-selected', String(b.dataset.page === this.page)); }
+    const top = this.body.scrollTop;
+    this.body.replaceChildren(...(data ? buildOverview(data.model, data.events, this.page) : [el('div', 'ov-summary', 'Descend to a planet to read its story.')]));
+    if (keepScroll) this.body.scrollTop = top;
   }
 }

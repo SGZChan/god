@@ -48,7 +48,13 @@ export const HEADS = [
   // 18 grey alien: a big smooth head, huge dark slanted eyes, a tiny mouth
   ['..oooooo', '.obbbbbb', 'obbbbbbb', 'obkkkkbb', 'obkkkkbb', 'obbbbbbb', '.obbbbbb', '..oo.ooo'],
   // 19 goblin: pointed brow and a big nose
-  ['........', '.o.ooooo', 'obobbbbb', 'obbbbbbb', 'obwebbbb', 'obbbbbkk', '.obbbbbb', '..oobbbb']
+  ['........', '.o.ooooo', 'obobbbbb', 'obbbbbbb', 'obwebbbb', 'obbbbbkk', '.obbbbbb', '..oobbbb'],
+  // 20 shark: a pointed snout with white teeth
+  ['........', '..oooooo', '.obbbbbb', 'obwebbbb', 'obbbbbbb', 'oblllllw', '.ohwhwhw', '..oooooo'],
+  // 21 whale: a huge blunt head, a small eye, a pale throat
+  ['........', '.ooooooo', 'obbbbbbb', 'obbbbbbb', 'obbbwebb', 'obbbbbbb', 'obllllll', '.ooooooo'],
+  // 22 eel: a small flat head
+  ['........', '........', '..ooooo.', '.obbbbbb', '.obwebbb', '.obbbbbk', '..ooooo.', '........']
 ];
 
 // ---- bodies: 8 rows each, placed with the top row at y = 8 ----
@@ -78,7 +84,11 @@ export const BODIES = [
   // 11 insect thorax: segmented
   ['...ooooo', '..obbbbb', '..osssss', '..obbbbb', '..osssss', '..obbbbb', '...obbbb', '....oooo'],
   // 12 lanky alien: a thin torso
-  ['.....ooo', '....obbb', '....obbb', '...obbbb', '...obbbl', '....obbb', '....obbb', '.....ooo']
+  ['.....ooo', '....obbb', '....obbb', '...obbbb', '...obbbl', '....obbb', '....obbb', '.....ooo'],
+  // 13 whale / dolphin: a big torpedo with a pale belly
+  ['........', '..oooooo', '.obbbbbb', 'obbbbbbb', 'obbbbbbb', 'obllllll', '.oblllll', '..oooooo'],
+  // 14 eel: a long thin body
+  ['........', '........', '....oooo', '..obbbbb', '.obssbbb', '..obbbbb', '....oooo', '........']
 ];
 
 // ---- legs: [frameA, frameB], 4 rows each, placed at y = 16. The right side uses the other frame, so the
@@ -143,7 +153,9 @@ export const HORNS = [
   // 6 unicorn horn
   ['.......h', '.......h', '......oh', '........'],
   // 7 ram horns: curled
-  ['.hh.....', 'hhhh....', 'h..h....', '.hh.....']
+  ['.hh.....', 'hhhh....', 'h..h....', '.hh.....'],
+  // 8 dorsal fin
+  ['......ss', '.....sss', '....ssso', '........']
 ];
 
 // ---- wings: 7 rows x 4 columns, placed at x = 0 (the margin), y = 5, drawn behind the body ----
@@ -185,7 +197,11 @@ export const TAILS = [
   // 7 thin rat tail
   ['....', '....', '....', '...o', '..o.', '.o..'],
   // 8 stinger: a curved tail with a dark tip
-  ['..o.', '.ob.', '.ob.', '.ob.', '..ob', '...k']
+  ['..o.', '.ob.', '.ob.', '.ob.', '..ob', '...k'],
+  // 9 whale fluke
+  ['....', '..ss', '.sss', '.sso', '.sss', '..ss'],
+  // 10 shark tail: a tall crescent
+  ['..s.', '.ss.', '.sso', '.ss.', '..ss', '...s']
 ];
 
 // ---- alien mutations: pixel overlays on the finished sprite (rare, dominant: see life/genome.js 'mutation').

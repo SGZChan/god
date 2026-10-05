@@ -6,6 +6,7 @@ import { AStarPathfinder } from '../ai/pathfinding.js';
 import { MAX_CITIZENS } from '../civilization/society.js';
 import { popCap } from '../civilization/settlements.js';
 import { random } from '../simulation/random.js';
+import { isAquaticBody } from './aquatic.js';
 
 export const MAX_ENTITIES = 1100; // safety limit only; real limits are local crowding and food
 export const MAX_ANIMALS = 560;  // wildlife stops breeding at this many animals, so a growing society never crowds nature out (nor the reverse)
@@ -23,24 +24,25 @@ const SAPIENT_GENES = {
   lifespan: [0.7, 0.85], fertility: [0.4, 0.6], perception: [0.4, 0.6], prefTemp: [0.42, 0.58],
   coldTol: [0.45, 0.7], heatTol: [0.45, 0.7], metabolism: [0.4, 0.6]
 };
+// land animals never get swimmer parts (fish bodies, shark and whale heads, fins)
+const LAND_PARTS = { body: { oneOf: [0, 1, 2, 3, 4, 7, 8] }, head: { oneOf: [0, 1, 2, 3, 4, 5, 9] }, ears: { oneOf: [0, 1, 2, 3, 4, 5, 7, 8] }, tail: { oneOf: [0, 1, 2, 3, 4, 6, 7, 8] }, horns: { oneOf: [0, 1, 2, 3, 4, 5, 6, 7] }, legs: { oneOf: [0, 1, 2, 3, 4, 5] } };
 const HERBIVORE_GENES = {
+  ...LAND_PARTS,
   herbivory: [0.85, 1], carnivory: [0, 0.08], intelligence: [0.1, 0.3], aggression: [0.05, 0.25],
   sociality: [0.6, 0.95], speed: [0.5, 0.8], size: [0.3, 0.9], fertility: [0.5, 0.8], lifespan: [0.2, 0.5],
   perception: [0.5, 0.8], prefTemp: [0.4, 0.6], coldTol: [0.4, 0.8], heatTol: [0.4, 0.8], metabolism: [0.3, 0.7]
 };
 const PREDATOR_GENES = {
+  ...LAND_PARTS,
   carnivory: [0.85, 1], herbivory: [0, 0.12], aggression: [0.7, 0.95], speed: [0.55, 0.85], size: [0.45, 0.8],
   sociality: [0.2, 0.6], fertility: [0.45, 0.7], lifespan: [0.3, 0.55], intelligence: [0.3, 0.5],
   perception: [0.65, 0.9], prefTemp: [0.4, 0.6], coldTol: [0.4, 0.8], heatTol: [0.4, 0.8], metabolism: [0.3, 0.7]
 };
 const OMNIVORE_GENES = {
+  ...LAND_PARTS,
   herbivory: [0.5, 0.7], carnivory: [0.3, 0.5], size: [0.15, 0.4], speed: [0.5, 0.8], fertility: [0.7, 0.95],
   lifespan: [0.1, 0.3], sociality: [0.4, 0.7], aggression: [0.2, 0.4], intelligence: [0.2, 0.4],
   perception: [0.5, 0.8], prefTemp: [0.4, 0.6], coldTol: [0.4, 0.8], heatTol: [0.4, 0.8], metabolism: [0.4, 0.8]
-};
-// Fish-like river folk: amphibious omnivores with the swimmer body plan
-const AMPHIBIAN_GENES = {
-  ...OMNIVORE_GENES, head: 10, body: 6, legs: { oneOf: [6, 0] }, ears: 0, tail: 5, wings: 0, horns: 0, size: [0.15, 0.4]
 };
 // Wildlife with their own look. Deer and rabbits graze, bears eat anything; the 'alien' beasts carry a mutation from the start
 const DEER_GENES = { ...HERBIVORE_GENES, head: 14, body: { oneOf: [1, 4] }, legs: 7, ears: 5, tail: 1, horns: { oneOf: [5, 5, 0] }, wings: 0, size: [0.4, 0.7], speed: [0.65, 0.9], prefTemp: [0.35, 0.55] };
@@ -50,20 +52,40 @@ const ALIEN_GENES = {
   ...OMNIVORE_GENES, head: { oneOf: [17, 18] }, body: { oneOf: [11, 12] }, legs: { oneOf: [7, 8] }, ears: 0, tail: { oneOf: [0, 8] }, horns: { oneOf: [0, 4] },
   wings: { oneOf: [0, 6] }, mutation: { oneOf: [1, 2, 3, 4, 5, 6, 7] }, size: [0.2, 0.5], intelligence: [0.3, 0.5]
 };
+// A food pyramid: many grazers, fewer mid-sized hunters, a handful of apex predators. Their numbers are kept in
+// proportion by prey supply (tryConceive).
+const FOX_GENES = { ...PREDATOR_GENES, head: 1, body: 0, legs: 2, ears: 1, tail: 3, horns: 0, wings: 0, size: [0.15, 0.3], aggression: [0.5, 0.7], speed: [0.65, 0.85], fertility: [0.55, 0.75], lifespan: [0.2, 0.35] };
+const APEX_GENES = { ...PREDATOR_GENES, head: 1, body: 2, legs: 2, ears: 5, tail: 6, horns: 0, wings: 0, pattern: 3, size: [0.78, 0.95], aggression: [0.8, 0.95], speed: [0.7, 0.9], fertility: [0.3, 0.45], lifespan: [0.45, 0.65], carnivory: [0.92, 1] };
+// The sea. Swimmer body plans (body 6, 13, 14) live only in water, see life/aquatic.js. Cold and heat hardly matter there.
+const SEA = { coldTol: [0.8, 1], heatTol: [0.8, 1], prefTemp: [0.4, 0.6], wings: 0, ears: 0, legs: 0, horns: 0, intelligence: [0.1, 0.3] };
+const MINNOW_GENES = { ...HERBIVORE_GENES, ...SEA, body: 6, head: 10, tail: 5, pattern: { oneOf: [0, 2, 3] }, size: [0.04, 0.1], herbivory: [0.9, 1], carnivory: [0, 0.05], fertility: [0.85, 1], lifespan: [0.1, 0.2], sociality: [0.8, 1], speed: [0.6, 0.8] };
+const REEF_GENES = { ...OMNIVORE_GENES, ...SEA, body: 6, head: 10, tail: 5, pattern: { oneOf: [2, 3, 4] }, size: [0.12, 0.25], herbivory: [0.6, 0.8], carnivory: [0.2, 0.4], fertility: [0.7, 0.9], lifespan: [0.15, 0.3] };
+const TUNA_GENES = { ...PREDATOR_GENES, ...SEA, body: 6, head: 10, tail: 10, horns: 8, pattern: 1, size: [0.28, 0.45], carnivory: [0.75, 0.9], herbivory: [0, 0.1], aggression: [0.5, 0.7], fertility: [0.6, 0.8], lifespan: [0.25, 0.4] };
+const EEL_GENES = { ...PREDATOR_GENES, ...SEA, body: 14, head: 22, tail: 5, pattern: 3, size: [0.2, 0.35], carnivory: [0.7, 0.85], herbivory: [0, 0.15], fertility: [0.5, 0.7], lifespan: [0.3, 0.45] };
+const SHARK_GENES = { ...PREDATOR_GENES, ...SEA, body: 6, head: 20, tail: 10, horns: 8, pattern: 1, size: [0.7, 0.9], carnivory: [0.92, 1], herbivory: [0, 0.05], aggression: [0.8, 0.95], fertility: [0.25, 0.4], lifespan: [0.5, 0.7] };
+const WHALE_GENES = { ...HERBIVORE_GENES, ...SEA, body: 13, head: 21, tail: 9, pattern: 1, size: [0.92, 1], herbivory: [0.8, 0.95], carnivory: [0.02, 0.1], aggression: [0.05, 0.15], fertility: [0.2, 0.3], lifespan: [0.8, 0.95], speed: [0.4, 0.55], sociality: [0.6, 0.8] };
 const FOUNDER_PLANS = [
   { genes: SAPIENT_GENES, sapient: true, count: 0 }, // the civilizations raise the sapient founders themselves
   // Each herbivore prefers a different climate band, so they do not all compete for the same ground
   { genes: { ...HERBIVORE_GENES, prefTemp: [0.3, 0.42] }, count: 16 },
   { genes: { ...HERBIVORE_GENES, prefTemp: [0.46, 0.54] }, count: 16 },
   { genes: { ...HERBIVORE_GENES, prefTemp: [0.58, 0.7] }, count: 14 },
-  { genes: PREDATOR_GENES, count: 14 },
-  { genes: PREDATOR_GENES, count: 14 },
+  { genes: PREDATOR_GENES, count: 8 },
+  { genes: PREDATOR_GENES, count: 8 },
   { genes: OMNIVORE_GENES, count: 10 },
-  { genes: AMPHIBIAN_GENES, count: 10 },
+  { genes: FOX_GENES, count: 8 },
+  { genes: APEX_GENES, count: 6 },
   { genes: DEER_GENES, count: 14 },
   { genes: RABBIT_GENES, count: 16 },
   { genes: BEAR_GENES, count: 8 },
-  { genes: ALIEN_GENES, count: 8 }
+  { genes: ALIEN_GENES, count: 8 },
+  // the sea (fish, hunters, sharks, whales, eels)
+  { genes: MINNOW_GENES, count: 44, aquatic: true },
+  { genes: REEF_GENES, count: 20, aquatic: true },
+  { genes: TUNA_GENES, count: 5, aquatic: true },
+  { genes: EEL_GENES, count: 4, aquatic: true },
+  { genes: SHARK_GENES, count: 3, aquatic: true },
+  { genes: WHALE_GENES, count: 4, aquatic: true }
 ];
 
 export class Ecosystem {
@@ -108,7 +130,13 @@ export class Ecosystem {
     for (const plan of FOUNDER_PLANS) {
       const template = Genome.pure(plan.genes);
       const species = this.registry.found(template.phenotype(), { sapient: Boolean(plan.sapient), foundedAt: 0 });
-      if (plan.count > 0) {
+      if (plan.count > 0 && plan.aquatic) {
+        // a school begins in the sea nearest the start area, and more of its kind in other waters
+        for (let k = 0; k < 3; k++) {
+          const water = this.findWater(home.x, home.y, k === 0 ? 150 : 260);
+          if (water) this.spawnFounders(species, k === 0 ? plan.count : Math.max(3, Math.round(plan.count * 0.5)), water.x, water.y, template, 5);
+        }
+      } else if (plan.count > 0) {
         // Each herd begins somewhere in the start area
         const angle = random() * Math.PI * 2;
         const dist = 15 + random() * 40;
@@ -132,7 +160,7 @@ export class Ecosystem {
     const base = template || Genome.fromPhenotype(species.centroid);
     const founders = [];
     for (let i = 0; i < count; i++) {
-      const spot = this.landNear(cx, cy, spread);
+      const spot = isAquaticBody(species.centroid.body) ? this.waterNear(cx, cy, spread) : this.landNear(cx, cy, spread);
       if (!spot) continue;
       const entity = new Entity({
         species,
@@ -147,6 +175,30 @@ export class Ecosystem {
     }
     this.registry.refresh(this.entities, this.timeYears);
     return founders;
+  }
+
+  // Open water (ocean or shallows with water all round) near (x, y), found by sampling rings outward
+  findWater(x, y, maxR = 200) {
+    for (let attempt = 0; attempt < 90; attempt++) {
+      const a = random() * Math.PI * 2;
+      const d = 6 + random() * maxR;
+      const wx = Math.floor(x + Math.cos(a) * d);
+      const wy = Math.floor(y + Math.sin(a) * d);
+      if (!this.terrain.inBounds(wx, wy)) continue;
+      let wet = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (this.terrain.inBounds(wx + dx, wy + dy) && this.terrain.getTile(wx + dx, wy + dy).biome.isWater) wet++;
+      if (wet >= 20) return { x: wx, y: wy };
+    }
+    return null;
+  }
+
+  waterNear(cx, cy, spread) {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const x = Math.floor(cx + (random() - 0.5) * 2 * spread);
+      const y = Math.floor(cy + (random() - 0.5) * 2 * spread);
+      if (this.terrain.inBounds(x, y) && this.terrain.getTile(x, y).biome.isWater) return { x, y };
+    }
+    return null;
   }
 
   landNear(cx, cy, spread) {
@@ -260,6 +312,16 @@ export class Ecosystem {
 
   // Recounts every species, moves their centroids, and reports species that have died out.
   takeCensus() {
+    // the food pyramid, counted: grazers and small fry at the bottom, hunters above
+    const t = { landPrey: 0, landHunters: 0, seaPrey: 0, seaHunters: 0, whales: 0 };
+    for (const e of this.entities) {
+      if (!e.alive || e.isSapient) continue;
+      const hunter = e.traits.carnivory > 0.6;
+      if (e.aquatic) { if (hunter) t.seaHunters++; else t.seaPrey++; }
+      else if (hunter) t.landHunters++;
+      else t.landPrey++;
+    }
+    this.trophic = t;
     const newlyExtinct = this.registry.refresh(this.entities, this.timeYears);
     for (const species of this.registry.species) species.generations = 1;
     for (const e of this.entities) {
@@ -298,6 +360,17 @@ export class Ecosystem {
     // Courtship does not always succeed; well-fed nations have more children, starving ones fewer
     let chance = 0.3 + 0.4 * mother.traits.fertility + 0.2 * (father.traits.sociality + mother.traits.sociality) / 2;
     if (civ) chance *= civ.prosperity;
+    // the food pyramid: hunters breed only as far as their prey allows (about one hunter per five prey animals; a species down to a handful is never held back)
+    if (!mother.isSapient && mother.traits.carnivory > 0.6 && !(mother.species && mother.species.population < (mother.aquatic ? 6 : 22))) {
+      const t = this.trophic;
+      if (t) {
+        const sea = mother.aquatic;
+        const prey = sea ? t.seaPrey : t.landPrey;
+        const hunters = Math.max(1, sea ? t.seaHunters : t.landHunters);
+        chance *= Math.max(0.45, Math.min(1, prey / (hunters * 5)));
+        if (sea && prey < hunters * 2) return false; // too few small fish left to feed another hunter
+      }
+    }
     father.mateCooldown = 3;
     if (random() > chance) return false;
 

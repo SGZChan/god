@@ -114,6 +114,10 @@
           </div>
         </div>
 
+        <button id="btn-world" class="icon-btn" title="World tab: peoples, faiths, wildlife and events, to read at leisure (W)">
+          <span aria-hidden="true">📖</span><span class="sr-only">World</span>
+        </button>
+
         <!-- Surface view: show or hide the side panels (overview, planet map, resources, pan pad) -->
         <button id="btn-toggle-panels" class="icon-btn" title="Show panels: world overview, planet map, resources (H)" aria-pressed="false">
           <svg class="icon" aria-hidden="true"><use href="#i-panels"/></svg><span class="sr-only">Panels</span>
@@ -298,6 +302,15 @@
           <button id="btn-cancel-new-universe" class="btn-secondary">Cancel</button>
           <button id="btn-confirm-new-universe" class="btn-primary">🌌 Ignite New Universe</button>
         </div>
+      </div>
+    </div>
+
+    <!-- WORLD TAB: the overview as a page to read -->
+    <div id="world-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="world-title">
+      <div class="modal-content world-tab">
+        <div class="modal-header"><h2 id="world-title">📖 The World</h2><button class="modal-close" id="btn-world-close" aria-label="Close">✕</button></div>
+        <div class="world-tabs" role="tablist"></div>
+        <div class="world-body"></div>
       </div>
     </div>
 

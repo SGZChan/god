@@ -9,7 +9,7 @@ import { InspectorPanel } from './ui/inspector.js';
 import { CreationWorkshop } from './workshop/creator.js';
 import { catchUpEngine } from './simulation/catchUpEngine.js';
 import { NotificationManager } from './ui/notificationManager.js';
-import { OverviewPanel, summarizeWorld } from './ui/overviewPanel.js';
+import { OverviewPanel, WorldTab, summarizeWorld } from './ui/overviewPanel.js';
 import { Minimap } from './ui/minimap.js';
 import { ResourceLensPanel } from './ui/resourceLens.js';
 import { sounds } from './audio/soundFX.js';
@@ -114,6 +114,7 @@ class GameApp {
     this.initNavigation();
     this.initPanelsToggle();
     this.initModals();
+    this.initWorldTab();
     this.initSkip();
 
     // Audio init on first user click
@@ -1238,6 +1239,23 @@ class GameApp {
   }
 
   // Every window closes with Esc or a click on the dimmed backdrop (the saved-universe question needs an answer).
+  // The overview as a full page (button 📖 or W): peoples, faiths, wildlife and the sea, events
+  initWorldTab() {
+    const root = document.getElementById('world-modal');
+    this.worldTab = new WorldTab(root, () => {
+      const sim = this.activeSim;
+      return sim ? { model: summarizeWorld(sim), events: sim.eventLog.slice(0, 40) } : null;
+    });
+    document.getElementById('btn-world').addEventListener('click', () => { sounds.playUIClick(); this.worldTab.toggle(); });
+    document.getElementById('btn-world-close').addEventListener('click', () => this.worldTab.close());
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'w' && e.key !== 'W')) return;
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (!this.worldTab.isOpen && document.querySelector('.modal-overlay:not(.hidden)')) return;
+      this.worldTab.toggle();
+    });
+  }
+
   initModals() {
     const NEEDS_ANSWER = new Set(['continue-modal', 'skip-modal']); // these close through their own buttons
     const closable = () => [...document.querySelectorAll('.modal-overlay:not(.hidden)')].filter(m => !NEEDS_ANSWER.has(m.id));

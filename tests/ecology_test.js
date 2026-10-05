@@ -26,13 +26,14 @@ section('Founders: a planet starts with random species, both sexes, no free spaw
 {
   const w = defaultWorld();
   const kinds = w.ecosystem.speciesCatalog.map(s => s.type);
-  assert(w.ecosystem.speciesCatalog.length === 12, 'twelve founder species');
-  assert(kinds.filter(k => k === 'humanoid').length === 1 && kinds.filter(k => k === 'predator').length === 2, 'one sapient, two predator species');
+  assert(w.ecosystem.speciesCatalog.length >= 12, "at least twelve founder species");
+  assert(kinds.filter(k => k === 'humanoid').length === 1 && kinds.filter(k => k === 'predator').length >= 2, 'one sapient, several predator species');
   assert(kinds.filter(k => k === 'herbivore').length >= 3 && kinds.includes('omnivore'), 'several herbivore species and omnivores');
   const looks = new Set(w.ecosystem.speciesCatalog.map(s => ['body', 'head', 'legs', 'ears', 'tail', 'horns', 'wings', 'pattern'].map(g => s.centroid[g]).join('')));
   assert(looks.size >= 6, `species look different: random combinations of parts (${looks.size} distinct)`);
   for (const species of w.ecosystem.speciesCatalog.filter(s => !s.sapient)) {
     const members = w.ecosystem.entities.filter(e => e.species === species);
+    if (!members.length) continue; // (sea species have no school on a world without sea)
     assert(members.some(m => m.sex === 'F') && members.some(m => m.sex === 'M') && members.every(m => m.isAdult), `${species.name} founders are adults of both sexes`);
   }
   assert(w.ecosystem.sapientSpecies().sapient, 'the sapient species is findable');
