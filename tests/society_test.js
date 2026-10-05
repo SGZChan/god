@@ -423,7 +423,7 @@ section('Sapient sprites: clan colour and held tool');
 
 section('Overview: society figures');
 {
-  const sim = realWorld('ov-1');
+  const sim = realWorld('ov-2');
   run(sim, 1500);
   sim.planet = { name: 'Testworld' };
   sim.eventLog = [];

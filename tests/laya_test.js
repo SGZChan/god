@@ -133,4 +133,30 @@ section('Save and load keep the Laya state');
   assert(again && again.aiSystem === 'LAYA', 'the champion is still a Laya mind');
 }
 
+section('A Laya champion lives a day: it walks, visits, prays and sleeps instead of standing still');
+{
+  const { createPlanetWorld } = await import('../src/simulation/world.js');
+  const { SeededRNG } = await import('../src/cosmos/seed.js');
+  const { setActiveRng } = await import('../src/simulation/random.js');
+  const { runSimulationSteps } = await import('../src/simulation/fixedStep.js');
+  const rng = new SeededRNG('laya-walk');
+  setActiveRng(rng);
+  const sim = createPlanetWorld(rng, { seed: 'laya-walk', radius: 1 });
+  setActiveRng(rng);
+  runSimulationSteps(sim, 20 * 80);
+  const eco = sim.ecosystem;
+  const home = sim.terrain.home;
+  const champ = eco.spawnRandomEntity(eco.sapientSpecies(), true, { name: 'Eve', epithet: 'Prophet', gender: 'Female', sex: 'F', aiSystem: 'LAYA', appearance: { auraColor: '#fff' }, personality: { openness: 1, conscientiousness: 1, extraversion: 1, agreeableness: 1, neuroticism: 0, piety: 1 }, proficiencies: { architecture: 80, warfare: 50, statesmanship: 95, farming: 70, science: 85, mysticism: 98 }, x: home.x + 8.5, y: home.y + 8.5 });
+  let moved = 0;
+  let last = { x: champ.x, y: champ.y };
+  const states = new Set();
+  for (let i = 0; i < 150 && champ.alive; i++) {
+    for (let k = 0; k < 8; k++) { runSimulationSteps(sim, 5); states.add(champ.state); }
+    moved += Math.hypot(champ.x - last.x, champ.y - last.y);
+    last = { x: champ.x, y: champ.y };
+  }
+  assert(moved > 40, `the champion walked about (${moved.toFixed(0)} tiles)`);
+  assert(states.has('SLEEP') && states.has('WORK'), `it works by day and sleeps at night (${[...states].join(', ')})`);
+}
+
 summary();

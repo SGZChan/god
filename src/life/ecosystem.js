@@ -64,6 +64,9 @@ const TUNA_GENES = { ...PREDATOR_GENES, ...SEA, body: 6, head: 10, tail: 10, hor
 const EEL_GENES = { ...PREDATOR_GENES, ...SEA, body: 14, head: 22, tail: 5, pattern: 3, size: [0.2, 0.35], carnivory: [0.7, 0.85], herbivory: [0, 0.15], fertility: [0.5, 0.7], lifespan: [0.3, 0.45] };
 const SHARK_GENES = { ...PREDATOR_GENES, ...SEA, body: 6, head: 20, tail: 10, horns: 8, pattern: 1, size: [0.7, 0.9], carnivory: [0.92, 1], herbivory: [0, 0.05], aggression: [0.8, 0.95], fertility: [0.25, 0.4], lifespan: [0.5, 0.7] };
 const WHALE_GENES = { ...HERBIVORE_GENES, ...SEA, body: 13, head: 21, tail: 9, pattern: 1, size: [0.92, 1], herbivory: [0.8, 0.95], carnivory: [0.02, 0.1], aggression: [0.05, 0.15], fertility: [0.2, 0.3], lifespan: [0.8, 0.95], speed: [0.4, 0.55], sociality: [0.6, 0.8] };
+// Ready-made sprites for a couple of familiar animals (art/sheetSprites.js)
+const CAT_GENES = { ...FOX_GENES, size: [0.1, 0.2], speed: [0.7, 0.9], fertility: [0.6, 0.8] };
+const DOG_GENES = { ...FOX_GENES, size: [0.25, 0.4], sociality: [0.7, 0.95], aggression: [0.4, 0.6] };
 const FOUNDER_PLANS = [
   { genes: SAPIENT_GENES, sapient: true, count: 0 }, // the civilizations raise the sapient founders themselves
   // Each herbivore prefers a different climate band, so they do not all compete for the same ground
@@ -75,6 +78,8 @@ const FOUNDER_PLANS = [
   { genes: OMNIVORE_GENES, count: 10 },
   { genes: FOX_GENES, count: 8 },
   { genes: APEX_GENES, count: 6 },
+  { genes: CAT_GENES, count: 6, sheets: { any: ['animal-cat-01-1', 'animal-cat-01-2', 'animal-cat-01-3'] } },
+  { genes: DOG_GENES, count: 6, sheets: { any: ['animal-dog-01-1', 'animal-dog-01-2', 'animal-dog-01-3'] } },
   { genes: DEER_GENES, count: 14 },
   { genes: RABBIT_GENES, count: 16 },
   { genes: BEAR_GENES, count: 8 },
@@ -130,7 +135,7 @@ export class Ecosystem {
     const home = this.terrain.home;
     for (const plan of FOUNDER_PLANS) {
       const template = Genome.pure(plan.genes);
-      const species = this.registry.found(template.phenotype(), { sapient: Boolean(plan.sapient), foundedAt: 0 });
+      const species = this.registry.found(template.phenotype(), { sapient: Boolean(plan.sapient), foundedAt: 0, sheets: plan.sheets || null });
       if (plan.count > 0 && plan.aquatic) {
         // a school begins in the sea nearest the start area, and more of its kind in other waters
         for (let k = 0; k < 3; k++) {
@@ -468,13 +473,20 @@ export class Ecosystem {
       intelligence: sapient ? 0.9 : 0.25
     };
     if (sapient) Object.assign(genes, { legs: 1, wings: 0 });
+    // fine control from the workshop: individual traits (0..1) override the defaults of the diet
+    const t = config.traits || {};
+    for (const k of ['aggression', 'sociality', 'fertility', 'perception', 'metabolism', 'prefTemp', 'herbivory', 'carnivory']) {
+      if (Number.isFinite(t[k])) genes[k] = clamp01(t[k]);
+    }
+    if (Number.isFinite(t.intelligence)) genes.intelligence = sapient ? Math.max(0.8, clamp01(t.intelligence)) : clamp01(t.intelligence);
     // `look` pins the body-plan and colour genes chosen in the workshop preview
     const template = Genome.pure({ ...(config.look || {}), ...genes });
     const species = this.registry.found(template.phenotype(), {
       sapient,
       name: config.name || null,
       isCustom: true,
-      foundedAt: this.timeYears
+      foundedAt: this.timeYears,
+      sheets: config.sheets || null
     });
     this.notifications.unshift({
       text: `✨ Divine Creation: You engineered a new species "${species.name}"!`,

@@ -470,6 +470,15 @@
               </div>
 
               <fieldset class="ws-group">
+                <legend>Appearance</legend>
+                <div class="ws-seg" role="group" aria-label="How the champion is drawn">
+                  <button type="button" class="seg active" data-champ-style="people">Like their people</button>
+                  <button type="button" class="seg" data-champ-style="sheet">Ready-made sprite</button>
+                </div>
+                <div id="ws-champ-sheet" hidden><div id="ws-champ-picker"></div></div>
+              </fieldset>
+
+              <fieldset class="ws-group">
                 <legend>Mind</legend>
                 <label class="ai-option-label">
                   <input type="radio" name="champ-ai" value="LAYA" data-field="champion.aiSystem">
@@ -501,8 +510,13 @@
               </fieldset>
             </section>
 
-            <!-- Species: a founding group built from genes; after that they breed and evolve on their own -->
+            <!-- Species: a founding group; after that they breed and evolve on their own -->
             <section data-panel="species" role="tabpanel" hidden>
+              <fieldset class="ws-group">
+                <legend>Start from</legend>
+                <div id="ws-archetypes" class="archetype-grid"></div>
+              </fieldset>
+
               <div class="form-grid">
                 <label class="form-group"><span>Species name</span><input type="text" data-field="species.name" maxlength="28"></label>
                 <label class="form-group"><span>Kind</span>
@@ -518,25 +532,52 @@
                     <option value="carnivore">Carnivore — hunts other creatures</option>
                   </select>
                 </label>
-                <label class="form-group"><span>Founders</span>
-                  <select data-field="species.founders" data-type="number">
-                    <option value="4">4 (fragile)</option>
-                    <option value="8">8</option>
-                    <option value="12">12</option>
-                    <option value="16">16 (robust)</option>
-                  </select>
-                </label>
               </div>
 
               <fieldset class="ws-group">
-                <legend>Genes</legend>
-                <label class="ws-slider"><span>Body size</span><input type="range" min="0.5" max="2" step="0.05" data-field="species.size" data-format="x"><output></output></label>
-                <label class="ws-slider"><span>Speed</span><input type="range" min="0.6" max="1.75" step="0.05" data-field="species.speed" data-format="x"><output></output></label>
-                <label class="ws-slider"><span>Lifespan</span><input type="range" min="6" max="90" step="1" data-field="species.lifespan" data-format="yrs"><output></output></label>
+                <legend>Look</legend>
+                <div class="ws-seg" role="group" aria-label="How the creature is drawn">
+                  <button type="button" class="seg active" data-style="parts">Build from parts</button>
+                  <button type="button" class="seg" data-style="sheet">Ready-made sprite</button>
+                </div>
+                <div id="ws-style-parts">
+                  <div id="ws-parts"></div>
+                  <div class="ws-mini-label">Colours</div>
+                  <div id="ws-colours"></div>
+                </div>
+                <div id="ws-style-sheet" hidden>
+                  <div class="sheet-target">
+                    <span>Use for</span>
+                    <label><input type="radio" name="sheet-target" value="all" checked> everyone</label>
+                    <label><input type="radio" name="sheet-target" value="F"> females</label>
+                    <label><input type="radio" name="sheet-target" value="M"> males</label>
+                  </div>
+                  <div id="ws-sheet-chosen" class="ws-note"></div>
+                  <div id="ws-sheet-picker"></div>
+                </div>
+              </fieldset>
+
+              <fieldset class="ws-group">
+                <legend>Body &amp; life</legend>
+                <label class="ws-slider"><span>Founders</span><input type="range" min="4" max="24" step="1" data-field="species.founders" data-format="int"><output></output></label>
+                <label class="ws-slider"><span>Body size</span><input type="range" min="0.4" max="2.4" step="0.05" data-field="species.size" data-format="x"><output></output></label>
+                <label class="ws-slider"><span>Speed</span><input type="range" min="0.5" max="2" step="0.05" data-field="species.speed" data-format="x"><output></output></label>
+                <label class="ws-slider"><span>Lifespan</span><input type="range" min="4" max="200" step="1" data-field="species.lifespan" data-format="yrs"><output></output></label>
                 <label class="ws-slider"><span>Cold tolerance</span><input type="range" min="0" max="1" step="0.05" data-field="species.coldResist" data-format="pct"><output></output></label>
                 <label class="ws-slider"><span>Heat tolerance</span><input type="range" min="0" max="1" step="0.05" data-field="species.heatResist" data-format="pct"><output></output></label>
               </fieldset>
-              <p class="ws-note">Founders are placed where you click. From then on nothing spawns: they mate, mutate and may split into new species.</p>
+
+              <fieldset class="ws-group">
+                <legend>Nature</legend>
+                <label class="ws-slider"><span>Intelligence</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.intelligence" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Aggression</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.aggression" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Herding instinct</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.sociality" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Fertility</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.fertility" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Senses</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.perception" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Appetite</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.metabolism" data-format="pct"><output></output></label>
+                <label class="ws-slider"><span>Comfortable warmth</span><input type="range" min="0" max="1" step="0.05" data-field="species.traits.prefTemp" data-format="pct"><output></output></label>
+              </fieldset>
+              <p class="ws-note">Founders are placed where you click (a sea creature needs water). From then on nothing spawns: they mate, mutate and may split into new species.</p>
             </section>
 
             <!-- Planet: added to the current star system -->

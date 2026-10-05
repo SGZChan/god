@@ -8,6 +8,8 @@
 import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
 import { ALL_GENES, BODY_GENES, COLOR_GENES, PART_COUNTS } from '../life/genome.js';
 import { PlanetCreator } from './planetCreator.js';
+import { PartsPicker, ColourControls, SheetPicker, ARCHETYPES } from './appearanceEditor.js';
+import { drawSheet, WALK_FRAMES, loadCatalog, sheetInfo } from '../art/sheetSprites.js';
 import { sounds } from '../audio/soundFX.js';
 
 const PRESETS = {
@@ -86,14 +88,24 @@ export class CreationWorkshop {
       speed: 1.4,
       lifespan: 40,
       coldResist: 0.7,
-      heatResist: 0.6
+      heatResist: 0.6,
+      // fine control over the nature of the creature (0..1 genes)
+      traits: { intelligence: 0.25, aggression: 0.3, sociality: 0.6, fertility: 0.6, perception: 0.6, metabolism: 0.5, prefTemp: 0.5 }
     };
     this.look = randomLook();
+    // how it is drawn: from parts (the look above) or a ready-made sprite sheet (art/sheetSprites.js)
+    this.sheetStyle = 'parts';
+    this.sheetTarget = 'all';
+    this.sheetPick = { all: null, M: null, F: null };
+    this.champSheetStyle = 'people';
+    this.animFrame = 0;
 
+    this.championConfig.appearance.sheet = null;
     this.state = { champion: this.championConfig, species: this.speciesConfig, planet: this.planetCreator.config };
     this.canvas = root.querySelector('#ws-preview-canvas');
     this.spawnBtn = root.querySelector('#btn-spawn-creation');
     this.bind();
+    this.mountEditors();
     this.syncForm();
   }
 
@@ -120,6 +132,8 @@ export class CreationWorkshop {
     root.querySelector('#ws-reroll-look').addEventListener('click', () => {
       sounds.playUIClick();
       this.look = randomLook();
+      this.parts.setLook(this.look);
+      this.colours.setLook(this.look);
       this.refresh();
     });
     root.querySelector('#btn-close-workshop').addEventListener('click', () => this.close());
@@ -127,12 +141,95 @@ export class CreationWorkshop {
     this.spawnBtn.addEventListener('click', () => this.create());
   }
 
+  // The look editors: part strips, colours, the sprite-sheet browsers and the archetype buttons
+  mountEditors() {
+    const root = this.root;
+    this.parts = new PartsPicker(root.querySelector('#ws-parts'), this.look, () => this.refresh());
+    this.colours = new ColourControls(root.querySelector('#ws-colours'), this.look, () => { this.parts.refresh(); this.refresh(); });
+    this.sheetPicker = new SheetPicker(root.querySelector('#ws-sheet-picker'), {
+      onPick: (id) => { this.sheetPick[this.sheetTarget] = id; this.updateSheetNote(); this.refresh(); }
+    });
+    this.champPicker = new SheetPicker(root.querySelector('#ws-champ-picker'), {
+      categories: ['people', 'soldier', 'monster', 'other', 'boss', 'school', 'festive'],
+      onPick: (id) => { this.championConfig.appearance.sheet = id; this.refresh(); }
+    });
+    // how the species is drawn
+    for (const b of root.querySelectorAll('[data-style]')) {
+      b.addEventListener('click', () => {
+        this.sheetStyle = b.dataset.style;
+        for (const o of root.querySelectorAll('[data-style]')) o.classList.toggle('active', o === b);
+        root.querySelector('#ws-style-parts').hidden = this.sheetStyle !== 'parts';
+        root.querySelector('#ws-style-sheet').hidden = this.sheetStyle !== 'sheet';
+        this.refresh();
+      });
+    }
+    for (const r of root.querySelectorAll('input[name="sheet-target"]')) {
+      r.addEventListener('change', () => {
+        if (!r.checked) return;
+        this.sheetTarget = r.value;
+        this.sheetPicker.select(this.sheetPick[this.sheetTarget]);
+        this.updateSheetNote();
+      });
+    }
+    // how the champion is drawn
+    for (const b of root.querySelectorAll('[data-champ-style]')) {
+      b.addEventListener('click', () => {
+        this.champSheetStyle = b.dataset.champStyle;
+        for (const o of root.querySelectorAll('[data-champ-style]')) o.classList.toggle('active', o === b);
+        root.querySelector('#ws-champ-sheet').hidden = this.champSheetStyle !== 'sheet';
+        if (this.champSheetStyle === 'people') this.championConfig.appearance.sheet = null;
+        else if (this.champPicker.selected) this.championConfig.appearance.sheet = this.champPicker.selected;
+        this.refresh();
+      });
+    }
+    // starting points
+    const box = root.querySelector('#ws-archetypes');
+    for (const a of ARCHETYPES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = a.label;
+      b.addEventListener('click', () => this.applyArchetype(a));
+      box.appendChild(b);
+    }
+    this.updateSheetNote();
+  }
+
+  updateSheetNote() {
+    const note = this.root.querySelector('#ws-sheet-chosen');
+    const label = id => (id && sheetInfo(id) ? sheetInfo(id).label : 'none yet');
+    const p = this.sheetPick;
+    note.textContent = `Everyone: ${label(p.all)} • Females: ${label(p.F)} • Males: ${label(p.M)}. A sex without its own pick uses "everyone".`;
+  }
+
+  applyArchetype(a) {
+    sounds.playUIClick();
+    const c = this.speciesConfig;
+    Object.assign(c, { name: a.cfg.name, type: a.cfg.type, diet: a.cfg.diet, size: a.cfg.size, speed: a.cfg.speed, lifespan: a.cfg.lifespan });
+    if (a.cfg.coldResist !== undefined) c.coldResist = a.cfg.coldResist;
+    if (a.cfg.heatResist !== undefined) c.heatResist = a.cfg.heatResist;
+    c.traits = { intelligence: a.cfg.type === 'humanoid' ? 0.9 : 0.25, aggression: 0.3, sociality: 0.6, fertility: 0.6, perception: 0.6, metabolism: 0.5, prefTemp: 0.5, ...(a.traits || {}) };
+    Object.assign(this.look, a.look);
+    // an archetype is a parts-built species
+    this.sheetStyle = 'parts';
+    for (const o of this.root.querySelectorAll('[data-style]')) o.classList.toggle('active', o.dataset.style === 'parts');
+    this.root.querySelector('#ws-style-parts').hidden = false;
+    this.root.querySelector('#ws-style-sheet').hidden = true;
+    this.parts.refresh();
+    this.colours.refresh();
+    this.syncForm();
+    this.refresh();
+  }
+
   open(tab = this.activeTab) {
+    clearInterval(this.animTimer);
+    this.animTimer = setInterval(() => { this.animFrame++; if (!this.root.classList.contains('hidden')) this.drawPreview(); }, 260);
+    loadCatalog().then(() => { this.sheetPicker.renderGrid(); this.champPicker.renderGrid(); });
     this.root.classList.remove('hidden');
     this.selectTab(tab);
   }
 
   close() {
+    clearInterval(this.animTimer);
     sounds.playUIClick();
     this.root.classList.add('hidden');
   }
@@ -203,7 +300,7 @@ export class CreationWorkshop {
       sub.textContent = this.championConfig.epithet;
       if (people) {
         note.textContent = `One of the ${people.name}`;
-        this.drawCreature(people.centroid, this.championConfig.appearance.auraColor, 6);
+        this.drawPreview();
       } else {
         note.textContent = `No people live on ${planetName} yet. Create a sapient species first.`;
         this.drawEmpty();
@@ -214,8 +311,10 @@ export class CreationWorkshop {
     } else if (this.activeTab === 'species') {
       const s = this.speciesConfig;
       title.textContent = s.name;
-      sub.textContent = `${s.type === 'humanoid' ? 'Sapient' : 'Animal'} • ${s.diet}`;
-      this.drawCreature(this.speciesPreviewTraits(), null, 3.5 + s.size * 1.5);
+      const swimmer = this.sheetStyle === 'parts' && [6, 13, 14].includes(Math.round(this.look.body));
+      sub.textContent = `${s.type === 'humanoid' ? 'Sapient' : 'Animal'} • ${s.diet}${swimmer ? ' • lives in the sea' : ''}`;
+      note.textContent = swimmer ? 'A swimmer: place its founders on water.' : '';
+      this.drawPreview();
       target.textContent = `${s.founders} founders on ${planetName}`;
       this.spawnBtn.textContent = '✨ Place founders';
     } else {
@@ -244,7 +343,7 @@ export class CreationWorkshop {
     ctx.fillText('?', this.canvas.width / 2, this.canvas.height / 2);
   }
 
-  drawCreature(traits, aura, scale) {
+  drawCreature(traits, aura, scale, frame = 0) {
     const ctx = this.clearStage();
     const { width, height } = this.canvas;
     if (aura) {
@@ -257,7 +356,44 @@ export class CreationWorkshop {
     const w = Math.round(SPRITE_W * scale);
     const h = Math.round(SPRITE_H * scale);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(getCreatureCanvas(traits, 0), Math.round((width - w) / 2), Math.round((height - h) / 2), w, h);
+    ctx.drawImage(getCreatureCanvas(traits, frame), Math.round((width - w) / 2), Math.round((height - h) / 2), w, h);
+  }
+
+  // The creature being made, walking on the spot (both the part-built look and the ready-made sheets)
+  drawPreview() {
+    if (this.activeTab === 'planet') return;
+    const ctx = this.clearStage();
+    const { width, height } = this.canvas;
+    const frame = this.animFrame;
+    ctx.imageSmoothingEnabled = false;
+    const sheetOf = (id, dir) => id && sheetInfo(id) && drawSheet(ctx, id, dir, WALK_FRAMES[frame % 4], width / 2, height * 0.9, height * 0.85);
+    const dirs = ['down', 'right', 'up', 'left'];
+    const dir = dirs[Math.floor(frame / 6) % 4];
+    if (this.activeTab === 'champion') {
+      const aura = this.championConfig.appearance.auraColor;
+      const glow = ctx.createRadialGradient(width / 2, height / 2, 8, width / 2, height / 2, width / 2);
+      glow.addColorStop(0, aura + 'aa');
+      glow.addColorStop(1, aura + '00');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+      if (this.championConfig.appearance.sheet && sheetOf(this.championConfig.appearance.sheet, dir)) return;
+      const sim = this.getSim();
+      const people = sim ? sim.ecosystem.sapientSpecies() : null;
+      if (people) this.drawCreature(people.centroid, null, 6, frame & 1);
+      return;
+    }
+    const sp = this.speciesConfig;
+    if (this.sheetStyle === 'sheet') {
+      const id = this.sheetPick[this.sheetTarget] || this.sheetPick.all || this.sheetPick.F || this.sheetPick.M;
+      if (!(id && sheetOf(id, dir))) {
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Pick a sprite below', width / 2, height / 2);
+      }
+      return;
+    }
+    this.drawCreature(this.speciesPreviewTraits(), null, 3.5 + sp.size * 1.5, frame & 1);
   }
 
   drawPlanet(p) {
@@ -311,9 +447,16 @@ export class CreationWorkshop {
       this.onSpawnReady({ type: 'champion', species: people, config: JSON.parse(JSON.stringify(this.championConfig)) });
     } else {
       sounds.playDivineBlessing();
-      const species = sim.ecosystem.createCustomSpecies({ ...this.speciesConfig, look: { ...this.look } });
+      const sc = this.speciesConfig;
+      const picks = this.sheetPick;
+      const sheets = this.sheetStyle === 'sheet' && (picks.all || picks.F || picks.M)
+        ? { any: picks.all || picks.F || picks.M, ...(picks.F ? { F: picks.F } : {}), ...(picks.M ? { M: picks.M } : {}) }
+        : null;
+      const species = sim.ecosystem.createCustomSpecies({ ...sc, look: { ...this.look }, sheets });
       this.onSpawnReady({ type: 'species', species, founders: this.speciesConfig.founders });
       this.look = randomLook(); // the next species gets its own look
+      this.parts.setLook(this.look);
+      this.colours.setLook(this.look);
     }
   }
 }

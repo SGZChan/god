@@ -14,7 +14,7 @@ const TYPE_SYMBOLS = { humanoid: '🧑', predator: '🐾', herbivore: '🌿', om
 
 export class Species {
   constructor({
-    id, name, centroid, sapient = false, ancestorId = null, foundedAt = 0, isCustom = false
+    id, name, centroid, sapient = false, ancestorId = null, foundedAt = 0, isCustom = false, sheets = null
   }) {
     this.id = id;
     this.name = name;
@@ -23,6 +23,7 @@ export class Species {
     this.ancestorId = ancestorId;
     this.foundedAt = foundedAt;     // simulated years
     this.isCustom = isCustom;
+    this.sheets = sheets;           // ready-made sprite sheets { M, F, any } (ids or lists of ids), see art/sheetSprites.js; null: drawn from the genes
     this.population = 0;
     this.peakPopulation = 0;
     this.generations = 1;
@@ -57,6 +58,7 @@ export class Species {
       ancestorId: this.ancestorId,
       foundedAt: this.foundedAt,
       isCustom: this.isCustom,
+      sheets: this.sheets,
       population: this.population,
       peakPopulation: this.peakPopulation,
       generations: this.generations,
@@ -92,7 +94,7 @@ export class SpeciesRegistry {
   }
 
   // Founds a species from a centroid phenotype (the first generation of a lineage).
-  found(centroid, { sapient = false, ancestorId = null, foundedAt = 0, name = null, isCustom = false } = {}) {
+  found(centroid, { sapient = false, ancestorId = null, foundedAt = 0, name = null, isCustom = false, sheets = null } = {}) {
     const draft = new Species({ id: 'draft', name: 'draft', centroid, sapient });
     let speciesName = name;
     for (let tries = 0; !speciesName && tries < 20; tries++) {
@@ -106,7 +108,8 @@ export class SpeciesRegistry {
       sapient,
       ancestorId,
       foundedAt,
-      isCustom
+      isCustom,
+      sheets
     });
     this.species.push(species);
     return species;
@@ -147,7 +150,7 @@ export class SpeciesRegistry {
     this.candidates.splice(this.candidates.indexOf(group), 1);
     const centroid = centroidOf(alive.map(m => m.traits));
     const sapient = parent.sapient ? centroid.intelligence > 0.55 : centroid.intelligence > 0.9;
-    const species = this.found(centroid, { sapient, ancestorId: parent.id, foundedAt: now });
+    const species = this.found(centroid, { sapient, ancestorId: parent.id, foundedAt: now, sheets: parent.sheets });
     for (const member of alive) member.species = species;
     if (onEmerge) onEmerge(species, parent);
     return species;

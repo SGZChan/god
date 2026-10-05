@@ -18,6 +18,7 @@ import { random, setActiveRng, withRng } from './simulation/random.js';
 import { createPlanetWorld } from './simulation/world.js';
 import { SaveError, serializeGame, restoreSim, parseSave } from './persistence/saveGame.js';
 import { SaveStore } from './persistence/saveStore.js';
+import { loadCatalog } from './art/sheetSprites.js';
 import { foundColony } from './civilization/spaceflight.js';
 import { timeOfDay, partOfDay, isNight } from './simulation/dayCycle.js';
 
@@ -103,6 +104,7 @@ class GameApp {
     this.loadSystem(this.galaxy.getActiveSystem().id);
 
     // 4. Initialize UI & Workshops
+    loadCatalog(); // the ready-made sprite sheets (art/sheetSprites.js)
     this.initUI();
     this.initWorkshop();
     this.initGuide();

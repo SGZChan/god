@@ -7,6 +7,9 @@ import { livestockAI } from '../civilization/livestock.js';
 import { makeCorpse, CORPSE_LIFE } from '../civilization/deathcare.js';
 import { isAquaticBody, aquaticAI } from './aquatic.js';
 import { UNITS, pickUnit, damageAgainst } from '../civilization/military.js';
+import { timeOfDay, isNight } from '../simulation/dayCycle.js';
+import { BUILDING_TYPES } from '../world/buildings.js';
+import { pickSheet } from '../art/sheetSprites.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -33,6 +36,7 @@ export class Entity {
     this.lifespanJitter = 0.9 + random() * 0.2;
     this.pregnancy = null;                   // { embryos: [Genome], fatherId, timeLeft }
     this.mateCooldown = 0;
+    this.dir = 'down';                     // facing (for sprite sheets): down, left, right, up
     this.unit = null;                      // soldier class (civilization/military.js)
     this.combat = null;                    // { anim, left }: an attack pose being shown
     this.dispersed = false;
@@ -135,6 +139,14 @@ export class Entity {
     if (this.age < this.stats.maturityYears) return 'juvenile';
     if (this.age > this.maxAge * 0.8) return 'elder';
     return 'adult';
+  }
+
+  // A ready-made sprite sheet this creature is drawn with (its own look, else its species'), or null: drawn from genes
+  get sheetId() {
+    if (this.appearance && this.appearance.sheet) return this.appearance.sheet;
+    const sh = this.species && this.species.sheets;
+    if (!sh) return null;
+    return pickSheet(sh[this.sex] || sh.any, this.id);
   }
 
   // Swimmers (fish, sharks, whales) live only in water; see life/aquatic.js
@@ -880,6 +892,81 @@ export class Entity {
         break;
       }
     }
+    // Between the cards a champion still lives a day: sleeps at night, eats, walks among the people, prays, patrols
+    this.layaRoutine(worldContext, decision);
+  }
+
+  // The daily life of a Laya champion (the cards above are its occasions, this is what it does in between).
+  layaRoutine(worldContext, decision) {
+    const terrain = worldContext.terrain;
+    const eco = worldContext.ecosystem;
+    const civ = this.civilization;
+    const card = decision.card;
+    if (card && Math.hypot(card.x - this.x, card.y - this.y) > 2) { this.state = 'WORK'; this.activity = decision.title || 'On a mission'; return; } // walking to a card
+    if (this.path.length > 0) return;                     // already on its way somewhere
+    const L = this.laya || (this.laya = { stats: {}, recent: [] });
+    const stuck = L.routine && L.routine.fail > 2;
+    const st = civ && civ.settlements && civ.settlements.length
+      ? civ.settlements.reduce((best, s) => (!best || Math.hypot(s.x - this.x, s.y - this.y) < Math.hypot(best.x - this.x, best.y - this.y) ? s : best), null)
+      : null;
+    const anchor = st ? { x: st.x, y: st.y } : terrain.home;
+    const go = (x, y, state, activity) => {
+      this.state = state;
+      this.activity = activity;
+      this.requestPath(x, y, worldContext.pathfinder, 600);
+      if (this.path.length === 0) { L.routine = { fail: ((L.routine && L.routine.fail) || 0) + 1 }; return false; }
+      L.routine = { fail: 0 };
+      return true;
+    };
+    const near = (x, y, r = 3) => Math.hypot(this.x - x, this.y - y) <= r;
+
+    // night: home to rest (or by the nearest shrine, or where it stands)
+    if (isNight(timeOfDay(eco.timeYears)) && !(this.role === 'SOLDIER' && civ && civ.warTarget)) {
+      let spot = anchor;
+      if (this.homeId) { const h = terrain.getBuilding(this.homeId); if (h) spot = { x: h.x + h.w / 2, y: h.y + h.h + 0.5 }; }
+      if (near(spot.x, spot.y, 3.5) || stuck) {
+        this.state = 'SLEEP'; this.activity = 'Resting for the night'; this.path = [];
+        this.energy = Math.min(100, this.energy + 6);
+        this.health = Math.min(this.maxHealth, this.health + 1.5);
+        this.actionCooldown = 2.5;
+        return;
+      }
+      if (go(spot.x, spot.y, 'HOMEWARD', 'Going to rest')) return;
+    }
+    // hungry: to the stores
+    if (this.hunger > 55 && civ && civ.food >= 2) {
+      const depot = st ? { x: st.x, y: st.y } : anchor;
+      if (near(depot.x, depot.y, 3)) { civ.food -= 2; this.hunger = Math.max(0, this.hunger - 60); this.state = 'EAT'; this.activity = 'Taking a meal with the people'; this.actionCooldown = 1.5; return; }
+      if (go(depot.x, depot.y, 'WORK', 'Going to eat')) return;
+    }
+    // otherwise: a round of the town
+    const roll = random();
+    const people = (worldContext.grid ? worldContext.grid.within(this.x, this.y, 40) : worldContext.entities)
+      .filter(e => e.alive && e !== this && e.isSapient && (!civ || e.civilization === civ) && Math.hypot(e.x - this.x, e.y - this.y) > 3);
+    const sacred = [];
+    const work = [];
+    for (const b of terrain.buildingsInRect(anchor.x - 24, anchor.y - 24, anchor.x + 24, anchor.y + 24)) {
+      if (b.progress < 1 && civ && b.civId === civ.id) work.push(b);
+      else if (b.progress >= 1 && (b.type === 'shrine' || b.type === 'temple' || b.type === 'cathedral' || b.type === 'graveyard' || b.type === 'barrow')) sacred.push(b);
+      else if (b.progress >= 1 && ['farm', 'market', 'library', 'workshop', 'well', 'granary'].includes(b.type)) work.push(b);
+    }
+    if (roll < 0.34 && people.length) {
+      const p = people[Math.floor(random() * people.length)];
+      if (go(p.x, p.y, 'WORK', `Visiting ${p.name}`)) { this.actionCooldown = 0.6; return; }
+    } else if (roll < 0.52 && sacred.length) {
+      const b = sacred[Math.floor(random() * sacred.length)];
+      if (go(b.x + b.w / 2, b.y + b.h + 0.6, 'WORK', 'Walking to pray')) { L.praying = b.id; return; }
+    } else if (roll < 0.72 && work.length) {
+      const b = work[Math.floor(random() * work.length)];
+      if (go(b.x + b.w / 2, b.y + b.h + 0.6, 'WORK', `Looking in on the ${BUILDING_TYPES[b.type] ? BUILDING_TYPES[b.type].name.toLowerCase() : 'works'}`)) return;
+    }
+    // patrol: a loop round the settlement
+    const a = random() * Math.PI * 2;
+    const r = 5 + random() * 14;
+    if (!go(anchor.x + Math.cos(a) * r, anchor.y + Math.sin(a) * r, 'WORK', 'Walking the town')) {
+      // nowhere to go from here: a short wander
+      this.requestPath(this.x + (random() - 0.5) * 12, this.y + (random() - 0.5) * 12, worldContext.pathfinder);
+    }
   }
 
   // If the creature stands on a solid building tile (a wall rose around it), step out to the nearest free tile.
@@ -948,6 +1035,7 @@ export class Entity {
     const moveDist = Math.min(0.9, (baseSpeed / terrainCost) * sim); // (never more than a tile per step: no tunnelling through thin walls)
 
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
+    this.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
     const nx = this.x + (dx / dist) * Math.min(dist, moveDist);
     const ny = this.y + (dy / dist) * Math.min(dist, moveDist);
     const flying = unit && unit.kind === 'air';

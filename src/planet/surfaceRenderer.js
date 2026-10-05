@@ -2,6 +2,9 @@
 import { CHUNK_SIZE } from './terrain.js';
 import { getCreatureCanvas, getVehicleCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
 import { UNITS } from '../civilization/military.js';
+import { drawSheet, WALK_FRAMES } from '../art/sheetSprites.js';
+
+const SHEET_SCALE = 1.6; // a ready-made sprite sheet frame is drawn this many times as tall as the gene-built sprite
 import { VEHICLE_SIZE } from '../art/warSprites.js';
 import { JOB_INFO } from '../civilization/jobs.js';
 import { itemColor } from '../civilization/economy.js';
@@ -661,7 +664,7 @@ export class SurfaceRenderer {
         ctx.translate(px, cy);
         ctx.rotate(Math.PI / 2);
         ctx.globalAlpha = 0.92;
-        ctx.drawImage(getCreatureCanvas(ent.traits, 0, null), -spriteW / 2, -spriteH * 0.5, spriteW, spriteH);
+        if (!(ent.sheetId && drawSheet(ctx, ent.sheetId, 'down', 1, 0, spriteH * 0.4, spriteH * SHEET_SCALE))) ctx.drawImage(getCreatureCanvas(ent.traits, 0, null), -spriteW / 2, -spriteH * 0.5, spriteW, spriteH);
         // a pale shroud over the body
         ctx.fillStyle = 'rgba(232, 230, 222, 0.82)';
         ctx.fillRect(-spriteW * 0.5, -spriteH * 0.02, spriteW, spriteH * 0.52);
@@ -732,6 +735,27 @@ export class SurfaceRenderer {
       ctx.beginPath();
       ctx.ellipse(px, py + spriteH * 0.18, spriteW * 0.38, spriteH * 0.09, 0, 0, Math.PI * 2);
       ctx.fill();
+      // a ready-made sprite sheet (art/sheetSprites.js): four facings and a walking cycle
+      let sheetDrawn = false;
+      const sid = ent.sheetId;
+      if (sid) {
+        const su = ent.isSapient && ent.role === 'SOLDIER' && ent.civilization && ent.civilization.warTarget && ent.unit ? UNITS[ent.unit] : null;
+        if (!(su && su.kind !== 'foot')) {
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;
+          if (asleep) { ctx.translate(px, py); ctx.rotate(Math.PI / 2); ctx.translate(-px, -py + spriteH * 0.25); }
+          const moving = ent.path.length > 0 && !asleep;
+          const sf = moving ? WALK_FRAMES[Math.floor(this.waterAnimTime * 7 + ent.homeX) & 3] : 1;
+          sheetDrawn = drawSheet(ctx, sid, ent.dir || 'down', sf, px, py + spriteH * 0.12, spriteH * SHEET_SCALE);
+          ctx.restore();
+          if (sheetDrawn && ent.isSapient && ent.civilization) {
+            // the people's colour as a ring at the feet
+            ctx.strokeStyle = (clanColors.get(ent.clanId) || ent.civilization.color) + 'cc';
+            ctx.lineWidth = 1.4 / this.camera.zoom;
+            ctx.beginPath(); ctx.ellipse(px, py + spriteH * 0.16, spriteW * 0.3, spriteH * 0.07, 0, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+      }
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       if (asleep) { ctx.translate(px, py); ctx.rotate(Math.PI / 2 * (ent.facing < 0 ? -1 : 1)); ctx.translate(-px, -py + spriteH * 0.25); }
@@ -786,7 +810,7 @@ export class SurfaceRenderer {
         extras.unit = null;
         extras.anim = null;
       }
-      ctx.drawImage(getCreatureCanvas(ent.traits, frame, extras), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
+      if (!sheetDrawn) ctx.drawImage(getCreatureCanvas(ent.traits, frame, extras), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
       ctx.restore();
 
       if (asleep) this.drawGlyph(ctx, '💤', Math.floor(ts * 0.6), px, py - spriteH * 0.7 + Math.sin(this.waterAnimTime * 2 + ent.homeX) * ts * 0.1);
