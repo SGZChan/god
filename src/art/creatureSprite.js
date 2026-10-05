@@ -2,6 +2,7 @@
 // can be tested without a browser; the helpers below turn a sprite into a canvas or data URL.
 import { PART_COUNTS } from '../life/genome.js';
 import { HEADS, BODIES, LEGS, EARS, HORNS, WINGS, TAILS, MUTATIONS } from './creatureParts.js';
+import { gearPixels, vehicleSprite } from './warSprites.js';
 
 export const SPRITE_W = 20;
 export const SPRITE_H = 20;
@@ -132,7 +133,7 @@ export const TOOLS = {
 
 // Pixels to paint over the base sprite. `clanColor` is '#rrggbb' or null, `tool` a key of TOOLS or null.
 // The headband sits on the head (row 3) and the sash across the shoulders (row 9); everything shifts down 1 px with the walking bob.
-export function decorationPixels(clanColor, tool, bob = 0) {
+export function decorationPixels(clanColor, tool, bob = 0, unit = null, anim = null) {
   const out = [];
   if (clanColor) {
     const dark = shade(clanColor, 0.72);
@@ -141,7 +142,9 @@ export function decorationPixels(clanColor, tool, bob = 0) {
     for (let x = 6; x <= 13; x++) out.push([x, 9, x % 3 === 0 ? dark : clanColor]);
   }
   if (tool && TOOLS[tool]) out.push(...TOOLS[tool]());
-  return out.map(([x, y, c]) => [x, y + bob, c]);
+  // soldiers: armour and weapons of their class, with the attack pose while fighting (art/warSprites.js)
+  const gear = unit ? gearPixels(unit, anim, 0, clanColor || '#38bdf8') : [];
+  return [...out, ...gear].map(([x, y, c]) => [x, y + bob, c]);
 }
 
 // ---------- colours ----------
@@ -179,10 +182,10 @@ export function paletteFor(traits) {
 // ---------- rendering (browser) ----------
 
 // Sprites with the same parts, colours (to a coarse step) and frame share one canvas.
-export function spriteKey(traits, frame, clanColor = null, tool = null) {
+export function spriteKey(traits, frame, clanColor = null, tool = null, unit = null, anim = null) {
   const parts = Object.keys(PART_COUNTS).map(g => Math.round(traits[g])).join('');
   const q = (v, n) => Math.min(n - 1, Math.floor(v * n));
-  return `${parts}|${q(traits.hue, 24)}|${q(traits.sat, 4)}|${q(traits.light, 4)}|${q(traits.hue2, 4)}|${q(traits.eyeHue, 4)}|${frame}${clanColor || tool ? `|${clanColor || '-'}|${tool || '-'}` : ''}`;
+  return `${parts}|${q(traits.hue, 24)}|${q(traits.sat, 4)}|${q(traits.light, 4)}|${q(traits.hue2, 4)}|${q(traits.eyeHue, 4)}|${frame}${clanColor || tool || unit ? `|${clanColor || '-'}|${tool || '-'}|${unit || '-'}|${anim || '-'}` : ''}`;
 }
 
 const canvasCache = new Map();
@@ -191,7 +194,9 @@ const canvasCache = new Map();
 export function getCreatureCanvas(traits, frame = 0, extras = null) {
   const clanColor = extras ? extras.clanColor || null : null;
   const tool = extras ? extras.tool || null : null;
-  const key = spriteKey(traits, frame, clanColor, tool);
+  const unit = extras ? extras.unit || null : null;
+  const anim = extras ? extras.anim || null : null;
+  const key = spriteKey(traits, frame, clanColor, tool, unit, anim);
   let canvas = canvasCache.get(key);
   if (!canvas) {
     const rows = composeSprite(traits, frame);
@@ -208,14 +213,35 @@ export function getCreatureCanvas(traits, frame = 0, extras = null) {
         ctx.fillRect(x, y, 1, 1);
       }
     });
-    if (clanColor || tool) {
-      for (const [x, y, color] of decorationPixels(clanColor, tool, frame === 1 ? 1 : 0)) {
+    if (clanColor || tool || unit) {
+      for (const [x, y, color] of decorationPixels(clanColor, tool, frame === 1 ? 1 : 0, unit, anim)) {
         if (x < 0 || x >= SPRITE_W || y < 0 || y >= SPRITE_H) continue;
         ctx.fillStyle = color;
         ctx.fillRect(x, y, 1, 1);
       }
     }
     canvasCache.set(key, canvas);
+  }
+  return canvas;
+}
+
+// Machines of war (tanks, catapults, aircraft, walkers...): one canvas per machine, colour and pose
+const vehicleCache = new Map();
+export function getVehicleCanvas(gear, civColor = '#38bdf8', anim = null) {
+  const key = `${gear}|${civColor}|${anim || '-'}`;
+  let canvas = vehicleCache.get(key);
+  if (!canvas) {
+    const v = vehicleSprite(gear, civColor, anim);
+    canvas = document.createElement('canvas');
+    canvas.width = v.w + 4;
+    canvas.height = v.h + 4;
+    const ctx = canvas.getContext('2d');
+    for (const [x, y, color] of v.pixels) {
+      if (x < 0 || y < 0 || x >= v.w || y >= v.h) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(x + 2, y + 2, 1, 1);
+    }
+    vehicleCache.set(key, canvas);
   }
   return canvas;
 }

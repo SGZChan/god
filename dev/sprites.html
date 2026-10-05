@@ -20,7 +20,8 @@
     import { SeededRNG } from '/src/cosmos/seed.js';
     import { setActiveRng } from '/src/simulation/random.js';
     import { Genome, PART_COUNTS, recombine } from '/src/life/genome.js';
-    import { getCreatureCanvas } from '/src/art/creatureSprite.js';
+    import { getCreatureCanvas, getVehicleCanvas } from '/src/art/creatureSprite.js';
+    import { UNITS } from '/src/civilization/military.js';
 
     const SCALE = 6;
     const seed = new URLSearchParams(location.search).get('seed') || 'sheet';
@@ -44,6 +45,41 @@
       parent.appendChild(cell);
     }
 
+    // armies: every unit class at rest and attacking, then the machines (idle and firing)
+    {
+      const human = Genome.pure({ body: 5, head: 6, legs: 1, ears: 0, tail: 0, horns: 0, wings: 0, pattern: 0, hue: 0.07, sat: 0.6, light: 0.5, hue2: 0.3, eyeHue: 0.6 }).phenotype();
+      const war = document.createElement('div');
+      war.className = 'row';
+      document.getElementById('random').before(war);
+      for (const [id, u] of Object.entries(UNITS)) {
+        if (u.kind !== 'foot') continue;
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.display = 'flex'; cell.style.gap = '2px'; cell.title = u.name;
+        for (const anim of [null, u.anim]) {
+          const src = getCreatureCanvas(human, 0, { clanColor: '#38bdf8', unit: id, anim });
+          const c = document.createElement('canvas'); c.width = src.width * 5; c.height = src.height * 5;
+          const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(src, 0, 0, c.width, c.height);
+          cell.appendChild(c);
+        }
+        war.appendChild(cell);
+      }
+      const machines = document.createElement('div');
+      machines.className = 'row';
+      document.getElementById('random').before(machines);
+      for (const [id, u] of Object.entries(UNITS)) {
+        if (u.kind === 'foot') continue;
+        const cell = document.createElement('div');
+        cell.className = 'cell'; cell.style.display = 'flex'; cell.style.gap = '4px'; cell.title = u.name;
+        for (const anim of [null, 'fire']) {
+          const src = getVehicleCanvas(u.gear, '#38bdf8', anim);
+          const c = document.createElement('canvas'); c.width = src.width * 4; c.height = src.height * 4;
+          const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(src, 0, 0, c.width, c.height);
+          cell.appendChild(c);
+        }
+        machines.appendChild(cell);
+      }
+    }
     // the founding body plans: people, fish folk, and hybrids of two kinds (a child takes each part from either parent)
     const mk = parts => Genome.pure({ ...parts, hue: 0.08, sat: 0.6, light: 0.5, hue2: 0.3, eyeHue: 0.6 });
     const kinds = {

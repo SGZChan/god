@@ -6,6 +6,7 @@ import { makeName } from './names.js';
 import { livestockAI } from '../civilization/livestock.js';
 import { makeCorpse, CORPSE_LIFE } from '../civilization/deathcare.js';
 import { isAquaticBody, aquaticAI } from './aquatic.js';
+import { UNITS, pickUnit, damageAgainst } from '../civilization/military.js';
 
 const YEARS_PER_SECOND = 0.25; // one simulated year is 4 simulated seconds
 
@@ -32,6 +33,8 @@ export class Entity {
     this.lifespanJitter = 0.9 + random() * 0.2;
     this.pregnancy = null;                   // { embryos: [Genome], fatherId, timeLeft }
     this.mateCooldown = 0;
+    this.unit = null;                      // soldier class (civilization/military.js)
+    this.combat = null;                    // { anim, left }: an attack pose being shown
     this.dispersed = false;
     this.homeX = this.x;
     this.homeY = this.y;
@@ -197,6 +200,8 @@ export class Entity {
   update(dt, speedMultiplier, worldContext) {
     if (!this.alive) return;
     const sim = dt * Math.max(1, speedMultiplier); // simulated seconds
+
+    if (this.combat) { this.combat.left -= sim; if (this.combat.left <= 0) this.combat = null; }
 
     // A building that went up (or completed) where this creature stands must not swallow it
     if (worldContext && worldContext.terrain) this.unstickFromBuildings(worldContext.terrain);
@@ -611,17 +616,45 @@ export class Entity {
         e.alive && !e.isSpecialIndividual && e.civilization === foe && e.role === 'SOLDIER' && e.isAdult
         && Math.hypot(e.x - this.x, e.y - this.y) < front
       );
+      // the soldier's class follows the age and the industry of its people (civilization/military.js)
+      const eraId = this.civilization.era && this.civilization.era.id;
+      if (!this.unit || this.unitEra !== eraId) {
+        this.unit = pickUnit(this.civilization, worldContext.ecosystem, worldContext.terrain, random);
+        this.unitEra = eraId;
+      }
+      const U = UNITS[this.unit] || UNITS.clubman;
       if (enemy) {
         this.state = 'WAR_MARCH';
         this.target = enemy;
-        this.activity = `Fighting the soldiers of ${foe.name}`;
-        this.requestPath(enemy.x, enemy.y, worldContext.pathfinder);
-        if (Math.hypot(this.x - enemy.x, this.y - enemy.y) < 1.4) {
-          enemy.health -= 22 + this.proficiencies.warfare / 5;
-          if (enemy.health <= 0) {
-            enemy.die(`Killed in War by ${this.civilization.name} Soldier`);
-            this.kills++;
+        this.activity = `${U.name} fighting the soldiers of ${foe.name}`;
+        const dist = Math.hypot(this.x - enemy.x, this.y - enemy.y);
+        if (dist > U.range * 0.85) {
+          // advance (aircraft fly straight over everything, the rest find a way)
+          if (U.kind === 'air') this.path = [{ x: enemy.x, y: enemy.y }];
+          else if (this.path.length === 0 || random() < 0.25) this.requestPath(enemy.x, enemy.y, worldContext.pathfinder);
+          return true;
+        }
+        // in range: stand and fight
+        this.path = [];
+        this.facing = enemy.x >= this.x ? 1 : -1;
+        const dmg = damageAgainst(this.unit, this.proficiencies.warfare, enemy.unit, random);
+        enemy.health -= dmg;
+        const eco = worldContext.ecosystem;
+        if (eco.warFx) {
+          eco.warFx.push({ fx: U.fx, unit: this.unit, x0: this.x, y0: this.y, x1: enemy.x, y1: enemy.y });
+          if (eco.warFx.length > 240) eco.warFx.splice(0, eco.warFx.length - 240);
+        }
+        // blasts and volleys hurt the ones standing close to the target
+        if (U.splash) {
+          for (const e of worldContext.entities) {
+            if (e !== enemy && e.alive && e.civilization === foe && Math.hypot(e.x - enemy.x, e.y - enemy.y) < U.splash) e.health -= dmg * 0.5;
           }
+        }
+        this.combat = { anim: U.anim, left: 0.55 };
+        this.actionCooldown = U.cd * (0.9 + random() * 0.2);
+        if (enemy.health <= 0) {
+          enemy.die(`Killed in War by ${this.civilization.name} ${U.name}`);
+          this.kills++;
         }
         return true;
       }
@@ -635,10 +668,13 @@ export class Entity {
       if (target) {
         this.state = 'RAID';
         this.activity = `Raiding ${target.name}`;
-        if (best > 3) {
-          if (this.path.length === 0 || random() < 0.2) this.requestPath(target.x + 0.5, target.y + 0.5, worldContext.pathfinder);
+        const standoff = Math.max(3, U.range * 0.7);
+        if (best > standoff) {
+          if (U.kind === 'air') this.path = [{ x: target.x + 0.5, y: target.y + 0.5 }];
+          else if (this.path.length === 0 || random() < 0.2) this.requestPath(target.x + 0.5, target.y + 0.5, worldContext.pathfinder);
           return true;
         }
+        this.path = [];
         // loot food and goods for home, and set fire to a building
         const loot = {};
         for (const k of ['grain', 'meat', 'fish', 'berries', 'tools', 'bronze', 'iron_bar']) {
@@ -650,8 +686,11 @@ export class Entity {
         const victims = terrain.buildingsInRect(target.x - 8, target.y - 8, target.x + 8, target.y + 8).filter(b => b.civId === foe.id && b.progress >= 1);
         if (victims.length && random() < 0.35) {
           const b = victims[Math.floor(random() * victims.length)];
-          terrain.damageBuilding(b.id, 30);
+          terrain.damageBuilding(b.id, 20 + U.dmg * 0.7);
           terrain.spawnParticles(b.x + b.w / 2, b.y + b.h / 2, 12, '#f97316', 1.2);
+          const eco = worldContext.ecosystem;
+          if (eco.warFx) eco.warFx.push({ fx: U.fx, unit: this.unit, x0: this.x, y0: this.y, x1: b.x + b.w / 2, y1: b.y + b.h / 2 });
+          this.combat = { anim: U.anim, left: 0.55 };
         }
         // an adult who stands in the way may be struck down
         const defender = this.findNearestEntity(worldContext.entities, e => e.alive && e.civilization === foe && e.isAdult && !e.isSpecialIndividual && Math.hypot(e.x - this.x, e.y - this.y) < 2);
@@ -904,14 +943,17 @@ export class Entity {
     // Young creatures are slower; pregnant ones too
     const grown = 0.5 + 0.5 * Math.min(1, this.age / this.stats.maturityYears);
     const burden = this.pregnancy ? 0.8 : 1;
-    const baseSpeed = this.stats.speedMult * 2.2 * grown * burden;
+    const unit = this.role === 'SOLDIER' && this.unit && this.civilization && this.civilization.warTarget ? UNITS[this.unit] : null;
+    const baseSpeed = this.stats.speedMult * 2.2 * grown * burden * (unit ? unit.speed : 1);
     const moveDist = Math.min(0.9, (baseSpeed / terrainCost) * sim); // (never more than a tile per step: no tunnelling through thin walls)
 
     if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
     const nx = this.x + (dx / dist) * Math.min(dist, moveDist);
     const ny = this.y + (dy / dist) * Math.min(dist, moveDist);
+    const flying = unit && unit.kind === 'air';
     // swimmers never leave the water
     if (this.aquatic && !terrain.getTile(Math.floor(nx), Math.floor(ny)).biome.isWater) { this.path = []; return; }
+    if (flying) { this.x = Math.max(0.01, Math.min(terrain.width - 0.01, nx)); this.y = Math.max(0.01, Math.min(terrain.height - 0.01, ny)); return; }
     // Walls block walking: a step into a solid building tile (not through a door) is refused and the path dropped
     const toStruct = terrain.getTile(Math.floor(nx), Math.floor(ny)).structure;
     // (only a creature already standing inside a solid footprint may move within it, to get out: the door tile is not solid,

@@ -89,13 +89,14 @@ export function bodyOptions(ent, c, options) {
     for (const dead of bodiesOf(ecosystem, civ, ['lying'])) {
       const cp = dead.corpse;
       if ((cp.noClaimUntil || 0) > clock) continue;
-      if (cp.claim && cp.claim !== ent.id && clock - cp.claimAt < 15) {
+      // one bearer at a time: if someone else has taken it up, the rest go on with their day
+      if (cp.claim && cp.claim !== ent.id && clock - cp.claimAt < 25) {
         const other = ecosystem.byId.get(cp.claim);
-        if (other && other.alive && !isKin(ent, dead)) continue;
+        if (other && other.alive) continue;
       }
       const d = dist(ent, dead);
       const kin = isKin(ent, dead);
-      if (d > (kin ? 70 : 12)) continue;
+      if (d > (kin ? 26 : 9)) continue;
       const score = kin ? 0.97 - d * 0.001 : 0.74 - d * 0.01;
       if (score > bestScore) { bestScore = score; best = dead; }
     }
@@ -111,8 +112,8 @@ export function bodyOptions(ent, c, options) {
     // a funeral is held: close family comes (at most six, for a short while)
     for (const dead of bodiesOf(ecosystem, civ, ['rite'])) {
       const f = dead.corpse.funeral;
-      if (!f || !isKin(ent, dead) || dist(ent, f.site) > 60 || clock - (f.started || clock) > 14) continue;
-      if (!f.mourners[ent.id] && Object.keys(f.mourners).length >= 6) continue;
+      if (!f || !isKin(ent, dead) || dist(ent, f.site) > 30 || clock - (f.started || clock) > 12) continue;
+      if (!f.mourners[ent.id] && Object.keys(f.mourners).length >= 4) continue;
       options.push({ score: 0.93, run: () => {
         const target = f.spot;
         helpers.say(ent, `Mourning ${dead.name}`);

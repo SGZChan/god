@@ -1,6 +1,8 @@
 // 2D High-Performance Surface Canvas Renderer with Minecraft-Style Top-Down Structures, Smooth Pan/Zoom & Drag Brush
 import { CHUNK_SIZE } from './terrain.js';
-import { getCreatureCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
+import { getCreatureCanvas, getVehicleCanvas, SPRITE_W, SPRITE_H } from '../art/creatureSprite.js';
+import { UNITS } from '../civilization/military.js';
+import { VEHICLE_SIZE } from '../art/warSprites.js';
 import { JOB_INFO } from '../civilization/jobs.js';
 import { itemColor } from '../civilization/economy.js';
 
@@ -36,6 +38,7 @@ export class SurfaceRenderer {
 
     // Current Divine Power reference
     this.currentPower = null;
+    this.warFx = [];
     this.onTileClicked = null;
 
     // Continuous brush dragging support
@@ -737,16 +740,51 @@ export class SurfaceRenderer {
         ctx.scale(-1, 1);
         ctx.translate(-px, 0);
       }
+      // soldiers at war: a machine instead of a body (tanks, catapults, aircraft, walkers), see civilization/military.js
+      const atWar = ent.isSapient && ent.role === 'SOLDIER' && ent.civilization && ent.civilization.warTarget;
+      const U = atWar && ent.unit ? UNITS[ent.unit] : null;
+      if (U && U.kind !== 'foot') {
+        ctx.restore();
+        const k = spriteH / SPRITE_H;
+        const [vw, vh] = VEHICLE_SIZE[U.gear] || [24, 16];
+        const canvas = getVehicleCanvas(U.gear, ent.civilization.color, ent.combat ? 'fire' : null);
+        const dw = (vw + 4) * k * 0.8;
+        const dh = (vh + 4) * k * 0.8;
+        const air = U.kind === 'air';
+        const lift = air ? ts * 1.3 + Math.sin(this.waterAnimTime * 3 + ent.homeX) * ts * 0.12 : 0;
+        // moving machines rock a little
+        const rock = ent.path.length > 0 && !air ? Math.sin(this.waterAnimTime * 14 + ent.homeX) * k * 0.25 : 0;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        if (air) {
+          ctx.fillStyle = 'rgba(0,0,0,0.28)';
+          ctx.beginPath(); ctx.ellipse(px, py + spriteH * 0.12, dw * 0.35, dh * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.translate(px, py - lift + rock);
+        if (ent.facing < 0) ctx.scale(-1, 1);
+        ctx.drawImage(canvas, -dw / 2, -dh * 0.85, dw, dh);
+        ctx.restore();
+        ctx.save();
+        if (ent.combat) this.drawGlyph(ctx, '💥', Math.floor(ts * 0.5), px, py - lift - dh * 0.95);
+        ctx.restore();
+        continue;
+      }
       // sapients wear their clan's colour and carry the tool of their job
       let extras = null;
       if (ent.isSapient && ent.civilization && ent.isAdult) {
         extras = this._extras || (this._extras = { clanColor: null, tool: null });
         extras.clanColor = clanColors.get(ent.clanId) || null;
-        extras.tool = (ent.role === 'SOLDIER' && ent.civilization.warTarget) ? 'spear' : (JOB_TOOLS[ent.job] || null);
+        extras.tool = (ent.role === 'SOLDIER' && ent.civilization.warTarget) ? null : (JOB_TOOLS[ent.job] || null);
+        // a soldier wears the colours of the whole people at war and carries the arms of his class (art/warSprites.js)
+        extras.unit = U ? ent.unit : (ent.role === 'SOLDIER' && ent.unit ? ent.unit : null);
+        extras.anim = ent.combat ? ent.combat.anim : null;
+        if (U) extras.clanColor = ent.civilization.color;
       } else if (ent.isSapient && ent.civilization) {
         extras = this._extras || (this._extras = { clanColor: null, tool: null });
         extras.clanColor = clanColors.get(ent.clanId) || null;
         extras.tool = null;
+        extras.unit = null;
+        extras.anim = null;
       }
       ctx.drawImage(getCreatureCanvas(ent.traits, frame, extras), px - spriteW / 2, py - spriteH * 0.8, spriteW, spriteH);
       ctx.restore();
@@ -798,6 +836,20 @@ export class SurfaceRenderer {
       drawStatusFx(ctx, this.ecosystem.entities, ts, this.waterAnimTime, fxView);
       drawSkyFx(ctx, effects, ts, this.waterAnimTime, fxView);
     }
+
+    // War effects: arrows, bullets, shells, lasers, sword strokes and the blasts where they land
+    if (!farView) {
+      const queue = this.ecosystem.warFx;
+      if (queue && queue.length) {
+        for (const f of queue.splice(0)) this.warFx.push(makeWarFx(f));
+        if (this.warFx.length > 300) this.warFx.splice(0, this.warFx.length - 300);
+      }
+      if (this.warFx.length) {
+        for (const f of this.warFx) f.age += dt;
+        this.warFx = this.warFx.filter(f => f.age < f.life + f.after);
+        drawWarFx(ctx, this.warFx, ts, this.camera.zoom);
+      }
+    } else if (this.ecosystem.warFx) this.ecosystem.warFx.length = 0;
 
     // 4. Draw Divine Impact Particles
     for (const p of this.terrain.particles) {
@@ -1003,4 +1055,121 @@ function drawStructureMark(ctx, structure, px, py, ts) {
   ctx.fillStyle = color;
   ctx.fillRect(px + pad, py + pad, ts - pad * 2, ts - pad * 2);
   if (structure.type === 'capital') drawCrown(ctx, px + ts / 2, py + ts / 2, ts * 0.4);
+}
+
+
+// ---------- war effects (see civilization/military.js UNITS[...].fx) ----------
+
+const FX_LIFE = { melee: [0.28, 0], stone: [0.45, 0.1], arrow: [0.5, 0.1], bullet: [0.14, 0.12], tracer: [0.18, 0.12], shell: [0.7, 0.5], boulder: [0.9, 0.5], bolt: [0.16, 0.2], laser: [0.2, 0.15], plasma: [0.55, 0.45] };
+
+function makeWarFx(f) {
+  const [flight, after] = FX_LIFE[f.fx] || [0.3, 0.1];
+  const dist = Math.hypot(f.x1 - f.x0, f.y1 - f.y0);
+  // slow things fly longer the farther they go
+  const slow = f.fx === 'shell' || f.fx === 'boulder' || f.fx === 'arrow' || f.fx === 'stone' || f.fx === 'plasma';
+  return { ...f, age: 0, life: slow ? flight * (0.5 + dist / 24) : flight, after, jitter: Math.random() * 0.6 - 0.3 };
+}
+
+function drawWarFx(ctx, list, ts, zoom) {
+  const px = 1 / zoom;
+  for (const f of list) {
+    const x0 = f.x0 * ts;
+    const y0 = (f.y0 - 0.5) * ts;
+    const x1 = (f.x1 + f.jitter * 0.5) * ts;
+    const y1 = (f.y1 - 0.4) * ts;
+    const t = Math.min(1, f.age / f.life);
+    const landed = f.age >= f.life;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    ctx.save();
+    switch (f.fx) {
+      case 'melee': {
+        // a stroke of the blade: a pale crescent at the foe and sparks
+        const a = t * Math.PI * 0.9 - 0.2;
+        ctx.strokeStyle = `rgba(241,245,249,${1 - t})`;
+        ctx.lineWidth = 2.2 * px;
+        ctx.beginPath(); ctx.arc(x1, y1, ts * 0.7, a - 1.1, a, false); ctx.stroke();
+        ctx.fillStyle = `rgba(253,224,71,${1 - t})`;
+        for (let i = 0; i < 4; i++) ctx.fillRect(x1 + Math.cos(i * 1.7 + a) * ts * 0.5 * t, y1 + Math.sin(i * 1.7 + a) * ts * 0.5 * t, 1.6 * px, 1.6 * px);
+        break;
+      }
+      case 'arrow':
+      case 'stone': {
+        if (landed) break;
+        const arc = Math.sin(t * Math.PI) * Math.min(len * 0.25, ts * 3);
+        const x = x0 + dx * t;
+        const y = y0 + dy * t - arc;
+        const ang = Math.atan2(dy - Math.cos(t * Math.PI) * arc * 2, dx);
+        if (f.fx === 'arrow') {
+          ctx.translate(x, y); ctx.rotate(ang);
+          ctx.fillStyle = '#a16207'; ctx.fillRect(-5 * px, -0.5 * px, 7 * px, 1.1 * px);
+          ctx.fillStyle = '#e2e8f0'; ctx.fillRect(2 * px, -1 * px, 2 * px, 2 * px);
+        } else { ctx.fillStyle = '#9ca3af'; ctx.fillRect(x - px, y - px, 2.4 * px, 2.4 * px); }
+        break;
+      }
+      case 'bullet':
+      case 'tracer': {
+        // muzzle flash at the gun, a bright streak along the line of fire
+        if (f.age < 0.08) { ctx.fillStyle = 'rgba(253,224,71,0.9)'; ctx.beginPath(); ctx.arc(x0 + (dx / len) * ts * 0.5, y0 + (dy / len) * ts * 0.5, ts * 0.22, 0, Math.PI * 2); ctx.fill(); }
+        if (!landed) {
+          const head = Math.min(1, t * 1.4);
+          const tail = Math.max(0, head - 0.35);
+          ctx.strokeStyle = f.fx === 'tracer' ? 'rgba(253,186,116,0.95)' : 'rgba(254,240,138,0.95)';
+          ctx.lineWidth = (f.fx === 'tracer' ? 1.6 : 1.1) * px;
+          ctx.beginPath(); ctx.moveTo(x0 + dx * tail, y0 + dy * tail); ctx.lineTo(x0 + dx * head, y0 + dy * head); ctx.stroke();
+        } else { ctx.fillStyle = `rgba(254,240,138,${1 - (f.age - f.life) / f.after})`; ctx.fillRect(x1 - px, y1 - px, 2.4 * px, 2.4 * px); }
+        break;
+      }
+      case 'shell':
+      case 'boulder': {
+        const boulder = f.fx === 'boulder';
+        if (!landed) {
+          const arc = Math.sin(t * Math.PI) * Math.min(len * 0.45, ts * 7);
+          const x = x0 + dx * t;
+          const y = y0 + dy * t - arc;
+          ctx.fillStyle = boulder ? '#78716c' : '#1f2937';
+          ctx.beginPath(); ctx.arc(x, y, (boulder ? 2.4 : 1.6) * px, 0, Math.PI * 2); ctx.fill();
+          if (!boulder) { ctx.fillStyle = 'rgba(203,213,225,0.5)'; ctx.fillRect(x - dx / len * 3 * px - px, y - dy / len * 3 * px - px, 2 * px, 2 * px); }
+          if (f.age < 0.12) { ctx.fillStyle = 'rgba(253,224,71,0.9)'; ctx.beginPath(); ctx.arc(x0, y0, ts * 0.3, 0, Math.PI * 2); ctx.fill(); }
+        } else {
+          const u = (f.age - f.life) / f.after;
+          ctx.fillStyle = boulder ? `rgba(168,162,158,${0.7 * (1 - u)})` : `rgba(251,146,60,${0.9 * (1 - u)})`;
+          ctx.beginPath(); ctx.arc(x1, y1, ts * (0.4 + u * 1.1), 0, Math.PI * 2); ctx.fill();
+          if (!boulder) { ctx.fillStyle = `rgba(254,240,138,${1 - u})`; ctx.beginPath(); ctx.arc(x1, y1, ts * (0.2 + u * 0.4), 0, Math.PI * 2); ctx.fill(); }
+        }
+        break;
+      }
+      case 'bolt':
+      case 'laser': {
+        const col = f.fx === 'bolt' ? [251, 146, 60] : (f.unit === 'starfighter' ? [248, 113, 113] : [103, 232, 249]);
+        const fade = 1 - Math.min(1, f.age / (f.life + f.after));
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${fade})`;
+        ctx.lineWidth = (f.fx === 'bolt' ? 2 : 1.6) * px;
+        ctx.shadowColor = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.shadowBlur = 6;
+        const head = f.fx === 'bolt' ? Math.min(1, t * 1.3) : 1;
+        ctx.beginPath(); ctx.moveTo(x0 + (f.fx === 'bolt' ? dx * Math.max(0, head - 0.3) : 0), y0 + (f.fx === 'bolt' ? dy * Math.max(0, head - 0.3) : 0)); ctx.lineTo(x0 + dx * head, y0 + dy * head); ctx.stroke();
+        if (f.age > f.life * 0.6) { ctx.fillStyle = `rgba(255,255,255,${fade})`; ctx.beginPath(); ctx.arc(x1, y1, ts * 0.28 * (1 + (f.age / (f.life + f.after))), 0, Math.PI * 2); ctx.fill(); }
+        break;
+      }
+      case 'plasma': {
+        if (!landed) {
+          const x = x0 + dx * t;
+          const y = y0 + dy * t - Math.sin(t * Math.PI) * ts;
+          ctx.shadowColor = '#7dd3fc'; ctx.shadowBlur = 8;
+          ctx.fillStyle = '#e0f2fe'; ctx.beginPath(); ctx.arc(x, y, 2.2 * px, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(125,211,252,0.55)'; ctx.beginPath(); ctx.arc(x - dx / len * 3 * px, y - dy / len * 3 * px, 1.6 * px, 0, Math.PI * 2); ctx.fill();
+        } else {
+          const u = (f.age - f.life) / f.after;
+          ctx.fillStyle = `rgba(125,211,252,${0.85 * (1 - u)})`;
+          ctx.beginPath(); ctx.arc(x1, y1, ts * (0.3 + u * 1.2), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = `rgba(255,255,255,${1 - u})`; ctx.beginPath(); ctx.arc(x1, y1, ts * (0.15 + u * 0.4), 0, Math.PI * 2); ctx.fill();
+        }
+        break;
+      }
+      default:
+    }
+    ctx.restore();
+  }
 }

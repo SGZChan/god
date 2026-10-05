@@ -99,6 +99,7 @@ export class Ecosystem {
     this.births = 0;
     this.deaths = 0;
     this.timeYears = 0;
+    this.warFx = [];         // attacks to draw (arrows, shells, lasers...): the renderer takes them each frame
     this.worldEvents = [];   // god powers and natural disasters, see god/events.js
     this.worldEventSeq = 0;
     this.censusTimer = 0;

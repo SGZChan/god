@@ -190,3 +190,12 @@ chooses sites).
 - Prices come from scarcity and money supply; GDP is the value of what is produced; the state taxes it (rate by government, markets widen the base; heavy taxes cost legitimacy).
 - The state pays its army (unpaid soldiers cost legitimacy) and buys missing site materials from foreign merchants at a premium.
 - Peoples at peace trade surplus goods for coin; trading partners are less likely to go to war; routes are shown in the overview. `scripts/econtrace.mjs` prints the books.
+
+## Progress: death care, fire, upkeep, ecology, saves, war
+- Death care (`civilization/deathcare.js`): corpses stay; kin and passers-by carry them to a healer's hut / infirmary / hospital, the family holds a funeral and buries them in a barrow (Stone Age) or graveyard; unburied dead make the living sick. New buildings with sprites: barrow, healer's hut, infirmary, hospital, fire station.
+- Firefighting (`civilization/firefighting.js`): citizens run to fires near town and douse them (effort grows with the age; fire stations double it).
+- Upkeep (`civilization/upkeep.js`): buildings wear down, builders repair them and clear ruins in town (salvage returns to stock).
+- Ecology: marine life (`life/aquatic.js`: fish, tuna, eels, sharks, whales), a food pyramid with predators limited by prey, land and sea. Overview is now a readable tab (W). People are drawn at human scale.
+- Saves (`persistence/saveStore.js`, `cloudStore.js`): compressed IndexedDB, file on the device, optional Firebase cloud saves; hosting config in `firebase.json`, `docs/HOSTING.md`.
+- War (`civilization/military.js`, `art/warSprites.js`, surfaceRenderer war effects): unit classes by age (clubman ... knight ... rifleman, tank, fighter pilot ... space marine, battle walker, grav-tank, starfighter), ranged combat with ranges and rates of fire, attack poses, arrows, bullets, shells, bolts, lasers, plasma and blasts. Dev sheet: `dev/sprites.html`.
+- Dev scripts: `townmap`, `poptrace`, `eratrace`, `econtrace`, `foodchain`, `daytrace`.
