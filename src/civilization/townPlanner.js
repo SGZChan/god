@@ -173,7 +173,7 @@ function streetPlot(terrain, civ, st, type, instant) {
   for (let k = 0; k < nrows; k++) {
     rows.push(town.y0 + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * ROW_SPACING));
   }
-  const pitch = def.w + 1;
+  const pitch = def.w + (housing && eraTier(civ) >= 4 ? 0 : 1);
   const cands = [];
   for (let attempt = 0; attempt < 90; attempt++) {
     const row = civic && random() < 0.75 ? town.y0 : rows[Math.floor(random() * rows.length)];
@@ -185,7 +185,9 @@ function streetPlot(terrain, civ, st, type, instant) {
     if (Math.abs(x + def.w / 2 - town.cx - 8) < 2.5 || Math.abs(x + def.w / 2 - town.cx + 8) < 2.5) continue; // avenues
     if (!terrain.canPlaceBuilding(type, x, y)) continue;
     if (!roadFree(terrain, x, y, def.w, def.h)) continue;
-    if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 0)) continue;
+    // industrial and later towns build terraces: blocks of homes wall to wall along the street
+    const gap = housing && eraTier(civ) >= 4 ? 0 : 1;
+    if (hasBuildingNear(terrain, x, y, def.w, def.h, gap, gap, 1, 0)) continue;
     const fx = x + (def.door ? def.door.x : 0);
     if (!terrain.isBuildable(fx, row)) continue;
     const dx = Math.abs(x + def.w / 2 - town.cx);
