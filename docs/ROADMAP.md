@@ -176,3 +176,11 @@ chooses sites).
   (civilization/expansion.js): more scouts, clans split sooner (up to 14 settlements), outposts beside needed deposits,
   wars of conquest for deposits in a neighbour's land with annexation of the region and its town, colony ships seek the
   resource their people lack and land beside it.
+
+## Progress: creatures, towns, statecraft
+- Sprites: 12 heads, 9 bodies and more legs/ears/horns/wings/tails; each planet's people look like humans, elves, beastfolk or dragonkin; amphibious fish-folk wildlife; hybrid offspring mix parts across body-plan families (`life/genome.js` PART_FAMILIES).
+- Towns (`civilization/townPlanner.js`): Stone Age camps are rings round the hall; later towns put civic buildings in a central square and homes on a regular pitch along streets; ring walls (palisade, then stone) with gates and corner towers once a town is large.
+- Supply (`civilization/logistics.js`): workshops are supplied from other towns' stores; ghost towns are abandoned. Clans split later (14 members, 16 citizens per settlement) so real towns form.
+- State dynamics (`civilization/statecraft.js`): rulers by government custom, succession crises, legitimacy, unrest, war motives (resources, vengeance, faith, ambition, rally-round-the-flag), war weariness, revolts that found new civilizations, coups, ranks (Tribe to Empire).
+- Dev tools: `scripts/townmap.mjs` (ASCII town map), `scripts/poptrace.mjs` (population and events over time).
+- Known gaps: wall rings complete slowly when wood is scarce; palisades are not upgraded to stone; era progress still depends on tin discovery and smithy supply.
