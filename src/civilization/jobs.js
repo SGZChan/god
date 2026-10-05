@@ -444,7 +444,7 @@ function findTarget(c, ent, res) {
   }
   const origin = res === 'fish' || res === 'berries' || res === 'fibre' || res === 'wood' ? { x: st.x, y: st.y } : { x: st.x, y: st.y };
   const min = res === 'wood' || res === 'fibre' || res === 'berries' || res === 'fish' ? 3 : 1;
-  const d = terrain.findNearestDeposit(origin.x, origin.y, res, 55, { minAmount: min });
+  const d = terrain.findNearestDeposit(origin.x, origin.y, res, min === 1 ? 100 : 55, { minAmount: min });
   return d ? { x: d.x, y: d.y } : null;
 }
 

@@ -93,7 +93,7 @@ function obtainable(civ, terrain, st, res) {
   if (!st._near) Object.defineProperty(st, '_near', { value: new Map(), writable: true, configurable: true, enumerable: false });
   const hit = st._near.get(res);
   if (hit && hit.t > (civ._clock || 0) - 60) return hit.ok;
-  const d = terrain.findNearestDeposit(st.x, st.y, res, 70);
+  const d = terrain.findNearestDeposit(st.x, st.y, res, 100);
   const ok = Boolean(d);
   st._near.set(res, { ok, t: civ._clock || 0 });
   return ok;
@@ -386,7 +386,7 @@ export function wishes(civ, terrain, st, n, tier, cn) {
     const def = BUILDING_TYPES[type];
     // buildings of the next era's requirements may be raised one era early (a kiln and a smithy lead INTO the bronze age)
     if (!def || (def.tier > tier && !(def.tier === tier + 1 && need.has(type))) || !affordable(civ, terrain, st, type)) return;
-    if (need.has(type) && civHave(type) === 0) weight *= 3;
+    if (need.has(type) && civHave(type) === 0) weight *= 8; // what the next age needs comes first
     list.push({ type, weight, kind, res });
   };
 
