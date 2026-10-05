@@ -819,7 +819,10 @@ function stepBuilder(ent, c, haulOnly) {
     return true;
   }
   // 2. pick a site
-  const sites = openSites(terrain, st).sort((a, b) => Math.hypot(a.x - ent.x, a.y - ent.y) - Math.hypot(b.x - ent.x, b.y - ent.y));
+  // shelter first while people sleep rough: homes are worked on before everything else
+  const homesFirst = (st.homeless || 0) > 0 ? 40 : 0;
+  const rank = s => Math.hypot(s.x - ent.x, s.y - ent.y) - (BUILDING_TYPES[s.type].category === 'housing' ? homesFirst : 0);
+  const sites = openSites(terrain, st).sort((a, b) => rank(a) - rank(b));
   const clock = c.civ.clock || 0;
   for (const site of sites) {
     if (site.blockedUntil > clock) continue; // unreachable for now

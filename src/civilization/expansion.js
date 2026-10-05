@@ -109,6 +109,30 @@ export function covetedDeposit(civ, other, terrain) {
   return goal && best < 80 ? goal : null;
 }
 
+// Moves a whole settlement (buildings, people, their clans) from one civilization to another: conquest, secession.
+export function transferSettlement(society, loser, winner, st) {
+  const { terrain, ecosystem } = society;
+  loser.settlements.splice(loser.settlements.indexOf(st), 1);
+  winner.settlements.push(st);
+  for (const b of terrain.buildings.values()) if (b.settlementId === st.id) { b.civId = winner.id; terrain.syncBuildingTiles(b); }
+  for (const e of ecosystem.entities) {
+    if (!e.alive || e.civilization !== loser || e.settlementId !== st.id) continue;
+    e.civilization = winner;
+    e.job = null;
+    e.task = null;
+    if (e.role === 'SOLDIER') e.role = 'CITIZEN';
+    // their clan comes with them
+    const clan = getClan(loser, e.clanId);
+    if (clan && !getClan(winner, clan.id)) {
+      loser.clans.splice(loser.clans.indexOf(clan), 1);
+      clan.civId = winner.id;
+      winner.clans.push(clan);
+    } else if (!clan) {
+      e.clanId = createClan(winner, { leader: e, settlementId: st.id, year: ecosystem.timeYears }).id;
+    }
+  }
+}
+
 // The winner takes the land around `goal` (radius 12): tiles, and the loser's settlement there unless it is the
 // capital, with its buildings and its people (who keep their homes and families but now belong to the winner).
 export function annexRegion(society, winner, loser, goal) {
@@ -127,25 +151,7 @@ export function annexRegion(society, winner, loser, goal) {
   let town = null;
   const st = settlementsOf(loser).filter(s => !s.capital).sort((a, b) => Math.hypot(a.x - goal.x, a.y - goal.y) - Math.hypot(b.x - goal.x, b.y - goal.y))[0];
   if (st && Math.hypot(st.x - goal.x, st.y - goal.y) <= R + 8 && settlementsOf(winner).length < MAX_SETTLEMENTS) {
-    loser.settlements.splice(loser.settlements.indexOf(st), 1);
-    winner.settlements.push(st);
-    for (const b of terrain.buildings.values()) if (b.settlementId === st.id) { b.civId = winner.id; terrain.syncBuildingTiles(b); }
-    for (const e of ecosystem.entities) {
-      if (!e.alive || e.civilization !== loser || e.settlementId !== st.id) continue;
-      e.civilization = winner;
-      e.job = null;
-      e.task = null;
-      if (e.role === 'SOLDIER') e.role = 'CITIZEN';
-      // their clan comes with them
-      const clan = getClan(loser, e.clanId);
-      if (clan && !getClan(winner, clan.id)) {
-        loser.clans.splice(loser.clans.indexOf(clan), 1);
-        clan.civId = winner.id;
-        winner.clans.push(clan);
-      } else if (!clan) {
-        e.clanId = createClan(winner, { leader: e, settlementId: st.id, year: ecosystem.timeYears }).id;
-      }
-    }
+    transferSettlement(society, loser, winner, st);
     town = st;
   }
   // the coveted deposit is now known as the winner's own

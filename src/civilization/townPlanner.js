@@ -152,19 +152,35 @@ function placeAt(terrain, civ, st, type, x, y, instant) {
   return b;
 }
 
-// A plot on a street: the building stands on the north side of street row `row`, door on the street.
+// How a people lays out its town depends on its age and what the building is for (researched layouts: Stone Age
+// camps are rings of shelters round the fire and chief's hall; Bronze Age city-states pack a dense core round the
+// temple and are walled; Classical towns are grids of blocks round a forum with its market and temple; Medieval
+// towns cluster round the castle and its market square inside a wall; Industrial towns are regular blocks).
+const CIVIC = new Set(['hall', 'keep', 'market', 'market_stall', 'temple', 'shrine', 'cathedral', 'library', 'tavern', 'well', 'barracks']);
+export function layoutOf(tier) {
+  return tier === 0 ? 'camp' : tier === 1 ? 'citadel' : tier === 3 ? 'castle' : 'grid';
+}
+
+// A plot on a street: the building stands on the north side of street row `row`, door on the street. Civic buildings
+// gather in the middle (the forum / square), homes line the rows on a regular pitch and fill outward from the centre.
 function streetPlot(terrain, civ, st, type, instant) {
   const town = st.town;
   const def = BUILDING_TYPES[type];
+  const civic = CIVIC.has(type);
+  const housing = def.category === 'housing';
   const rows = [];
-  const nrows = 1 + Math.min(4, Math.floor(buildingsOf(terrain, st).length / 10));
+  const nrows = Math.min(st.wall ? 3 : 5, 1 + Math.floor(buildingsOf(terrain, st).length / 10));
   for (let k = 0; k < nrows; k++) {
     rows.push(town.y0 + (k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * ROW_SPACING));
   }
+  const pitch = def.w + 1;
   const cands = [];
-  for (let attempt = 0; attempt < 70; attempt++) {
-    const row = rows[Math.floor(random() * rows.length)];
-    const x = town.cx + Math.round((random() * 2 - 1) * town.rx) - Math.floor(def.w / 2);
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const row = civic && random() < 0.75 ? town.y0 : rows[Math.floor(random() * rows.length)];
+    const reach = civic ? Math.max(4, town.rx * 0.45) : town.rx;
+    let x = town.cx + Math.round((random() * 2 - 1) * reach) - Math.floor(def.w / 2);
+    // homes stand on a regular pitch so a row reads as a street of houses
+    if (housing) x = town.cx + Math.round(((random() * 2 - 1) * reach) / pitch) * pitch - Math.floor(def.w / 2);
     const y = row - def.h;
     if (Math.abs(x + def.w / 2 - town.cx - 8) < 2.5 || Math.abs(x + def.w / 2 - town.cx + 8) < 2.5) continue; // avenues
     if (!terrain.canPlaceBuilding(type, x, y)) continue;
@@ -172,7 +188,10 @@ function streetPlot(terrain, civ, st, type, instant) {
     if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 0)) continue;
     const fx = x + (def.door ? def.door.x : 0);
     if (!terrain.isBuildable(fx, row)) continue;
-    const score = Math.hypot(x + def.w / 2 - town.cx, y + def.h - town.y0) + random() * 4;
+    const dx = Math.abs(x + def.w / 2 - town.cx);
+    const dr = Math.abs(row - town.y0);
+    // the centre first: civic buildings hug the middle of the main street, homes fill outward row by row
+    const score = civic ? dx + dr * 0.8 + random() * 2 : Math.hypot(dx, dr) + random() * 2.5;
     cands.push({ x, y, row, score });
   }
   const best = bestReachable(terrain, st, cands, c => ({ x: c.x + (def.door ? def.door.x : 0), y: c.row }));
@@ -183,11 +202,80 @@ function streetPlot(terrain, civ, st, type, instant) {
   return b;
 }
 
+// Stone Age camp: shelters stand in a ring round the fire (the hall, or the camp's heart), their doors toward it.
+function ringPlot(terrain, civ, st, type, instant) {
+  const town = st.town;
+  const def = BUILDING_TYPES[type];
+  const homes = buildingsOf(terrain, st).filter(b => BUILDING_TYPES[b.type].category === 'housing').length;
+  const R = 7 + Math.sqrt(homes) * 2.4;
+  const cx = town.cx;
+  const cy = town.y0 - 2;
+  const cands = [];
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const ang = random() * Math.PI * 2;
+    const r = R + (random() - 0.5) * 2.5;
+    const x = Math.round(cx + Math.cos(ang) * r * 1.35 - def.w / 2);
+    const y = Math.round(cy + Math.sin(ang) * r - def.h / 2);
+    if (!terrain.canPlaceBuilding(type, x, y)) continue;
+    if (!roadFree(terrain, x, y, def.w, def.h)) continue;
+    if (hasBuildingNear(terrain, x, y, def.w, def.h, 1, 1, 1, 1)) continue;
+    const fx = x + (def.door ? def.door.x : 0);
+    const fy = y + (def.door ? def.door.y : def.h - 1) + 1;
+    if (!terrain.isBuildable(fx, fy)) continue;
+    const score = Math.abs(Math.hypot((x + def.w / 2 - cx) / 1.35, y + def.h / 2 - cy) - R) + random() * 1.5;
+    cands.push({ x, y, score, fx, fy });
+  }
+  const best = bestReachable(terrain, st, cands, c => ({ x: c.fx, y: c.fy }));
+  return best ? placeAt(terrain, civ, st, type, best.x, best.y, instant) : null;
+}
+
+// ---------- walls ----------
+// A walled town: a rectangle round the built-up streets with a gate in the middle of each side and towers at the
+// corners (stone walls from the classical age on, a wooden palisade before). Pieces are planned a few at a time.
+const WALL_MIN_POP = 16;
+
+function planWall(civ, terrain, st, tier) {
+  const town = st.town;
+  const S = ROW_SPACING;
+  const R = Math.max(13, Math.min(21, Math.round(town.rx + 5)));
+  const w = { R, x0: town.cx - R, x1: town.cx + R, y0: town.y0 - S - 7, y1: town.y0 + S + 3, kind: tier >= 2 ? 'stone' : 'palisade', pieces: [] };
+  const wall = w.kind === 'stone' ? 'stone_wall' : 'palisade';
+  const gate = w.kind === 'stone' ? 'stone_gate' : 'palisade_gate';
+  const towers = w.kind === 'stone';
+  const inTower = (x, y) => towers && [[w.x0, w.y0], [w.x1 - 1, w.y0], [w.x0, w.y1 - 1], [w.x1 - 1, w.y1 - 1]].some(([tx, ty]) => x >= tx && x < tx + 2 && y >= ty && y < ty + 2);
+  const gates = new Set([`${w.x0},${town.y0}`, `${w.x1},${town.y0}`, `${town.cx - 8},${w.y0}`, `${town.cx + 8},${w.y0}`, `${town.cx - 8},${w.y1}`, `${town.cx + 8},${w.y1}`]);
+  const add = (type, x, y) => w.pieces.push({ type, x, y });
+  if (towers) for (const [tx, ty] of [[w.x0, w.y0], [w.x1 - 1, w.y0], [w.x0, w.y1 - 1], [w.x1 - 1, w.y1 - 1]]) add('wall_tower', tx, ty);
+  for (let x = w.x0; x <= w.x1; x++) for (const y of [w.y0, w.y1]) if (!inTower(x, y)) add(gates.has(`${x},${y}`) ? gate : wall, x, y);
+  for (let y = w.y0 + 1; y < w.y1; y++) for (const x of [w.x0, w.x1]) if (!inTower(x, y)) add(gates.has(`${x},${y}`) ? gate : wall, x, y);
+  // gates first, then the rest from the main street outward, so the town is never left half-enclosed behind a gap
+  w.pieces.sort((a, b) => (/gate/.test(b.type) ? 1 : 0) - (/gate/.test(a.type) ? 1 : 0));
+  st.wall = w;
+  town.rx = Math.min(town.rx, R - 4);
+  return w;
+}
+
+// Places up to `n` wall pieces; a piece that cannot stand (water, a building in the way) is skipped, leaving a gap.
+function wallPlot(terrain, civ, st, instant, n = 4) {
+  const w = st.wall;
+  let first = null;
+  while (w && w.pieces.length && n > 0) {
+    const pc = w.pieces[0];
+    if (!affordable(civ, terrain, st, pc.type)) break;
+    w.pieces.shift();
+    if (!terrain.canPlaceBuilding(pc.type, pc.x, pc.y)) continue;
+    const b = placeAt(terrain, civ, st, pc.type, pc.x, pc.y, instant);
+    if (b) { first = first || b; n--; }
+  }
+  return first;
+}
+
 function queueStreet(terrain, civ, st, row, instant) {
   const town = st.town;
   const kind = roadKindFor(eraTier(civ));
-  const x0 = town.cx - town.rx - 2;
-  const x1 = town.cx + town.rx + 2;
+  const reachOut = st.wall && row === town.y0 ? st.wall.R + 3 : town.rx + 2; // the main street runs out through the gates
+  const x0 = town.cx - reachOut;
+  const x1 = town.cx + reachOut;
   if (instant) {
     for (let x = x0; x <= x1; x++) terrain.setRoad(x, row, kind);
     for (const ax of [town.cx - 8, town.cx + 8]) for (let y = town.y0 - ROW_SPACING * 2; y <= town.y0 + ROW_SPACING * 2; y++) terrain.setRoad(ax, y, kind);
@@ -305,7 +393,7 @@ export function wishes(civ, terrain, st, n, tier, cn) {
   // shelter first: nobody should sleep rough for long
   const openHousing = openSites(terrain, st).filter(b => BUILDING_TYPES[b.type].category === 'housing').length;
   const freeBeds = housingCapacity(terrain, st) - (st.adults || 0);
-  if ((st.homeless > 0 || freeBeds < 2) && openHousing < 1 + Math.floor(pop / 12)) list.push({ type: 'housing', weight: 8 + (st.homeless || 0), kind: 'plot' });
+  if ((st.homeless > 0 || freeBeds < 2) && openHousing < Math.min(5, 1 + Math.floor((st.homeless || 0) / 2) + Math.floor(pop / 10))) list.push({ type: 'housing', weight: 8 + (st.homeless || 0), kind: 'plot' });
   // renewal: homes from an earlier age are replaced one at a time by homes of this age (see retireOldHouse)
   else if (openHousing < 1 && outdatedHouses(terrain, st, tier).length) list.push({ type: 'housing', weight: 3, kind: 'plot' });
 
@@ -352,6 +440,11 @@ export function wishes(civ, terrain, st, n, tier, cn) {
     if (have('temple') + have('cathedral') < 1 && pop >= 14) want('temple', 1.5);
     if (st.capital && have('cathedral') < 1 && pop >= 24) want('cathedral', 1.2);
   }
+  // a town of size walls itself (once it has a street grid worth defending): the plan is drawn once, the pieces follow
+  if (tier >= 1 && tier <= 3 && pop >= WALL_MIN_POP && (st.capital || pop >= 24)) {
+    if (!st.wall) planWall(civ, terrain, st, tier);
+    if (st.wall.pieces.length && affordable(civ, terrain, st, st.wall.pieces[0].type)) list.push({ type: st.wall.kind === 'stone' ? 'stone_wall' : 'palisade', weight: 2.2, kind: 'wall' });
+  }
   if (st.capital && have('spaceport') < 1 && pop >= 14) want('spaceport', 3, 'edge');
   return list;
 }
@@ -384,8 +477,9 @@ export function planSettlement(civ, terrain, st, { instant = false, maxSites = n
   const n = counts(terrain, st);
   const cn = {};
   for (const other of settlementsOf(civ)) for (const [k, v] of Object.entries(other === st ? n : counts(terrain, other))) cn[k] = (cn[k] || 0) + v;
-  const sites = openSites(terrain, st).length;
-  town.rx = Math.min(24, 6 + Math.floor((n.housing || 0) * 0.9));
+  // wall pieces are raised by the whole town over time, they do not hold up other building
+  const sites = openSites(terrain, st).filter(b => !BUILDING_TYPES[b.type].connects).length;
+  town.rx = Math.min(st.wall ? st.wall.R - 4 : 24, 6 + Math.floor((n.housing || 0) * 0.9));
   const cap = maxSites !== null ? maxSites : Math.max(2, 1 + Math.ceil(((st.jobs.builder || 0) + (st.jobs.hauler || 0)) / 2));
   if (sites >= cap && !instant) return null;
   const list = wishes(civ, terrain, st, n, tier, cn);
@@ -393,12 +487,14 @@ export function planSettlement(civ, terrain, st, { instant = false, maxSites = n
   const w = pick(list);
   const type = w.type === 'housing' ? housingType(civ, terrain, st, tier) : w.type;
   let b = null;
-  if (w.kind === 'edge') b = edgePlot(terrain, civ, st, type, instant);
+  if (w.kind === 'wall') b = wallPlot(terrain, civ, st, instant);
+  else if (w.kind === 'edge') b = edgePlot(terrain, civ, st, type, instant);
   else if (w.kind === 'deposit') b = depositPlot(terrain, civ, st, type, w.res, instant);
   else if (w.kind === 'dock') {
     b = dockPlot(terrain, civ, st, instant);
     if (!b) st.fishNear = false;
-  } else b = streetPlot(terrain, civ, st, type, instant);
+  } else if (tier === 0 && BUILDING_TYPES[type].category === 'housing') b = ringPlot(terrain, civ, st, type, instant);
+  else b = streetPlot(terrain, civ, st, type, instant);
   if (!b && w.type === 'quarry') st.noQuarry = true;
   if (!b && w.type === 'housing') return edgePlot(terrain, civ, st, 'tent', instant);
   return b;
@@ -462,7 +558,7 @@ export function initTown(civ, terrain, { instant = false, stock = STARTER_KIT } 
 
 function starterSites(civ, terrain, st, instant, homes) {
   const tier = eraTier(civ);
-  for (let i = 0; i < homes; i++) streetPlot(terrain, civ, st, tier === 0 ? 'tent' : housingType(civ, terrain, st, tier), instant);
+  for (let i = 0; i < homes; i++) (tier === 0 ? ringPlot : streetPlot)(terrain, civ, st, tier === 0 ? 'tent' : housingType(civ, terrain, st, tier), instant);
   edgePlot(terrain, civ, st, 'farm', instant);
 }
 

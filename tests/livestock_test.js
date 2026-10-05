@@ -8,7 +8,7 @@ console.log('====================================================');
 console.log('   LIVESTOCK TESTS                                  ');
 console.log('====================================================');
 
-setActiveRng(new SeededRNG('livestock'));
+setActiveRng(new SeededRNG('livestock-a'));
 const w = emptyWorld();
 const civ = addCiv(w, 'Pastoria', 60, 40, 6);
 for (const b of w.terrain.buildings.values()) if (b.civId === civ.id) w.terrain.advanceConstruction(b.id, 1e9);
@@ -61,7 +61,8 @@ section('Surplus animals are slaughtered for meat');
   const civ2 = addCiv(w2, 'Butcheria', 60, 40, 6);
   for (const b of w2.terrain.buildings.values()) if (b.civId === civ2.id) w2.terrain.advanceConstruction(b.id, 1e9);
   const st2 = civ2.settlements[0];
-  const pen2 = w2.terrain.placeBuilding('pen', st2.x + 6, st2.y + 3, { civId: civ2.id, progress: 1 });
+  let pen2 = null;
+  for (let r = 6; r < 30 && !pen2; r += 2) for (let a = 0; a < 12 && !pen2; a++) pen2 = w2.terrain.placeBuilding('pen', Math.round(st2.x + Math.cos(a / 12 * 6.283) * r), Math.round(st2.y + Math.sin(a / 12 * 6.283) * r), { civId: civ2.id, progress: 1 });
   pen2.settlementId = st2.id;
   const g2 = w2.ecosystem.speciesCatalog.find(s => !s.sapient && s.centroid.carnivory < 0.3);
   const herd = w2.ecosystem.spawnFounders(g2, PEN_CAPACITY + 3, pen2.x + 1, pen2.y + 1, null, 1);

@@ -126,6 +126,7 @@ section('Exploration: explored cells and discovered deposits');
 section('Construction by builders: nothing appears by itself');
 {
   const sim = realWorld('build-1');
+  for (const c of sim.society.civilizations) c.truce = 1e9; // this test is about building, not war
   const civ = sim.society.civilizations[0];
   const first = own(sim, civ);
   assert(first.length >= 3 && first.every(b => b.progress === 0), `a new civilization starts with ${first.length} construction sites and no finished building`);

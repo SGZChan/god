@@ -8,6 +8,7 @@ import { itemName, itemColor, foodUnits } from '../civilization/economy.js';
 import { JOB_INFO, seasonOf, SEASON_NAMES } from '../civilization/jobs.js';
 import { exploredFraction } from '../civilization/exploration.js';
 import { housingCapacityOfCiv } from '../civilization/settlements.js';
+import { titleOf, rankOf } from '../civilization/statecraft.js';
 import { religionsOf, getReligion, deityLabel, DOMAINS } from '../civilization/religion.js';
 
 export function civStatus(civ) {
@@ -79,6 +80,11 @@ export function summarizeWorld(sim) {
       status: civStatus(civ),
       progress: eraProgress(civ),
       faith: getReligion(sim.society, civ.faithId) ? getReligion(sim.society, civ.faithId).name : null,
+      rank: rankOf(civ),
+      ruler: (() => { const r = civ.rulerId ? sim.ecosystem.byId.get(civ.rulerId) : null; return r && r.alive ? `${titleOf(civ)} ${r.name}` : null; })(),
+      legitimacy: Math.round(civ.legitimacy === undefined ? 70 : civ.legitimacy),
+      unrest: Math.round((civ.unrest || 0) * 100),
+      weariness: Math.round(civ.weariness || 0),
       colonyOf: civ.colonyOf || null,
       ships: civ.shipsLaunched || 0
     })),
@@ -163,7 +169,8 @@ export class OverviewPanel {
       card.appendChild(title);
       if (civ.status.kind === 'war') card.appendChild(el('div', 'civ-meta', civ.status.label));
 
-      card.appendChild(el('div', 'civ-meta', `${civ.government} • ${civ.era}${civ.faith ? ` • ${civ.faith}` : ''}`));
+      card.appendChild(el('div', 'civ-meta', `${civ.rank} • ${civ.government} • ${civ.era}${civ.faith ? ` • ${civ.faith}` : ''}`));
+      card.appendChild(el('div', 'civ-meta', `${civ.ruler ? `👑 ${civ.ruler} • ` : ''}Legitimacy ${civ.legitimacy}% • Unrest ${civ.unrest}%${civ.weariness > 15 ? ` • War-weary ${civ.weariness}%` : ''}`));
       if (civ.colonyOf || civ.ships) card.appendChild(el('div', 'civ-meta', [civ.colonyOf ? `Colony of ${civ.colonyOf}` : '', civ.ships ? `🚀 ${civ.ships} ship${civ.ships === 1 ? '' : 's'} launched` : ''].filter(Boolean).join(' • ')));
 
       const stats = el('div', 'civ-stats');

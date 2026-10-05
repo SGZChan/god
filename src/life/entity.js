@@ -636,8 +636,11 @@ export class Entity {
         const defender = this.findNearestEntity(worldContext.entities, e => e.alive && e.civilization === foe && e.isAdult && !e.isSpecialIndividual && Math.hypot(e.x - this.x, e.y - this.y) < 2);
         if (defender && random() < 0.12) {
           defender.health -= 30;
-          if (defender.health <= 0) defender.die(`Killed in a raid by ${this.civilization.name}`);
+          if (defender.health <= 0) { defender.die(`Killed in a raid by ${this.civilization.name}`); foe.grievance[this.civilization.id] = Math.min(100, foe.grievance[this.civilization.id] + 6); }
         }
+        // the raided people remember (civilization/statecraft.js: grievances feed vengeance)
+        foe.grievance = foe.grievance || {};
+        foe.grievance[this.civilization.id] = Math.min(100, (foe.grievance[this.civilization.id] || 0) + 1.5);
         // and then home with the spoils
         this.civilization.warLoot = (this.civilization.warLoot || 0) + Object.values(loot).reduce((a, b) => a + b, 0);
         return false;

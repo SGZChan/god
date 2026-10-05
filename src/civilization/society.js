@@ -12,6 +12,8 @@ import { BUILDING_TYPES } from '../world/buildings.js';
 import { tickReligion } from './religion.js';
 import { tickSpaceflight } from './spaceflight.js';
 import { tickExpansion, covetedDeposit } from './expansion.js';
+import { tickLogistics } from './logistics.js';
+import { tickStatecraft, warMotive, noteWarEnd } from './statecraft.js';
 
 export const INITIAL_CITIZENS = 6;
 export const POP_PER_CITIZEN = 10;      // each citizen entity stands for 10 people in civ stats
@@ -152,29 +154,20 @@ export class Civilization {
         for (const b of other.settlements) dist = Math.min(dist, Math.hypot(a.x - b.x, a.y - b.y));
       }
 
-      // Wars of conquest: a neighbour holds deposits this people needs (expansion.js); the winner annexes them
-      if (dist < 75 && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0 && ecosystem.terrain) {
-        const goal = covetedDeposit(this, other, ecosystem.terrain);
-        if (goal && this.militaryStrength >= other.militaryStrength * 1.2 && random() < 0.12) {
-          this.warGoal = goal;
-          this.declareWar(other, ecosystem, `War for the ${goal.type} of ${other.name}`);
+      // War needs a motive (statecraft.js): resources, vengeance, faith, ambition, or a ruler's need for a rally
+      if (dist < 75 && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0) {
+        const motive = warMotive(this, other, ecosystem.terrain);
+        // a motive far from the border only counts if it is about land; neighbours quarrel more readily
+        if (motive && (dist < 45 || motive.goal) && random() < motive.score) {
+          this.warGoal = motive.goal || null;
+          this.declareWar(other, ecosystem, motive.reason);
           continue;
         }
       }
-
-      // Close neighbors can develop tension or declare war
+      // plain friction between close neighbours: tension, rarely more
       if (dist < 45) {
         const curStatus = this.diplomacy.get(other.id) || 'PEACE';
-
-        if (curStatus === 'PEACE' && !this.warTarget && !other.warTarget && this.truce <= 0 && other.truce <= 0) {
-          // Religious difference or resource greed can trigger war! Different faiths (religion.js) under a devout
-          // people, or a great gap in devotion
-          const differentFaith = this.faithId && other.faithId && this.faithId !== other.faithId && Math.max(this.piety, other.piety) > 60;
-          const religiousRift = (differentFaith && random() < 0.5) || Math.abs(this.piety - other.piety) > 40;
-          if (religiousRift || random() < 0.12) {
-            this.declareWar(other, ecosystem, religiousRift ? 'Holy Crusade over Heresy' : 'Border Dispute & Expansion');
-          }
-        }
+        if (curStatus === 'PEACE' && !this.warTarget && !other.warTarget && random() < 0.02) this.diplomacy.set(other.id, 'TENSION');
       }
     }
   }
@@ -188,6 +181,8 @@ export class Civilization {
     targetCiv.warTarget = this;
     this.warTimer = 0;
     targetCiv.warTimer = 0;
+    this.warStartSoldiers = this.soldiers || 0;
+    targetCiv.warStartSoldiers = targetCiv.soldiers || 0;
 
     ecosystem.notifications.unshift({
       text: `⚔️ WAR DECLARED! "${this.name}" has waged war against "${targetCiv.name}" (${reason})!`,
@@ -228,6 +223,7 @@ export class Civilization {
       civ.warTimer = 0;
       civ.truce = TRUCE_DURATION;
     }
+    for (const civ of [this, foe]) noteWarEnd(civ, civ === this ? foe : this, winner ? winner === civ : null);
     if (winner) winner.piety = Math.min(100, winner.piety + 5);
     ecosystem.notifications.unshift({
       text: `🕊️ Peace: ${reason}.`,
@@ -610,13 +606,19 @@ export class SocietyManager {
 
     // expansion: outposts by needed deposits, annexing land won in war (expansion.js)
     tickExpansion(this, civ, dt);
+
+    // supplies between the towns; ghost towns are abandoned (logistics.js)
+    tickLogistics(this, civ, dt);
+
+    // rulers, legitimacy, war weariness, revolts (statecraft.js)
+    tickStatecraft(this, civ, dt);
   }
 
   // A clan that outgrew CLAN_SPLIT_SIZE sends a splinter group to found a new hamlet.
   splitClans(civ) {
     if (civ.settlements.length >= MAX_SETTLEMENTS || !civ.isAlive) return false;
     // do not fragment a small people into ever smaller hamlets: about ten citizens per settlement are needed
-    if (civ.citizens < 9 * civ.settlements.length) return false;
+    if (civ.citizens < 16 * civ.settlements.length) return false;
     for (const clan of civ.clans) {
       if (clan.memberIds.length < CLAN_SPLIT_SIZE || (clan.splitCd || 0) > civ.clock) continue;
       const parent = getSettlement(civ, clan.settlementId) || nearestSettlement(civ, this.terrain.home.x, this.terrain.home.y);
